@@ -1,0 +1,31 @@
+# Codex Mac Cleaner
+
+Локальный Codex-плагин для macOS 26 на Apple Silicon. Он проводит read-only аудит остатков обычных приложений, объясняет доказательства и перемещает отдельно подтверждённые объекты в обратимый карантин.
+
+## Статус
+
+Архитектура и Product-пакет проектируются до начала реализации. Runtime-кода пока нет.
+
+Целевая платформа:
+
+* macOS 26 и новее;
+* только Apple Silicon `arm64`;
+* без Intel, Rosetta и старых macOS.
+
+## Документация
+
+* [Архитектурный канон](docs/index.md)
+* [Границы v0.1](docs/foundation/scope-and-principles.md)
+* [Модель безопасности](docs/safety/safety-model.md)
+* [PRD](docs/product/PRD-codex-mac-cleaner.md)
+* [План реализации](docs/superpowers/plans/2026-07-15-codex-mac-cleaner-v01.md)
+* [Промпты для Workers](docs/prompts/)
+* [Контракт выполнения](docs/development/execution-contract.md)
+
+## Оркестрация
+
+Репозиторий подготовлен для issues-mode навыка `$codex-cto-orchestrator`. Наличие конфигурации не активирует Controller. Для Controller нужна новая постоянная задача, явно назначенная пользователем этому репозиторию.
+
+## Лицензия
+
+Архитектурно утверждена Apache-2.0. Текущий MIT `LICENSE` остаётся временным несоответствием до отдельной юридически защищённой Issue `CMC-01`; реализация до её закрытия запрещена.

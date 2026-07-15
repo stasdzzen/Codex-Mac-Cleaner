@@ -2,6 +2,8 @@
 
 ## 2026-07-15
 
+* **Product-пакет**: начата подготовка PRD, roadmap, TDD-плана, Worker-промптов и GitHub Issues.
+* **Оркестрация**: репозиторий подготовлен для `codex-cto-orchestrator` beta.6 в issues-mode без активации Controller.
 * **Инициализация**: создан OKF bundle документации.
 * **Решение**: утверждён безопасный MVP для macOS 26 на Apple Silicon.
 * **Решение**: выбран локальный TypeScript MCP-сервер без Swift-компонентов.

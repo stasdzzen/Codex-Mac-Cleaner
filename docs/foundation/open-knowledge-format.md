@@ -46,6 +46,13 @@ date: 2026-07-15
 * `Test Strategy`
 * `Acceptance Gate`
 * `Product Handoff`
+* `Product Requirements`
+* `Product Roadmap`
+* `Traceability`
+* `Release Checklist`
+* `Implementation Plan`
+* `Worker Prompt`
+* `Execution Contract`
 
 # Лицензионная граница
 

@@ -1,0 +1,35 @@
+version: 1
+skill_version: 0.1.0-beta.6
+github:
+  repository: "stasdzzen/Codex-Mac-Cleaner"
+  mode: issues
+  labels:
+    ready: cto:ready
+    in_progress: cto:in-progress
+    review: cto:review
+    blocked: cto:blocked
+codex:
+  max_parallel_tasks: 2
+  heartbeat_minutes: 5
+git:
+  default_branch: "main"
+  branch_prefix: codex/
+quality:
+  commands:
+    - [git, diff, --check]
+documentation:
+  canonical_root: docs
+  execution_contract: docs/development/execution-contract.md
+  required:
+    - README.md
+    - AGENTS.md
+    - docs/index.md
+    - docs/handoff/product-input.md
+guardrails:
+  protected_actions:
+    - deploy
+    - production_mutation
+    - release
+    - credentials
+    - payments
+    - legal
