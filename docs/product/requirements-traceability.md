@@ -34,4 +34,17 @@ Issue и PR не могут объявить требование выполне
 
 # GitHub-сопоставление
 
-Точные номера и URL Issues записываются после их создания. Стабильным идентификатором до этого служит `CMC-01`…`CMC-10`; пустые или вымышленные ссылки не используются.
+| ID | GitHub Issue | Текущий operational label |
+|---|---|---|
+| `CMC-01` | [#1 — Apache-2.0](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/1) | `cto:blocked` |
+| `CMC-02` | [#2 — workspace и platform guard](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/2) | `cto:ready`, ожидает `#1` |
+| `CMC-03` | [#3 — contracts, store и MCP](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/3) | `cto:ready`, ожидает `#2` |
+| `CMC-04` | [#4 — source adapters](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/4) | `cto:ready`, ожидает `#3` |
+| `CMC-05` | [#5 — classifier и policy](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/5) | `cto:ready`, ожидает `#4` |
+| `CMC-06` | [#6 — quarantine transaction](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/6) | `cto:ready`, ожидает `#5` |
+| `CMC-07` | [#7 — restore и purge](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/7) | `cto:ready`, ожидает `#6` |
+| `CMC-08` | [#8 — Audit Dashboard](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/8) | `cto:ready`, ожидает `#5` |
+| `CMC-09` | [#9 — MCP App и plugin](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/9) | `cto:ready`, ожидает `#7` и `#8` |
+| `CMC-10` | [#10 — security и release evidence](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/10) | `cto:ready`, ожидает `#9` |
+
+Operational label не заменяет dependency validation. Источником текущего readiness остаётся GitHub и `issue_contract.py`.
