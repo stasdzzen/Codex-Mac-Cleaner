@@ -16,7 +16,7 @@ date: 2026-07-17
 
 # Решение
 
-1. Локальный сервер применяет неизменяемый `ProtectedScopeRule` до создания кандидата и перед каждой mutation. `~/APPS`, `~/.codex`, Telegram, Nicegram, Postman, pgAdmin, GitHub Desktop, профили Opera/Firefox/Slack, сохранения GRID/Disco Elysium, Microsoft Fonts, используемый Python.org 3.12 и любой локальный Git-проект защищены server-side. Названия задают product identity, а не угаданный bundle ID. Forged запрос блокируется кодом `PROTECTED_SCOPE`.
+1. Локальный сервер применяет неизменяемый `ProtectedScopeRule` до создания кандидата и перед каждой mutation. Первоначальное полевое решение включало private owner-specific scopes; их точные названия и пути удалены из публичного канона и не являются runtime-правилами. `~/.codex` и любой локальный Git-проект защищены server-side как универсальные классы. Forged запрос блокируется кодом `PROTECTED_SCOPE`.
 2. `Finding` получает `supportLevel: candidate | analysis_only | unsupported_manual`. Системные и shared-источники могут давать только `unsupported_manual` с безопасным объяснением, без mutation actions, готовой shell-команды или sudo-рекомендации.
 3. JSON/YAML/plist сводятся к `SafeMetadata` до persistence и MCP output. Сырые ключи/значения, секреты, subscription URLs, полный путь и stderr не попадают в model-visible output, логи, fixtures или PR evidence.
 4. Classifier не классифицирует по одному имени. Owner identity, installed state, process/open-file state, receipts, dependencies, temporal evidence, data kind и sensitivity проверяются раздельно; personal/sensitive признаки блокируют mutation.
@@ -39,3 +39,7 @@ date: 2026-07-17
 * [Safety/UX-дополнения](ADR-0009-v01-safety-ux-completion.md)
 * [Политика путей](../safety/path-policy.md)
 * [Доменная модель](../contracts/domain-model.md)
+
+# Статус после ADR-0011
+
+Пункт 1 и пользовательский no-op из пункта 6 заменены [ADR-0011](ADR-0011-public-plugin-exclusions-scheduling.md). Privacy redaction private examples выполнена как исключение из правила неизменности истории: публичный документ сохраняет смысл решения, но не раскрывает решения и инвентарь владельца.

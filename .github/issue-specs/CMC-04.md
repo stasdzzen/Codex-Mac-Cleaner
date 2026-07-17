@@ -12,19 +12,19 @@ execution_profile: default
 
 ### Goal
 
-Collect read-only field-derived observations while protecting excluded areas and producing honest support and coverage data.
+Collect read-only public-product observations while protecting universal scopes and producing honest support and coverage data.
 
 ### Scope
 
-Implement installed-app, nine-root Library, process/open-file, user autostart, targeted system/shared inspection, receipt, filesystem/APFS and safe JSON/YAML/plist adapters, Snapshot A/B coordination and cooperative cancellation. Add only synthetic field fixtures for remnants, caches, personal data and system/shared components.
+Implement installed-app, nine-root Library, process/open-file/TCP-evidence, login/background/launch-target, protected-container-metadata, official-uninstaller, stale-receipt, targeted system/shared, filesystem/APFS/Time-Machine-observation and safe JSON/YAML/plist adapters, Snapshot A/B coordination and cooperative cancellation. Add only synthetic public fixtures.
 
 ### Acceptance criteria
 
-Adapters never mutate scanned data. Candidate traversal stays inside the nine roots and never enumerates `~/APPS`, `~/.codex`, developer/external/network areas or local Git projects. System LaunchAgents/Daemons/helpers and receipts produce only `unsupported_manual` with inspect and no shell or sudo guidance. `Operation not permitted` becomes a coverage warning. JSON/YAML/plist are reduced to `SafeMetadata` before persistence; raw keys/values and secret-like inputs are absent from observations and test output. Cancellation closes writers, reaches one terminal state and leaves empty actions. Real owner paths, bundle IDs, app inventory and secrets are absent from fixtures and PR evidence.
+Adapters never mutate scanned data. Candidate traversal stays inside the nine roots and never enumerates `~/.codex`, current project, plugin state, universal protected classes, developer/external/network areas or local Git projects. Missing executable, protected metadata, stale receipt and official uninstaller produce typed evidence. System/relocated/helper/daemon/framework/printer/VPN/service/snapshot sources produce only `unsupported_manual` or capability gaps with no shell, sudo or TCC-bypass guidance. JSON/YAML/plist are reduced to `SafeMetadata`. Cancellation closes writers and leaves empty actions. Username, real paths, app inventory, bundle/signing IDs and secrets are absent from fixtures and PR evidence.
 
 ### Verification
 
-Run synthetic field fixtures, redaction, protected-root, inspection-only, cancellation and read-only tree-comparison tests plus root `pnpm check`.
+Run synthetic fixtures, redaction, universal-protected-root, missing-target, uninstaller, stale-receipt, protected-metadata, inspection-only, cancellation and read-only tree-comparison tests plus root `pnpm check`.
 
 ### Constraints
 
@@ -34,19 +34,19 @@ No whole-home scan, shell interpolation, real-Mac fixtures, policy decisions, mu
 
 ### Цель
 
-Собрать read-only observations из полевых сценариев, защитить исключённые области и вернуть честные support/coverage данные.
+Собрать read-only observations публичного продукта, защитить универсальные scopes и вернуть честные support/coverage данные.
 
 ### Объём
 
-Реализовать adapters installed apps, девяти Library roots, processes/open files, user autostart, targeted system/shared inspection, receipts, filesystem/APFS, безопасного JSON/YAML/plist, Snapshot A/B и cooperative cancellation. Добавить только синтетические field fixtures для остатков, кэшей, личных данных и system/shared-компонентов.
+Реализовать adapters installed apps, девяти Library roots, processes/open files/TCP evidence, login/background/launch targets, protected container metadata, official uninstallers, stale receipts, targeted system/shared inspection, filesystem/APFS/Time Machine observations, безопасного JSON/YAML/plist, Snapshot A/B и cooperative cancellation. Добавить только synthetic public fixtures.
 
 ### Критерии приёмки
 
-Adapters не меняют данные. Candidate traversal остаётся в девяти roots и не перечисляет `~/APPS`, `~/.codex`, developer/external/network области или локальные Git-проекты. System LaunchAgents/Daemons/helpers и receipts дают только `unsupported_manual` с inspect, без shell/sudo. `Operation not permitted` становится coverage warning. JSON/YAML/plist сводятся к `SafeMetadata` до persistence; raw keys/values и secret-like inputs отсутствуют в observations и test output. Отмена закрывает writers, фиксирует один terminal state и пустые actions. Реальные пути, bundle IDs, app inventory и секреты владельца отсутствуют в fixtures и PR evidence.
+Adapters не меняют данные. Candidate traversal остаётся в девяти roots и не перечисляет `~/.codex`, current project, plugin state, universal protected classes, developer/external/network области или локальные Git-проекты. Missing executable, protected metadata, stale receipt и official uninstaller дают typed evidence. System/relocated/helper/daemon/framework/printer/VPN/service/snapshot sources дают только `unsupported_manual` или capability gaps без shell, sudo и TCC bypass. JSON/YAML/plist сводятся к `SafeMetadata`. Отмена закрывает writers и оставляет пустые actions. Username, реальные пути, app inventory, bundle/signing IDs и секреты отсутствуют в fixtures и PR evidence.
 
 ### Проверка
 
-Запустить synthetic field fixtures, redaction, protected-root, inspection-only, cancellation и read-only tree-comparison tests, затем root `pnpm check`.
+Запустить synthetic fixtures, redaction, universal-protected-root, missing-target, uninstaller, stale-receipt, protected-metadata, inspection-only, cancellation и read-only tree-comparison tests, затем root `pnpm check`.
 
 ### Ограничения
 
