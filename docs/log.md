@@ -2,6 +2,7 @@
 
 ## 2026-07-17
 
+* **Публичный репозиторий**: CMC-16 закрепил community health, private vulnerability reporting, pinned GitHub Actions, Dependabot, repository gate, squash-only merge и rulesets для `main` и release tags.
 * **Публичный продукт**: ADR-0011 заменил персональные app/path rules универсальными protected classes и закрепил synthetic-only public bundle.
 * **UX**: канонические действия finding — «Удалить» с quarantine, persistent «Исключить» и session-local «Пропустить сейчас».
 * **State**: persistent exclusions хранятся в user Application Support, используют stable identity, versioned schema и atomic writes.

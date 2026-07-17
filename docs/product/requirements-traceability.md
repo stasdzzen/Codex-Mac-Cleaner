@@ -37,6 +37,7 @@ date: 2026-07-15
 | `REQ-EXCL-02` | Identity mismatch не скрывает новый объект; excluded finding не получает preview | [Safety model](../safety/safety-model.md) | `CMC-05`, `CMC-12`, `CMC-10` | D, H |
 | `REQ-SCHED-01` | Opt-in monthly read-only audit через capability-aware Codex automation bridge | [ADR-0011](../decisions/ADR-0011-public-plugin-exclusions-scheduling.md) | `CMC-09`, `CMC-13`, `CMC-10` | G, H |
 | `REQ-PUB-01` | Публичный bundle не содержит персональных решений, путей и app inventory разработчика | [Модель угроз](../safety/threat-model.md) | `CMC-03`, `CMC-04`, `CMC-09`, `CMC-10` | B, G, H |
+| `REQ-REPO-01` | Публичный репозиторий имеет community files, pinned Actions, security settings и защищённый `main` | [Политика репозитория](../development/public-repository-policy.md) | `CMC-16`, `CMC-10` | B, H |
 | `REQ-UNINST-01` | Официальный uninstaller приоритетнее manual quarantine | [Публичный дизайн](../superpowers/specs/2026-07-17-public-plugin-contract-design.md) | `CMC-04`, `CMC-05`, `CMC-08`, `CMC-10` | C, D, G |
 | `REQ-ADV-01` | System findings только read-only `unsupported_manual`; mutation ждёт Advanced Cleanup ADR | [ADR-0011](../decisions/ADR-0011-public-plugin-exclusions-scheduling.md) | `CMC-04`, `CMC-05`, `CMC-10`, `CMC-14` | C, D, H |
 | `REQ-NOCLI-01` | Установка, аудит и решения без копирования shell-команд | [ADR-0010](../decisions/ADR-0010-field-research-safety-contract.md) | `CMC-08`, `CMC-09`, `CMC-10` | G, H |
@@ -51,7 +52,7 @@ Issue и PR не могут объявить требование выполне
 
 | ID | GitHub Issue | Текущий operational label |
 |---|---|---|
-| `CMC-01` | [#1 — Apache-2.0](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/1) | `cto:ready`, legal permission получено |
+| `CMC-01` | [#1 — Apache-2.0](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/1) | `cto:ready`, ожидает закрытия `#17`; legal permission получено |
 | `CMC-02` | [#2 — workspace и platform guard](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/2) | `cto:ready`, ожидает `#1` |
 | `CMC-03` | [#3 — contracts, store и MCP](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/3) | `cto:ready`, ожидает `#2` |
 | `CMC-04` | [#4 — source adapters](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/4) | `cto:ready`, ожидает `#3` |
@@ -61,10 +62,11 @@ Issue и PR не могут объявить требование выполне
 | `CMC-08` | [#8 — Audit Dashboard](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/8) | `cto:ready`, ожидает `#5` |
 | `CMC-09` | [#9 — MCP App и plugin](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/9) | `cto:ready`, ожидает `#7`, `#8` и `#12` |
 | `CMC-10` | [#10 — security и release evidence](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/10) | `cto:ready`, ожидает `#13` |
-| `CMC-11` | [#11 — публичный продуктовый контракт](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/11) | `cto:in-progress` до PR, затем `cto:review` |
+| `CMC-11` | [#11 — публичный продуктовый контракт](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/11) | Закрыта, PR `#16` merged |
 | `CMC-12` | [#12 — постоянные исключения](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/12) | `cto:ready`, ожидает `#7` и `#8` |
 | `CMC-13` | [#13 — ежемесячный read-only аудит](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/13) | `cto:ready`, ожидает `#9` |
 | `CMC-14` | [#14 — Advanced Cleanup v0.2](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/14) | `cto:blocked`, вне v0.1 и ждёт owner approval/ADR |
 | `CMC-15` | [#15 — Browser и Developer Storage v0.2](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/15) | `cto:blocked`, вне v0.1 и ждёт owner approval/threat models |
+| `CMC-16` | [#17 — защита публичного репозитория](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/17) | `cto:in-progress`, текущий governance PR |
 
 Operational label не заменяет dependency validation. Источником текущего readiness остаётся GitHub и `issue_contract.py`.

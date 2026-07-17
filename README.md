@@ -1,10 +1,35 @@
 # Codex Mac Cleaner
 
-Публичный local-first Codex-плагин для macOS 26 на Apple Silicon. Он без терминального workflow проводит read-only аудит остатков обычных приложений, объясняет доказательства и по одной кнопке перемещает разрешённый объект в обратимый карантин. Универсальные protected classes, включая состояние Codex, текущий проект, credential/browser-profile/personal data и локальные Git-проекты, проверяются server-side; персональные решения разработчика в bundle не входят.
+[![Проверки репозитория](https://github.com/stasdzzen/Codex-Mac-Cleaner/actions/workflows/repository.yml/badge.svg?branch=main)](https://github.com/stasdzzen/Codex-Mac-Cleaner/actions/workflows/repository.yml)
+![Платформа](https://img.shields.io/badge/macOS-26%2B-000000?logo=apple&logoColor=white)
+![Архитектура](https://img.shields.io/badge/Apple%20Silicon-arm64-333333)
+[![Лицензия](https://img.shields.io/badge/license-MIT-2ea44f)](LICENSE)
 
-## Статус
+Публичный local-first плагин Codex для macOS 26 на Apple Silicon. Он без
+терминального workflow проводит read-only аудит остатков обычных приложений,
+объясняет доказательства и по одной кнопке перемещает разрешённый объект
+в обратимый карантин.
 
-Архитектура, Product-пакет, TDD-план, Worker-промпты и GitHub Issues подготовлены для отдельного Controller. Runtime-кода пока нет.
+> [!IMPORTANT]
+> Репозиторий находится на docs-first стадии. Устанавливаемого плагина и
+> публичного Release пока нет. `main` содержит утверждённый канон и backlog,
+> но не готовый runtime.
+
+## Безопасная модель
+
+Универсальные protected classes, включая состояние Codex, текущий проект,
+credential/browser-profile/personal data и локальные Git-проекты, проверяются
+server-side. Персональные решения разработчика, содержимое реального Mac,
+полные домашние пути и секреты в публичный bundle не входят.
+
+Удаление исходника не выполняется напрямую: действие «Удалить» в v0.1 означает
+отдельное подтверждение и перемещение одного объекта в собственный карантин.
+Restore и окончательный purge остаются отдельными поэлементными действиями.
+
+## Статус и платформа
+
+Архитектура, Product-пакет, TDD-план, Worker-промпты и GitHub Issues готовы.
+Runtime-кода пока нет.
 
 Целевая платформа:
 
@@ -17,16 +42,34 @@
 * [Архитектурный канон](docs/index.md)
 * [Границы v0.1](docs/foundation/scope-and-principles.md)
 * [Модель безопасности](docs/safety/safety-model.md)
-* [Полевой safety-контракт](docs/superpowers/specs/2026-07-17-field-research-safety-contract-design.md)
+* [Политика публичного репозитория](docs/development/public-repository-policy.md)
 * [PRD](docs/product/PRD-codex-mac-cleaner.md)
 * [План реализации](docs/superpowers/plans/2026-07-15-codex-mac-cleaner-v01.md)
 * [Промпты для Workers](docs/prompts/)
 * [Контракт выполнения](docs/development/execution-contract.md)
 
+## Участие и поддержка
+
+Перед вкладом прочитайте [CONTRIBUTING.md](CONTRIBUTING.md) и выберите одну
+GitHub Issue. Воспроизводимые ошибки отправляйте через Bug Issue Form,
+ограниченные предложения — через Feature Issue Form. Вопросы маршрутизируются
+по [SUPPORT.md](SUPPORT.md).
+
+Не публикуйте сведения об уязвимостях в Issue или Pull Request. Используйте
+[Private vulnerability reporting](https://github.com/stasdzzen/Codex-Mac-Cleaner/security/advisories/new)
+и правила из [SECURITY.md](SECURITY.md).
+
+Проект находится в ранней alpha-стадии и не предоставляет SLA.
+
 ## Оркестрация
 
-Репозиторий подготовлен для issues-mode навыка `$codex-cto-orchestrator`. Наличие конфигурации не активирует Controller. Для Controller нужна новая постоянная задача, явно назначенная пользователем этому репозиторию.
+Одна Issue соответствует одной задаче, одному worktree, одной ветке и одному
+Pull Request. `main` защищён GitHub ruleset и принимает изменения только через
+PR с обязательным repository gate. Release, tag и публикация требуют отдельного
+решения владельца.
 
 ## Лицензия
 
-Архитектурно утверждена Apache-2.0. Текущий MIT `LICENSE` остаётся временным несоответствием до отдельной юридически защищённой Issue `CMC-01`; реализация до её закрытия запрещена.
+Архитектурно утверждена Apache-2.0. Текущий MIT `LICENSE` остаётся временным
+несоответствием до отдельной юридически защищённой Issue `CMC-01`; реализация
+продукта до её закрытия запрещена.

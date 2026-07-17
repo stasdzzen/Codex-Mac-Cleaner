@@ -20,6 +20,14 @@ date: 2026-07-15
 * [ ] Package и artifact metadata указывают Apache-2.0.
 * [ ] License compatibility зависимостей проверена; `NOTICE` создан только при фактической необходимости.
 
+# Публичный репозиторий
+
+* [ ] Community profile полон; support и private vulnerability reporting доступны по опубликованным ссылкам.
+* [ ] `main` защищён ruleset без bypass: PR-only, squash-only, linear history, закрытые review threads и строгий required check `Контракты публичного репозитория`.
+* [ ] Release tags защищены от update и deletion; tag и Release не созданы до отдельного разрешения владельца.
+* [ ] Actions ограничены GitHub-owned actions с full-SHA pinning; default workflow token остаётся read-only.
+* [ ] Dependabot alerts/security updates, secret scanning, push protection и CodeQL default setup подтверждены живыми GitHub API.
+
 # Сборка и платформа
 
 * [ ] Clean checkout собирает MCP server и автономный widget фиксированными командами.

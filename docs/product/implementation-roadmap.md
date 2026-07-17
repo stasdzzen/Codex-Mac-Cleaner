@@ -16,8 +16,9 @@ date: 2026-07-15
 
 | ID | Результат | Зависимости | Риск | Параллельность |
 |---|---|---|---|---|
-| `CMC-11` | Публичный продуктовый контракт, ADR-0011, gap matrix и синхронизированный backlog | Нет | Высокий: architecture/privacy | Только последовательно; текущий docs PR |
-| `CMC-01` | MIT заменён на Apache-2.0 с проверенной metadata | `CMC-11` | Высокий: legal | Только последовательно; требует прямого разрешения владельца |
+| `CMC-11` | Публичный продуктовый контракт, ADR-0011, gap matrix и синхронизированный backlog | Нет | Высокий: architecture/privacy | Завершено |
+| `CMC-16` | Community health, repository gate, supply-chain settings и GitHub rulesets | `CMC-11` | Высокий: repository security | Только последовательно; GitHub settings после GREEN workflow |
+| `CMC-01` | MIT заменён на Apache-2.0 с проверенной metadata | `CMC-11`, `CMC-16` | Высокий: legal | Только последовательно; требует прямого разрешения владельца |
 | `CMC-02` | Workspace, platform guard и общие quality-команды | `CMC-01` | Средний | Последовательно |
 | `CMC-03` | Доменные schemas, universal protected/safe-metadata/finding-facts contracts, versioned local state, `audit_cancel` и model-visible MCP skeleton | `CMC-02` | Средний | Последовательно |
 | `CMC-04` | Candidate/inspection-only adapters, uninstallers, missing targets, safe parsers, synthetic public fixtures, capability report и cancellation | `CMC-03` | Средний | Можно выполнять независимо от UI |
@@ -34,14 +35,14 @@ date: 2026-07-15
 
 # Критический путь
 
-`CMC-11 → CMC-01 → CMC-02 → CMC-03 → CMC-04 → CMC-05 → CMC-06 → CMC-07 → CMC-12 → CMC-09 → CMC-13 → CMC-10`.
+`CMC-11 → CMC-16 → CMC-01 → CMC-02 → CMC-03 → CMC-04 → CMC-05 → CMC-06 → CMC-07 → CMC-12 → CMC-09 → CMC-13 → CMC-10`.
 
 После `CMC-05` Controller может одновременно запустить `CMC-06` и `CMC-08`, если текущие touched paths не пересекаются и `max_parallel_tasks=2`.
 
 # Границы готовности
 
 * Прямое разрешение владельца на legal action CMC-01 получено 17 июля 2026 года; Issue имеет `cto:ready`, но выполняется только после отдельного запуска Controller.
-* `CMC-01` не исполнима до merge архитектурной `CMC-11`; operational label не отменяет dependency check.
+* `CMC-01` не исполнима до merge `CMC-11` и repository hardening `CMC-16`; operational label не отменяет dependency check.
 * Остальные Issues получают `cto:ready`, но validator не считает их исполнимыми до закрытия dependencies.
 * `CMC-10` может подготовить release evidence, но tag, publication и release требуют отдельной команды владельца.
 * Manual real-Mac smoke остаётся отдельным owner gate; автоматическая очередь не может отметить его выполненным.

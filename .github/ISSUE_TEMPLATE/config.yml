@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Поддержка
+    url: https://github.com/stasdzzen/Codex-Mac-Cleaner/blob/main/SUPPORT.md
+    about: Перед созданием Issue прочитайте порядок обращения и ограничения поддержки.
+  - name: Закрытый отчёт об уязвимости
+    url: https://github.com/stasdzzen/Codex-Mac-Cleaner/security/advisories/new
+    about: Не публикуйте сведения об уязвимости в обычной Issue.

@@ -1,0 +1,34 @@
+name: Проверки репозитория
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    name: Контракты публичного репозитория
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Получить исходники
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Проверить контракты и тесты
+        run: |
+          python3 .github/scripts/validate_repository.py
+          python3 -m unittest discover -s tests -p 'test_repository_policy.py' -v
+      - name: Проверить пробелы в изменениях
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git show --check --format= --no-renames HEAD
+          if [[ -n "$BASE_REF" ]]; then
+            git diff --check "origin/$BASE_REF"...HEAD
+          fi
