@@ -11,6 +11,7 @@
 * [Решения](decisions/) — принятые ADR.
 * [Качество](quality/) — стратегия тестирования и release gates.
 * [Продукт](product/) — PRD, roadmap, трассировка требований и release scope.
+* [Спецификации дизайна](superpowers/specs/) — утверждённые на обсуждении дополнения перед изменением канона.
 * [Планы реализации](superpowers/plans/) — пошаговый TDD-план для Issues.
 * [Промпты](prompts/) — готовые входы для отдельных Workers.
 * [Разработка](development/) — контракт Issue → task → worktree → PR.
