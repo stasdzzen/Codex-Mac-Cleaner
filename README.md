@@ -3,7 +3,7 @@
 [![Проверки репозитория](https://github.com/stasdzzen/Codex-Mac-Cleaner/actions/workflows/repository.yml/badge.svg?branch=main)](https://github.com/stasdzzen/Codex-Mac-Cleaner/actions/workflows/repository.yml)
 ![Платформа](https://img.shields.io/badge/macOS-26%2B-000000?logo=apple&logoColor=white)
 ![Архитектура](https://img.shields.io/badge/Apple%20Silicon-arm64-333333)
-[![Лицензия](https://img.shields.io/badge/license-MIT-2ea44f)](LICENSE)
+[![Лицензия](https://img.shields.io/badge/license-Apache--2.0-2ea44f)](LICENSE)
 
 Публичный local-first плагин Codex для macOS 26 на Apple Silicon. Он без
 терминального workflow проводит read-only аудит остатков обычных приложений,
@@ -70,6 +70,5 @@ PR с обязательным repository gate. Release, tag и публикац
 
 ## Лицензия
 
-Архитектурно утверждена Apache-2.0. Текущий MIT `LICENSE` остаётся временным
-несоответствием до отдельной юридически защищённой Issue `CMC-01`; реализация
-продукта до её закрытия запрещена.
+Проект распространяется по Apache License 2.0. Полный текст находится в
+[LICENSE](LICENSE).
