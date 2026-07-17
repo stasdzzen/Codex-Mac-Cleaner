@@ -1,0 +1,22 @@
+{
+  "name": "@codex-mac-cleaner/mcp-server",
+  "private": true,
+  "type": "module",
+  "exports": "./src/server.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run test"
+  },
+  "dependencies": {
+    "@codex-mac-cleaner/contracts": "workspace:*",
+    "@codex-mac-cleaner/platform": "workspace:*",
+    "@codex-mac-cleaner/storage": "workspace:*",
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.3",
+    "typescript": "7.0.2",
+    "vitest": "4.1.10"
+  }
+}
