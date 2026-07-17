@@ -19,6 +19,8 @@ date: 2026-07-15
 3. Целостность системных настроек и объектов автозапуска.
 4. Приватность локальных путей, имён и evidence.
 5. Целостность опубликованных сборок и зависимостей.
+6. Целостность пользовательских exclusions и schedule state.
+7. Отсутствие персональных данных разработчика в публичном bundle.
 
 # Не рассматриваемый основной противник
 
@@ -37,7 +39,15 @@ date: 2026-07-15
 | Prompt injection в имени или содержимом | Обход политики через модель | Содержимое не читается как инструкции; модель не получает mutation-tools и пути |
 | Совпадение имени с удалённым приложением | Личные или shared-данные приняты за остаток | Owner, installed state, process, receipt, dependency, temporal и data-kind evidence проверяются раздельно |
 | Пароль, token или subscription URL в конфигурации | Утечка в модель, лог, fixture или PR | Safe Metadata Filter редактирует до persistence; raw keys/values не сохраняются |
-| Forged finding для `~/APPS`, `~/.codex` или Git-проекта | Обход UI-исключения | Неизменяемый server-side Protected Scope Registry до кандидата и перед mutation |
+| Forged finding для credential/browser-profile/personal/project/plugin/Codex scope | Обход UI-исключения | Неизменяемый универсальный Protected Scope Registry до кандидата и перед mutation |
+| Path-only exclusion скрывает новый объект | Опасный finding не показывается после замены файла | Stable identity match по rule/type/owner/bundle-package/signing/normalized target; mismatch снова показывает finding |
+| Excluded finding получает preview | Mutation объекта вопреки решению пользователя | Exclusion проверяется до дорогого анализа и перед token issuance; preview запрещён |
+| Повреждённая или новая schema exclusions | Тихая потеря правил либо скрытие findings | Versioned migrations; неизвестная schema не скрывает findings и блокирует destructive-token issuance |
+| Forged schedule request или duplicate click | Скрытая или дублирующая automation | Явный opt-in, server intent, host confirmation, один opaque automation ID и идемпотентный update |
+| Отсутствующая host capability | Скрытый cron/LaunchAgent fallback | Disabled state; никаких альтернативных scheduler-компонентов |
+| Scheduled run запускает mutation | Фоновое удаление без решения пользователя | Фиксированный read-only prompt, пустые mutation credentials/tokens и contract test |
+| Персональные данные разработчика попали в public package | Утечка путей, app inventory или решений владельца | Synthetic-only fixtures, package allowlist и privacy scan docs/snapshots/logs/PR evidence |
+| Официальный uninstaller проигнорирован | Неполное или небезопасное ручное удаление | Uninstaller evidence становится recommended method и блокирует manual quarantine, когда применим |
 | Системная находка вне v0.1 | Опасная инструкция с `sudo` или mutation `/Library` | Только `unsupported_manual`, без mutation actions и готовой команды |
 | APFS accounting интерпретирован как результат purge | Ложное обещание освобождённого места | StorageSummary и DiskObservation разделены; причинный delta не вычисляется |
 | Повреждение журнала или manifest | Потеря возможности восстановить | Atomic write, fsync до rename, schema validation, fail-closed recovery |
@@ -50,6 +60,7 @@ date: 2026-07-15
 
 * Диалог → model-visible MCP tool: все inputs проходят schema validation.
 * Widget → app-visible mutation-tool: UI-сессия и preview token не заменяют серверную политику.
+* Widget → schedule intent → Skill/host layer: MCP App не имеет прямого доступа к host-native automation; capability и подтверждение обязательны.
 * Сервер → ОС и файловая система: все ответы ОС и пути считаются изменяемыми.
 * Release pipeline → пользователь: артефакт должен быть связан с исходным коммитом и checksum.
 
@@ -60,6 +71,8 @@ date: 2026-07-15
 * Компрометация процесса с тем же UID после подтверждения может нарушить локальное состояние; recovery должен остановиться на противоречии.
 * Анализ владельца артефакта не может быть абсолютно точным; поэтому risk-категории остаются analysis-only.
 * `DiskObservation` может изменяться из-за APFS snapshots, compression и других процессов; продукт показывает время наблюдения и не приписывает delta себе.
+* Codex automation capability может отсутствовать или изменить контракт; продукт показывает состояние capability и не обещает расписание до подтверждённого host result.
+* Stable identity может быть неполной для необычного объекта; в этом случае exclusion не совпадает, finding остаётся видимым, а mutation работает fail closed.
 
 # Проверка мер
 

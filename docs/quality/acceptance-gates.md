@@ -28,9 +28,10 @@ date: 2026-07-15
 * Coverage gaps видимы и не интерпретируются как «остатков нет».
 * Classification воспроизводима named rules и golden tests.
 * Обычный аудит не выходит за allowlisted user Library roots.
-* `~/APPS` и `~/.codex` не перечисляются как кандидаты; field fixtures используют только синтетические identities и paths.
+* `~/.codex`, current project root, plugin-owned state, credential/browser-profile/personal-data classes и локальные Git-проекты не перечисляются как кандидаты; персональных app/path rules в bundle нет.
 * JSON/YAML/plist дают только `SafeMetadata`; raw keys/values и secrets отсутствуют в persisted observations.
 * Targeted system/shared inspection создаёт только `unsupported_manual` и не расширяет candidate roots.
+* Protected container metadata, stale receipts, missing launch executable и official uninstaller дают typed evidence без TCC bypass, `sudo` или manual removal при применимом uninstaller.
 * `audit_cancel` идемпотентно переводит активный аудит в `cancelled` и не оставляет незакрытых потоков записи.
 * Частичные находки `cancelled` видимы только для чтения и имеют пустые `allowedActions`.
 
@@ -42,6 +43,9 @@ date: 2026-07-15
 * Прямая подделка UI state или tool request не меняет `allowedActions`.
 * Built-in protected scopes нельзя ослабить через UI, model input, config или forged finding ID; сервер возвращает `PROTECTED_SCOPE`.
 * Name-only, sensitive/personal data, local Git project и кэш активного приложения блокируют mutation.
+* Совпавший `UserExclusion` блокирует preview; path-only match запрещён, а identity mismatch снова показывает finding.
+* Повреждённая или неизвестная exclusion schema не скрывает findings и блокирует destructive-token issuance.
+* Применимый official uninstaller блокирует manual quarantine и возвращает безопасный recommended method.
 
 # Gate E — карантин и восстановление
 
@@ -66,9 +70,12 @@ date: 2026-07-15
 * В основном пользовательском сценарии нет сетевых запросов и телеметрии.
 * Dashboard использует semantic tokens, тёмную тему и утверждённые shadcn/ui components.
 * Coverage warning, риск, уверенность и причина запрета действия различимы без опоры только на цвет.
-* Dashboard имеет три вкладки; Quarantine Center показывает поэлементные restore/purge без bulk action.
+* Dashboard имеет пять вкладок; Quarantine Center показывает поэлементные restore/purge без bulk action.
 * UI показывает `candidateLogicalBytes`, `candidatePhysicalBytes`, `quarantinePhysicalBytes`, `purgedPhysicalBytes` и timestamped `DiskObservation` без самостоятельного пересчёта и причинного APFS delta.
-* «Оставить» — session-local no-op: tool call, filesystem mutation и persistent ignore отсутствуют.
+* «Пропустить сейчас» — session-local no-op без tool call; «Исключить» создаёт versioned local state, а «Удалить» означает подтверждённый quarantine одного объекта.
+* Вкладка «Исключения» поддерживает persistence, search/filter, «Снова проверять», поэлементное удаление и подтверждаемый reset all.
+* Вкладка «Расписание» показывает capability, opt-in, day/time, next/last run и update/pause/resume/delete без raw RRULE.
+* Без host automation capability schedule disabled; cron, LaunchAgent и скрытый fallback отсутствуют.
 * `unsupported_manual` содержит только объяснение границы, без mutation, `sudo` и готовой shell-команды.
 * Вкладки, диалоги и действия доступны с клавиатуры и возвращают focus после закрытия.
 
@@ -79,8 +86,11 @@ date: 2026-07-15
 * GitHub Release содержит checksum, SBOM и provenance, связанные с tag и commit.
 * Clean-room запуск в новой задаче Codex открывает аудит и Dashboard без копирования команд в терминал.
 * Все решения пользователя выполняются отдельными кнопками для одного объекта; terminal confirmation flow отсутствует.
+* Scheduled run выполняет только read-only аудит, применяет exclusions, не создаёт mutation token и не запрашивает `sudo`.
+* Повторное включение расписания обновляет одну automation; duplicate, pause, resume и delete покрыты тестами.
+* Публичный package allowlist и privacy scan не находят username, home paths, персональные app names/decisions или real-Mac inventory.
 * Real-Mac smoke на macOS 26 Apple Silicon подписан отдельным проверяющим или приложен как воспроизводимый протокол.
 
 # Решение о готовности
 
-Любой невыполненный пункт Gate D, E или F блокирует merge и release. Невыполненные `REQ-CANCEL-01`, `REQ-QCTR-01`, `REQ-SIZE-01`, `REQ-PROT-01`, `REQ-META-01` или `REQ-NOCLI-01` блокируют release. Ручной gate нельзя обозначить выполненным без факта проверки. Временное исключение возможно только через отдельный ADR, который не ослабляет инварианты безопасности.
+Любой невыполненный пункт Gate D, E или F блокирует merge и release. Невыполненные `REQ-CANCEL-01`, `REQ-QCTR-01`, `REQ-SIZE-01`, `REQ-PROT-01`, `REQ-META-01`, `REQ-EXCL-01`, `REQ-SCHED-01`, `REQ-PUB-01` или `REQ-NOCLI-01` блокируют release. Ручной gate нельзя обозначить выполненным без факта проверки. Временное исключение возможно только через отдельный ADR, который не ослабляет инварианты безопасности.

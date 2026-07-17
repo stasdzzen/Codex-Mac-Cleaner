@@ -20,13 +20,23 @@ date: 2026-07-15
 
 Нормализованная находка внутри одной ревизии.
 
-Обязательные поля: `findingId`, `auditId`, `revision`, `displayName`, `canonicalPath`, `artifactKind`, `category`, `supportLevel`, `logicalSize`, `physicalSize`, `ownerCandidates`, `safeMetadata`, `label`, `confidence`, `evidenceSet`, `risk`, `snapshotFingerprint`, `allowedActions`.
+Обязательные поля: `findingId`, `auditId`, `revision`, `displayName`, `componentDisplayName`, `canonicalPath`, `artifactKind`, `category`, `supportLevel`, `logicalSize`, `physicalSize`, `findingFacts`, `reclaimEstimate`, `ownerCandidates`, `safeMetadata`, `label`, `confidence`, `evidenceSet`, `risk`, `snapshotFingerprint`, `allowedActions`.
 
 `artifactKind`: `file`, `directory`, `bundle`, `plist`, `launch_item`, `receipt` или `unknown`. `category`: `cache`, `log`, `webkit`, `http_storage`, `saved_state`, `application_support`, `container`, `group_container`, `preference`, `database`, `sync_data`, `vpn_data`, `personal_file`, `autostart` или `unknown`. Размеры измеряются в байтах и относятся к ревизии аудита.
 
 `canonicalPath` остаётся локальным и передаётся модели только в обезличенной форме.
 
-`supportLevel`: `candidate`, `analysis_only` или `unsupported_manual`. Для `analysis_only` и `unsupported_manual` допустим только `inspect`; остальные действия отсутствуют.
+`supportLevel`: `candidate`, `analysis_only` или `unsupported_manual`. Для `analysis_only` и `unsupported_manual` из filesystem-действий допустим только `inspect`; локальное `exclude` может быть доступно отдельно, но не разрешает mutation.
+
+# `FindingFacts`
+
+Server-owned сводка содержит `lastObservedAt`, `temporalKind`, `mainBundleState`, `activityState`, `openFileState`, `startupKinds`, `targetExecutableState`, `receiptState`, `dependencyState`, `sensitivityFlags`, `recommendedRemovalMethod` и `blockingReasons`.
+
+Трёхзначные states используют `present | absent | unknown` либо эквивалентный закрытый enum. `recommendedRemovalMethod`: `quarantine`, `official_uninstaller`, `close_and_recheck`, `advanced_mode` или `inspect_only`. Неизвестное состояние не трактуется как отсутствие.
+
+# `ReclaimEstimate`
+
+Содержит неотрицательные `estimatedPhysicalBytes`, `confidence`, `basis`, `limitations` и `observedAt`. Это snapshot-оценка, а не обещание изменения `df`; stale receipt может иметь `estimatedPhysicalBytes=0`.
 
 # `SafeMetadata`
 
@@ -56,13 +66,25 @@ date: 2026-07-15
 
 Содержит `allowedActions`, `blockingRuleIds`, `warnings` и `evaluatedFingerprint`.
 
-Допустимые действия: `inspect`, `reveal`, `prepare_move`, `prepare_restore`, `prepare_purge`.
+Допустимые действия: `inspect`, `reveal`, `exclude`, `prepare_move`, `prepare_restore`, `prepare_purge`.
 
 Классификация `orphaned` не гарантирует `prepare_move`.
 
 # `ProtectedScopeRule`
 
-Встроенное server-only правило с `ruleId`, `kind: canonical_prefix | owner_identity | local_git_repository`, безопасным объяснением и непустым `effects` из `exclude_from_candidates | block_mutation`. Hard exclusions содержат оба эффекта. Публичного API для изменения правил нет.
+Встроенное server-only правило с `ruleId`, `kind: system_scope | credential_store | browser_profile | personal_data | current_project_root | plugin_owned_state | codex_state | local_git_repository`, безопасным объяснением и непустым `effects` из `exclude_from_candidates | block_mutation`. Hard exclusions содержат оба эффекта. Публичного API для изменения правил нет; персональные пути и названия приложений разработчика отсутствуют.
+
+# `UserExclusion`
+
+Изменяемое пользователем локальное правило, отдельное от `ProtectedScopeRule`. Содержит `schemaVersion`, `exclusionId`, `ruleId`, `artifactKind`, `normalizedTargetIdentity`, опциональные `bundleId`/`packageId`, `signingIdentity`, `ownerTypeFingerprint`, `createdAt` и безопасную `reasonCategory`.
+
+Path-only equality запрещена. Match требует совпадения всех применимых identity fields. Несовпадение снова показывает finding. Совпавший exclusion не получает destructive action token. Model-visible output содержит только общий счётчик исключённых объектов.
+
+# `ScheduleIntent` и `ScheduleState`
+
+`ScheduleIntent` содержит server-generated `intentId`, действие `enable | update | pause | resume | delete`, локальные day/time параметры, `requestId`, `createdAt` и состояние `requested | awaiting_confirmation | completed | capability_unavailable | failed`. Raw RRULE отсутствует.
+
+`ScheduleState` содержит `schemaVersion`, `enabled`, opaque `automationId`, `dayOfMonth`, `localTime`, `nextRunAt`, `lastRunAt`, `updatedAt` и `capabilityState`. MCP-сервер хранит state, но не вызывает host-native automation. Неизвестная schema version работает fail closed для изменения расписания.
 
 # `SnapshotFingerprint`
 

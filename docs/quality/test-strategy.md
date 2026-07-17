@@ -18,7 +18,7 @@ date: 2026-07-15
 
 Версионированные fixtures покрывают приложения, receipts, JSON/YAML/plist, процессы, открытые файлы, APFS metadata и ошибки разрешений. Обязательны повреждённые, необычно большие, Unicode- и escape-насыщенные входы. Raw secret-like values присутствуют только во входном temp fixture и должны отсутствовать в observation, snapshot, логе и test output.
 
-Полевой synthetic pack покрывает Application Support, Containers, Group Containers, HTTPStorages, WebKit, Preferences, Saved Application State, updater, browser profile, messenger/mail data, game save, database, Git project, settings, VPN subscription, системный launch item/helper и TCC denial. Названия, bundle IDs, paths и содержимое не копируют реальный Mac.
+Полевой synthetic pack покрывает Application Support, Containers, Group Containers, HTTPStorages, WebKit, Preferences, Saved Application State, updater, browser profile, mail data, game save, database, Git project, settings, VPN subscription, protected container metadata, stale receipt, official uninstaller, login/background/launch item без executable, system helper и TCC denial. Названия, bundle IDs, signing identities, paths и содержимое не копируют реальный Mac.
 
 ## Golden tests классификатора
 
@@ -26,7 +26,11 @@ date: 2026-07-15
 
 ## Policy tests
 
-Матрица проверяет разделение `label` и `allowedActions`: `orphaned` с контрдоказательством, открытым файлом, risk-категорией или coverage gap не получает `prepare_move`. Отдельно проверяются name-only, protected owner, `~/APPS`, `~/.codex`, `.git`, sensitive metadata и active-app cache.
+Матрица проверяет разделение `label` и `allowedActions`: `orphaned` с контрдоказательством, открытым файлом, risk-категорией или coverage gap не получает `prepare_move`. Отдельно проверяются name-only, universal protected classes, `~/.codex`, current project root, plugin state, `.git`, sensitive metadata, active-app cache, official uninstaller и совпавший `UserExclusion`.
+
+## Exclusion state и migrations
+
+Тесты покрывают create/list/remove/reset, persistence после перезапуска, миграцию каждой поддержанной schema version, неизвестную/повреждённую схему, path-only false match, owner/type/signing/bundle-package/target mismatch, фильтрацию до дорогого анализа и запрет destructive token для excluded finding.
 
 ## Property-based и fuzz tests путей
 
@@ -34,7 +38,7 @@ date: 2026-07-15
 
 ## Contract tests MCP
 
-Проверяются точные input/output schemas, запрет неизвестных полей, annotations, `openWorldHint=false`, разделение model-visible и app-visible tools, `audit_cancel`, `supportLevel`, `ProtectedScopeRule`, `SafeMetadata`, `StorageSummary`, `DiskObservation`, отсутствие полных путей и secret-like values в `content` и `structuredContent`.
+Проверяются точные input/output schemas, запрет неизвестных полей, annotations, `openWorldHint=false`, разделение model-visible и app-visible tools, `audit_cancel`, `supportLevel`, `ProtectedScopeRule`, `UserExclusion`, `ScheduleIntent`, `FindingFacts`, `ReclaimEstimate`, `SafeMetadata`, `StorageSummary`, `DiskObservation`, отсутствие полных путей и secret-like values в `content` и `structuredContent`.
 
 ## Temp-directory E2E
 
@@ -52,7 +56,9 @@ date: 2026-07-15
 
 ## UI tests
 
-Проверяются три вкладки, состояния загрузки и отмены, coverage warnings, `supportLevel`, фильтры, evidence `Sheet`, «Оставить», Quarantine Center, пустые состояния, пять показателей, отсутствие кнопки при запрете policy, точный текст `AlertDialog`, одно действие за подтверждение, keyboard navigation, focus return и корректная обработка expired token. Отдельные negative tests доказывают отсутствие bulk action, shell-команд, tool call при «Оставить» и невозможность обойти policy прямым tool call.
+Проверяются пять вкладок, состояния загрузки и отмены, coverage warnings, `supportLevel`, `FindingFacts`, `ReclaimEstimate`, evidence `Sheet`, «Удалить», «Исключить», «Пропустить сейчас», Quarantine Center, Exclusions, Schedule, пустые состояния, пять показателей, отсутствие кнопки при запрете policy, точный текст `AlertDialog`, одно действие за подтверждение, keyboard navigation, focus return и корректная обработка expired token. Отдельные negative tests доказывают отсутствие bulk action, shell-команд, tool call при «Пропустить сейчас», direct delete исходника и обхода policy прямым tool call.
+
+Schedule tests покрывают отсутствие default opt-in, одну automation без дубликатов, update/pause/resume/delete, read-only prompt, применение exclusions, отсутствие mutation/`sudo`, raw RRULE и graceful fallback без capability. MCP App никогда не вызывает host-native tool напрямую.
 
 ## Real-Mac smoke
 
@@ -67,9 +73,12 @@ date: 2026-07-15
 * `audit → cancel` с просматриваемым, но недейственным partial report;
 * Quarantine Center, restore, purge и обновление StorageSummary/DiskObservation;
 * логический/физический размер, quarantine/purge и timestamped состояние диска без claim о причинном APFS delta;
-* `~/APPS` и `~/.codex` недоступны для mutation;
+* universal protected classes, `~/.codex`, current project root и synthetic Git project недоступны для mutation;
+* exclusion переживает перезапуск, снимается через «Снова проверять» и не совпадает с заменённой identity;
+* schedule flow создаёт либо обновляет одну native automation при capability или показывает disabled fallback;
 * clean-room запуск в новой задаче Codex без копирования команд;
-* отсутствие сетевых запросов во время основного сценария.
+* отсутствие сетевых запросов во время основного сценария;
+* package privacy scan не находит username, реальные home paths, персональный app inventory или developer decisions.
 
 # Тестовые данные
 

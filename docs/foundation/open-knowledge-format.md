@@ -51,6 +51,7 @@ date: 2026-07-15
 * `Traceability`
 * `Release Checklist`
 * `Implementation Plan`
+* `Design Specification`
 * `Worker Prompt`
 * `Execution Contract`
 

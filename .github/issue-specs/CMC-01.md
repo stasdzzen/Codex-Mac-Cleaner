@@ -1,6 +1,6 @@
 ```cto-issue
 schema: 1
-dependencies: none
+dependencies: #11
 conflicts: none
 touched_paths: LICENSE; README.md; docs/decisions/ADR-0008-apache-license.md
 risk: high
@@ -28,7 +28,7 @@ Run the license header search and `git diff --check` from the CMC-01 implementat
 
 ### Constraints
 
-The owner authorization recorded above satisfies the legal gate. Do not start until a separately launched Controller assigns CMC-01. Do not create an empty `NOTICE`, change product scope, merge, publish, or release.
+The owner authorization recorded above satisfies the legal gate. Do not start until CMC-11 is merged and a separately launched Controller assigns CMC-01. Do not create an empty `NOTICE`, change product scope, merge, publish, or release.
 
 ## Русский
 
@@ -50,4 +50,4 @@ The owner authorization recorded above satisfies the legal gate. Do not start un
 
 ### Ограничения
 
-Зафиксированное выше разрешение владельца закрывает legal gate. Не начинать до назначения CMC-01 отдельно запущенным Controller. Не создавать пустой `NOTICE`, не менять scope, не выполнять merge, publication или release.
+Зафиксированное выше разрешение владельца закрывает legal gate. Не начинать до merge CMC-11 и назначения CMC-01 отдельно запущенным Controller. Не создавать пустой `NOTICE`, не менять scope, не выполнять merge, publication или release.

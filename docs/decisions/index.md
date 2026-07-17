@@ -14,6 +14,7 @@
 * [ADR-0008: Apache License 2.0](ADR-0008-apache-license.md)
 * [ADR-0009: safety/UX-дополнения v0.1](ADR-0009-v01-safety-ux-completion.md)
 * [ADR-0010: protected scopes, inspection-only sources и наблюдаемые метрики диска](ADR-0010-field-research-safety-contract.md)
+* [ADR-0011: публичный продукт, пользовательские исключения и Codex-расписание](ADR-0011-public-plugin-exclusions-scheduling.md)
 
 ## Правило изменения
 

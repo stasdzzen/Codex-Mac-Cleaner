@@ -1,6 +1,6 @@
 ```cto-issue
 schema: 1
-dependencies: #9
+dependencies: #13
 conflicts: none
 touched_paths: .github/workflows/; scripts/; tests/security/; tests/plugin/; docs/release/; README.md
 risk: high
@@ -12,15 +12,15 @@ execution_profile: deep
 
 ### Goal
 
-Complete protected-scope, privacy, field-E2E and clean-room verification and produce deterministic release evidence without publishing.
+Complete universal-policy, privacy, exclusions/schedule, field-E2E and clean-room verification and produce deterministic release evidence without publishing.
 
 ### Scope
 
-Add CMC-10 security tests for protected scopes, safe metadata, synthetic field fixtures, cancellation races, quarantine metrics, purge failures and visibility; add no-terminal clean-room/new-task tests, non-publishing CI, deterministic packaging, SBOM/checksum/provenance inputs and an uncompleted real-Mac owner protocol.
+Add CMC-10 security tests for universal protected scopes, SafeMetadata, FindingFacts, public synthetic fixtures, exclusions/migrations/identity mismatch, official uninstaller, protected metadata, schedule lifecycle/fallback/read-only prompt, cancellation races, quarantine metrics, purge failures and visibility; add no-terminal clean-room/new-task tests, non-publishing CI, deterministic packaging and an uncompleted real-Mac owner protocol.
 
 ### Acceptance criteria
 
-Automated gates A–H pass on the final SHA. Forged findings for `~/APPS`, `~/.codex`, a protected owner and a local Git project return `PROTECTED_SCOPE` and cannot produce a preview. Raw JSON/YAML/plist values, passwords, tokens, subscription URLs, real paths, owner app inventory and local bundle IDs are absent from outputs, logs, snapshots, fixtures, package and PR evidence. Synthetic field E2E proves candidate/analysis-only/unsupported behavior. `Keep` calls no tool; unsupported findings have no shell/sudo; no bulk exists. Storage/disk UI makes no causal APFS claim. Clean-room installation opens an audit and Dashboard in a new Codex task and completes button-only leave/move/restore/purge without terminal copy or `ready` messages. Package contains only approved production files. Manual real-Mac smoke, tag and release remain explicitly incomplete owner gates.
+Automated gates A–H pass on the final SHA. Forged findings for credential/browser-profile/personal/current-project/plugin/Codex/Git scopes cannot produce preview. Excluded findings cannot mutate; identity mismatch is visible; migrations and corrupt-state fail-closed behavior pass. Official uninstaller, stale receipt, protected metadata, active process and missing executable cases are proven. Schedule creates one automation, supports update/pause/resume/delete, runs read-only and has an honest no-capability fallback. Skip now calls no tool; Delete quarantines one object; no bulk exists. Public package contains no username, home paths, personal app names/decisions, real inventory, raw secrets or local identities. Clean-room completes button-only delete/exclude/skip/restore/purge without terminal. Manual smoke, tag and release remain incomplete owner gates.
 
 ### Verification
 
@@ -34,15 +34,15 @@ Do not create a tag, release, publication, deploy, credential change, real-Mac m
 
 ### Цель
 
-Завершить protected-scope, privacy, field-E2E и clean-room verification и подготовить deterministic release evidence без публикации.
+Завершить universal-policy, privacy, exclusions/schedule, field-E2E и clean-room verification и подготовить deterministic release evidence без публикации.
 
 ### Объём
 
-Добавить security tests CMC-10 для protected scopes, SafeMetadata, synthetic field fixtures, cancellation races, quarantine metrics, purge failures и visibility; no-terminal clean-room/new-task tests, CI без публикации, deterministic packaging, SBOM/checksum/provenance inputs и незаполненный real-Mac owner protocol.
+Добавить security tests CMC-10 для universal protected scopes, SafeMetadata, FindingFacts, public synthetic fixtures, exclusions/migrations/identity mismatch, official uninstaller, protected metadata, schedule lifecycle/fallback/read-only prompt, cancellation races, quarantine metrics, purge failures и visibility; no-terminal clean-room/new-task tests, CI без публикации, deterministic packaging и незаполненный real-Mac owner protocol.
 
 ### Критерии приёмки
 
-Автоматические части gates A–H проходят на финальном SHA. Forged findings для `~/APPS`, `~/.codex`, protected owner и local Git project возвращают `PROTECTED_SCOPE` и не создают preview. Raw JSON/YAML/plist values, passwords, tokens, subscription URLs, реальные пути, owner app inventory и local bundle IDs отсутствуют в outputs, logs, snapshots, fixtures, package и PR evidence. Synthetic field E2E доказывает candidate/analysis-only/unsupported behavior. «Оставить» не вызывает tool; unsupported findings без shell/sudo; bulk отсутствует. Storage/disk UI не делает причинного APFS claim. Clean-room установка в новой задаче Codex открывает аудит и Dashboard и выполняет button-only leave/move/restore/purge без terminal copy или сообщений «готово». Package содержит только утверждённые production files. Manual real-Mac smoke, tag и release явно остаются незавершёнными owner gates.
+Автоматические части gates A–H проходят на финальном SHA. Forged findings для credential/browser-profile/personal/current-project/plugin/Codex/Git scopes не создают preview. Excluded finding не мутируется; identity mismatch видим; migrations и corrupt-state fail-closed behavior проходят. Official uninstaller, stale receipt, protected metadata, active process и missing executable cases доказаны. Schedule создаёт одну automation, поддерживает update/pause/resume/delete, запускает только read-only audit и имеет честный no-capability fallback. «Пропустить сейчас» без tool; «Удалить» карантинирует один объект; bulk отсутствует. Public package не содержит username, home paths, personal app names/decisions, real inventory, raw secrets или local identities. Clean-room выполняет button-only delete/exclude/skip/restore/purge без terminal. Manual smoke, tag и release остаются незавершёнными owner gates.
 
 ### Проверка
 

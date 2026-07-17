@@ -19,11 +19,14 @@ date: 2026-07-15
 │   ├── manifest.json
 │   └── payload/
 │       └── object
+├── state/
+│   ├── exclusions.json
+│   └── schedule.json
 └── journal/
     └── operations.ndjson
 ```
 
-Каталоги получают права `0700`, файлы — `0600`.
+Каталоги получают права `0700`, файлы — `0600`. `state/exclusions.json` и `state/schedule.json` версионируются и записываются через тот же atomic-write primitive, но не входят в quarantine manifest и никогда не хранятся в репозитории или `~/.codex`.
 
 # Обязательные поля manifest
 

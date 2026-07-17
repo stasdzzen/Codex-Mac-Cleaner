@@ -20,7 +20,7 @@ date: 2026-07-15
 | `REQ-EVID-01` | Named rules, evidence и counter-evidence | [Компоненты](../architecture/components.md) | `CMC-05` | C |
 | `REQ-POL-01` | Только server policy вычисляет действия | [Модель безопасности](../safety/safety-model.md) | `CMC-05` | D |
 | `REQ-PATH-01` | Allowlist и запрет link/mount escape | [Политика путей](../safety/path-policy.md) | `CMC-05`, `CMC-06` | D, E |
-| `REQ-PROT-01` | Неизменяемые protected scopes для `~/APPS`, `~/.codex`, protected owners и Git-проектов | [ADR-0010](../decisions/ADR-0010-field-research-safety-contract.md) | `CMC-03`, `CMC-04`, `CMC-05`, `CMC-10` | C, D, H |
+| `REQ-PROT-01` | Универсальные protected classes без персональных app/path rules | [ADR-0011](../decisions/ADR-0011-public-plugin-exclusions-scheduling.md) | `CMC-03`, `CMC-04`, `CMC-05`, `CMC-10` | C, D, H |
 | `REQ-META-01` | SafeMetadata и redaction JSON/YAML/plist до persistence | [ADR-0010](../decisions/ADR-0010-field-research-safety-contract.md) | `CMC-03`, `CMC-04`, `CMC-05`, `CMC-09`, `CMC-10` | C, D, G, H |
 | `REQ-SUPP-01` | `candidate`, `analysis_only`, `unsupported_manual` без system mutation и shell-команд | [Доменная модель](../contracts/domain-model.md) | `CMC-03`, `CMC-04`, `CMC-05`, `CMC-08`, `CMC-09`, `CMC-10` | C, D, G, H |
 | `REQ-MOVE-01` | Поэлементный durable atomic quarantine | [Runtime flows](../architecture/runtime-flows.md) | `CMC-06` | E |
@@ -30,8 +30,15 @@ date: 2026-07-15
 | `REQ-SIZE-01` | Логический/физический размер, карантин, purge и DiskObservation без ложного APFS claim | [Доменная модель](../contracts/domain-model.md) | `CMC-03`, `CMC-07`, `CMC-08`, `CMC-09`, `CMC-10` | F, G, H |
 | `REQ-MCP-01` | Model/app visibility и точные schemas | [MCP contract](../contracts/mcp-tools.md) | `CMC-03`, `CMC-09` | D |
 | `REQ-PRIV-01` | Без сети, телеметрии и полных путей модели | [Threat model](../safety/threat-model.md) | `CMC-03`, `CMC-09`, `CMC-10` | G |
-| `REQ-UI-01` | Тёмный shadcn Audit Dashboard с тремя вкладками | [ADR-0006](../decisions/ADR-0006-dark-shadcn-dashboard.md), [ADR-0009](../decisions/ADR-0009-v01-safety-ux-completion.md) | `CMC-08`, `CMC-09` | G |
-| `REQ-KEEP-01` | «Оставить» — session-local no-op текущей ревизии | [ADR-0010](../decisions/ADR-0010-field-research-safety-contract.md) | `CMC-08`, `CMC-09`, `CMC-10` | G, H |
+| `REQ-UI-01` | Тёмный shadcn Audit Dashboard с пятью вкладками | [ADR-0006](../decisions/ADR-0006-dark-shadcn-dashboard.md), [ADR-0009](../decisions/ADR-0009-v01-safety-ux-completion.md), [ADR-0011](../decisions/ADR-0011-public-plugin-exclusions-scheduling.md) | `CMC-08`, `CMC-09`, `CMC-12`, `CMC-13` | G |
+| `REQ-SKIP-01` | «Пропустить сейчас» — session-local no-op текущей ревизии | [ADR-0011](../decisions/ADR-0011-public-plugin-exclusions-scheduling.md) | `CMC-08`, `CMC-09`, `CMC-10` | G, H |
+| `REQ-FIND-01` | Карточка FindingFacts и честный `ReclaimEstimate` | [Публичный дизайн](../superpowers/specs/2026-07-17-public-plugin-contract-design.md) | `CMC-03`, `CMC-04`, `CMC-08`, `CMC-10` | C, G, H |
+| `REQ-EXCL-01` | Versioned identity-based persistent exclusions и UI управления | [ADR-0011](../decisions/ADR-0011-public-plugin-exclusions-scheduling.md) | `CMC-03`, `CMC-05`, `CMC-12`, `CMC-10` | D, G, H |
+| `REQ-EXCL-02` | Identity mismatch не скрывает новый объект; excluded finding не получает preview | [Safety model](../safety/safety-model.md) | `CMC-05`, `CMC-12`, `CMC-10` | D, H |
+| `REQ-SCHED-01` | Opt-in monthly read-only audit через capability-aware Codex automation bridge | [ADR-0011](../decisions/ADR-0011-public-plugin-exclusions-scheduling.md) | `CMC-09`, `CMC-13`, `CMC-10` | G, H |
+| `REQ-PUB-01` | Публичный bundle не содержит персональных решений, путей и app inventory разработчика | [Модель угроз](../safety/threat-model.md) | `CMC-03`, `CMC-04`, `CMC-09`, `CMC-10` | B, G, H |
+| `REQ-UNINST-01` | Официальный uninstaller приоритетнее manual quarantine | [Публичный дизайн](../superpowers/specs/2026-07-17-public-plugin-contract-design.md) | `CMC-04`, `CMC-05`, `CMC-08`, `CMC-10` | C, D, G |
+| `REQ-ADV-01` | System findings только read-only `unsupported_manual`; mutation ждёт Advanced Cleanup ADR | [ADR-0011](../decisions/ADR-0011-public-plugin-exclusions-scheduling.md) | `CMC-04`, `CMC-05`, `CMC-10`, `CMC-14` | C, D, H |
 | `REQ-NOCLI-01` | Установка, аудит и решения без копирования shell-команд | [ADR-0010](../decisions/ADR-0010-field-research-safety-contract.md) | `CMC-08`, `CMC-09`, `CMC-10` | G, H |
 | `REQ-DIST-01` | GitHub Releases и repository marketplace | [ADR-0007](../decisions/ADR-0007-github-distribution.md) | `CMC-09`, `CMC-10` | H |
 | `REQ-REC-01` | Fault-injection recovery fail closed | [Модель угроз](../safety/threat-model.md) | `CMC-06`, `CMC-10` | E, H |
@@ -52,7 +59,12 @@ Issue и PR не могут объявить требование выполне
 | `CMC-06` | [#6 — quarantine transaction](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/6) | `cto:ready`, ожидает `#5` |
 | `CMC-07` | [#7 — restore и purge](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/7) | `cto:ready`, ожидает `#6` |
 | `CMC-08` | [#8 — Audit Dashboard](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/8) | `cto:ready`, ожидает `#5` |
-| `CMC-09` | [#9 — MCP App и plugin](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/9) | `cto:ready`, ожидает `#7` и `#8` |
-| `CMC-10` | [#10 — security и release evidence](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/10) | `cto:ready`, ожидает `#9` |
+| `CMC-09` | [#9 — MCP App и plugin](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/9) | `cto:ready`, ожидает `#7`, `#8` и `#12` |
+| `CMC-10` | [#10 — security и release evidence](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/10) | `cto:ready`, ожидает `#13` |
+| `CMC-11` | [#11 — публичный продуктовый контракт](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/11) | `cto:in-progress` до PR, затем `cto:review` |
+| `CMC-12` | [#12 — постоянные исключения](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/12) | `cto:ready`, ожидает `#7` и `#8` |
+| `CMC-13` | [#13 — ежемесячный read-only аудит](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/13) | `cto:ready`, ожидает `#9` |
+| `CMC-14` | [#14 — Advanced Cleanup v0.2](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/14) | `cto:blocked`, вне v0.1 и ждёт owner approval/ADR |
+| `CMC-15` | [#15 — Browser и Developer Storage v0.2](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/15) | `cto:blocked`, вне v0.1 и ждёт owner approval/threat models |
 
 Operational label не заменяет dependency validation. Источником текущего readiness остаётся GitHub и `issue_contract.py`.

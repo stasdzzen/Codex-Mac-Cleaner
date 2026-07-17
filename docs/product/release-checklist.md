@@ -30,7 +30,7 @@ date: 2026-07-15
 
 * [ ] Contract, golden, property-based, fuzz, race и fault-injection tests проходят на final head SHA.
 * [ ] Mutation не принимает path или destination.
-* [ ] Built-in denylist исключает `~/APPS`, `~/.codex`, protected owners и локальные Git-проекты до кандидатов и перед mutation.
+* [ ] Universal protected registry исключает system/credential/browser-profile/personal/project/plugin/Codex scopes и локальные Git-проекты; персональных app/path rules нет.
 * [ ] Совпадение имени без owner/activity/receipt/dependency/data-kind evidence не разрешает mutation.
 * [ ] Quarantine использует durable `prepared` manifest и same-volume atomic rename.
 * [ ] Restore не перезаписывает объект и сохраняет проверяемые metadata/xattrs.
@@ -39,15 +39,21 @@ date: 2026-07-15
 * [ ] `audit_cancel` и race tests дают один terminal state; в `cancelled` нет `allowedActions`.
 * [ ] Failed purge не скрывает payload и не меняет `purgedPhysicalBytes`.
 * [ ] System/shared findings имеют `unsupported_manual` и не содержат mutation, `sudo` или готовой команды.
+* [ ] Official uninstaller блокирует manual quarantine, когда он является рекомендуемым способом.
+* [ ] Excluded finding не получает preview; path-only и изменившаяся identity не создают ложное совпадение.
+* [ ] Unknown/corrupt exclusion schema не скрывает findings и блокирует destructive-token issuance.
 
 # Privacy и UI
 
 * [ ] Model-visible ответы, обычные логи, fixtures и PR evidence не содержат полных путей, паролей, токенов, subscription URLs или raw config values.
 * [ ] Основной сценарий не выполняет сетевых запросов и не отправляет телеметрию.
 * [ ] Dashboard работает без CDN и показывает coverage, риск и причины запрета не только цветом.
-* [ ] Dashboard имеет вкладки «Обзор», «Находки», «Карантин» и не имеет bulk purge.
+* [ ] Dashboard имеет вкладки «Обзор», «Находки», «Карантин», «Исключения», «Расписание» и не имеет bulk purge.
 * [ ] Метрики приходят с сервера; отдельно показаны `candidateLogicalBytes`, `candidatePhysicalBytes`, quarantine/purge и timestamped `DiskObservation` без причинного APFS delta.
-* [ ] «Оставить» работает как session-local no-op и не создаёт server mutation или постоянное исключение.
+* [ ] «Пропустить сейчас» работает как session-local no-op; «Исключить» переживает перезапуск; «Удалить» перемещает только один объект в карантин.
+* [ ] Exclusions поддерживают search/filter, «Снова проверять», удаление одной записи, подтверждаемый reset all и schema migrations.
+* [ ] Schedule выключен по умолчанию, создаёт одну native Codex automation только после opt-in и поддерживает update/pause/resume/delete.
+* [ ] Без automation capability UI показывает disabled fallback и не создаёт cron или LaunchAgent.
 * [ ] Tabs, dialogs и actions проходят keyboard/focus tests.
 * [ ] App-only mutation tools недоступны модели.
 
@@ -56,6 +62,8 @@ date: 2026-07-15
 * [ ] `.codex-plugin/plugin.json`, `.mcp.json` и `SKILL.md` проходят проверки.
 * [ ] Clean-room установка из repository marketplace воспроизведена.
 * [ ] В новой задаче Codex аудит и Dashboard запускаются без копирования команды; решения выполняются только кнопками.
+* [ ] Scheduled prompt выполняет только read-only audit, применяет exclusions и не запрашивает `sudo`.
+* [ ] Public package scan не находит username, home paths, персональные app names/decisions или real-Mac inventory.
 * [ ] SBOM, checksum и provenance связаны с tag и commit.
 * [ ] Real-Mac smoke выполнен на macOS 26 Apple Silicon и приложен к тому же commit.
 * [ ] Независимое review подтверждает specification compliance, code quality и evidence freshness.

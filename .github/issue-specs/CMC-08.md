@@ -12,19 +12,19 @@ execution_profile: default
 
 ### Goal
 
-Build the autonomous dark Audit Dashboard with button-only decisions, support levels and honest metrics.
+Build the autonomous dark public-product Audit Dashboard shell with button-only decisions, FindingFacts, support levels and honest metrics.
 
 ### Scope
 
-Create the CMC-08 React/Vite widget, three tabs, local shadcn components, bridge, cancellation states, session-local Keep action, support-level UI, Quarantine Center, five server-owned indicators and tests against synthetic frozen fixtures.
+Create the CMC-08 React/Vite widget, five-tab shell, local shadcn components, bridge, cancellation states, `FindingFacts`/`ReclaimEstimate`, Delete/Exclude/Skip-now controls, support-level UI, Quarantine Center, five server-owned indicators and tests against synthetic frozen fixtures. CMC-12/13 will add Exclusions/Schedule behavior.
 
 ### Acceptance criteria
 
-The dashboard uses semantic tokens, approved components and no CDN. It drops stale versions and stores no path/token/policy. Actionable findings show `Keep` and `Move to quarantine`; Keep only updates revision-local `reviewedFindingIds`, calls no tool and resets on a new audit. `unsupported_manual` shows a safe explanation without mutation, shell command or sudo. UI displays logical candidate bytes, physical candidate bytes, quarantine bytes, purged bytes and timestamped free-disk observation without calculating an APFS delta. Cancelled results are read-only. Quarantine offers per-entry restore and permanent delete only; no bulk, clear-all or automatic purge.
+The dashboard uses semantic tokens, approved components and no CDN. It drops stale versions and stores no path/token/policy. It has Overview, Findings, Quarantine, Exclusions and Schedule tabs; the last two show honest dependency states until CMC-12/13. Finding details show component, category, time, installed/activity/open/startup/receipt states, sensitive-data flags, risk, reasons, recommended method and a non-causal reclaim estimate. Actionable findings show Delete, Exclude and Skip now; Skip only updates revision-local `skippedFindingIds` and calls no tool. Delete confirms consequences and quarantine of one object, not direct delete. `unsupported_manual` says advanced mode is required without shell/sudo. Quarantine remains per-entry only; no bulk or auto purge.
 
 ### Verification
 
-Run Testing Library tests for tabs, cancellation, Keep/no-tool, support levels, five indicators, absence of shell/bulk controls, keyboard/focus, widget production build and root `pnpm check`. Inspect built assets for external URLs.
+Run Testing Library tests for five tabs, cancellation, Skip-now/no-tool, FindingFacts, support levels, five indicators, one-object Delete confirmation, absence of shell/bulk controls, keyboard/focus, widget production build and root `pnpm check`. Inspect built assets for external URLs.
 
 ### Constraints
 
@@ -34,19 +34,19 @@ UI never computes policy or metrics. No server policy, quarantine implementation
 
 ### Цель
 
-Собрать автономный тёмный Audit Dashboard с решениями только кнопками, support levels и честными метриками.
+Собрать автономный тёмный public-product Audit Dashboard shell с решениями только кнопками, FindingFacts, support levels и честными метриками.
 
 ### Объём
 
-Создать React/Vite widget CMC-08, три вкладки, локальные shadcn components, bridge, cancellation states, session-local «Оставить», support-level UI, Quarantine Center, пять server-owned показателей и tests на synthetic frozen fixtures.
+Создать React/Vite widget CMC-08, пяти-вкладочный shell, локальные shadcn components, bridge, cancellation states, `FindingFacts`/`ReclaimEstimate`, controls «Удалить»/«Исключить»/«Пропустить сейчас», support-level UI, Quarantine Center, пять server-owned показателей и tests на synthetic frozen fixtures. Behavior «Исключений»/«Расписания» добавят CMC-12/13.
 
 ### Критерии приёмки
 
-Dashboard использует semantic tokens, утверждённые components и не загружает CDN. Он отбрасывает stale versions и не хранит path/token/policy. Actionable finding показывает «Оставить» и «Переместить в карантин»; «Оставить» меняет только `reviewedFindingIds` текущей ревизии, не вызывает tool и сбрасывается при новом аудите. `unsupported_manual` показывает безопасное объяснение без mutation, shell-команды или sudo. UI отдельно выводит logical candidate bytes, physical candidate bytes, quarantine bytes, purged bytes и timestamped free-disk observation без APFS delta. Cancelled report read-only. Карантин предлагает только поэлементные restore и permanent delete; bulk, clear-all и auto purge отсутствуют.
+Dashboard использует semantic tokens, утверждённые components и не загружает CDN. Он имеет вкладки «Обзор», «Находки», «Карантин», «Исключения», «Расписание»; последние две до CMC-12/13 показывают честный dependency state. Finding details показывают компонент, категорию, время, installed/activity/open/startup/receipt states, sensitive flags, риск, причины, recommended method и непричинный reclaim estimate. «Пропустить сейчас» меняет только `skippedFindingIds` и не вызывает tool. «Удалить» подтверждает последствия и quarantine одного объекта, а не direct delete. `unsupported_manual` сообщает о расширенном режиме без shell/sudo. Карантин только поэлементный; bulk и auto purge отсутствуют.
 
 ### Проверка
 
-Запустить Testing Library tests вкладок, cancellation, «Оставить» без tool, support levels, пяти показателей, отсутствия shell/bulk controls, keyboard/focus, production build и root `pnpm check`; проверить assets на внешние URLs.
+Запустить Testing Library tests пяти вкладок, cancellation, «Пропустить сейчас» без tool, FindingFacts, support levels, пяти показателей, подтверждения одного Delete, отсутствия shell/bulk controls, keyboard/focus, production build и root `pnpm check`; проверить assets на внешние URLs.
 
 ### Ограничения
 
