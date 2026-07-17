@@ -18,14 +18,14 @@ date: 2026-07-15
 |---|---|---|---|---|
 | `CMC-01` | MIT заменён на Apache-2.0 с проверенной metadata | Нет | Высокий: legal | Только последовательно; требует прямого разрешения владельца |
 | `CMC-02` | Workspace, platform guard и общие quality-команды | `CMC-01` | Средний | Последовательно |
-| `CMC-03` | Доменные schemas, JSON/NDJSON store, `audit_cancel` и model-visible MCP skeleton | `CMC-02` | Средний | Последовательно |
-| `CMC-04` | Source adapters, capability report и cooperative cancellation | `CMC-03` | Средний | Можно выполнять независимо от UI |
-| `CMC-05` | Evidence normalization, classifier и server-only policy | `CMC-04` | Высокий: security | Только последовательно |
+| `CMC-03` | Доменные schemas, protected/safe-metadata contracts, JSON/NDJSON store, `audit_cancel` и model-visible MCP skeleton | `CMC-02` | Средний | Последовательно |
+| `CMC-04` | Candidate/inspection-only adapters, безопасные parsers, field fixtures, capability report и cooperative cancellation | `CMC-03` | Средний | Можно выполнять независимо от UI |
+| `CMC-05` | Evidence normalization, classifier, protected scopes и server-only policy | `CMC-04` | Высокий: security | Только последовательно |
 | `CMC-06` | Quarantine transaction и crash recovery | `CMC-05` | Высокий: filesystem | Параллельно только с `CMC-08` |
-| `CMC-07` | Restore, ручной purge и серверная quarantine summary | `CMC-06` | Высокий: filesystem | Только последовательно |
-| `CMC-08` | Три вкладки Dashboard, Quarantine Center и метрики на shadcn/ui с fixtures | `CMC-05` | Средний | Параллельно с `CMC-06` |
-| `CMC-09` | Plugin manifest, Skill, `audit_cancel` и полная MCP App integration | `CMC-07`, `CMC-08` | Средний | Последовательно |
-| `CMC-10` | Security/privacy, cancel/race/E2E suite, clean-room packaging и release evidence | `CMC-09` | Высокий: release | Только последовательно; release не выполняется без владельца |
+| `CMC-07` | Restore, ручной purge, расширенная StorageSummary и DiskObservation | `CMC-06` | Высокий: filesystem | Только последовательно |
+| `CMC-08` | Три вкладки Dashboard, «Оставить», support levels, Quarantine Center и пять показателей на shadcn/ui | `CMC-05` | Средний | Параллельно с `CMC-06` |
+| `CMC-09` | Plugin manifest, Skill, `audit_cancel`, no-terminal flow и полная MCP App integration | `CMC-07`, `CMC-08` | Средний | Последовательно |
+| `CMC-10` | Denylist/redaction, field E2E, clean-room/new-task, security и release evidence | `CMC-09` | Высокий: release | Только последовательно; release не выполняется без владельца |
 
 # Критический путь
 
@@ -38,6 +38,7 @@ date: 2026-07-15
 * Прямое разрешение владельца на legal action CMC-01 получено 17 июля 2026 года; Issue имеет `cto:ready`, но выполняется только после отдельного запуска Controller.
 * Остальные Issues получают `cto:ready`, но validator не считает их исполнимыми до закрытия dependencies.
 * `CMC-10` может подготовить release evidence, но tag, publication и release требуют отдельной команды владельца.
+* Manual real-Mac smoke остаётся отдельным owner gate; автоматическая очередь не может отметить его выполненным.
 * Любое ослабление safety-инварианта возвращается Архитектору и оформляется новым ADR.
 
 # Источники

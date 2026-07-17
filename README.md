@@ -1,10 +1,10 @@
 # Codex Mac Cleaner
 
-Локальный Codex-плагин для macOS 26 на Apple Silicon. Он проводит read-only аудит остатков обычных приложений, объясняет доказательства и перемещает отдельно подтверждённые объекты в обратимый карантин.
+Локальный Codex-плагин для macOS 26 на Apple Silicon. Он без терминального workflow проводит read-only аудит остатков обычных приложений, объясняет доказательства и по одной кнопке перемещает разрешённый объект в обратимый карантин. Protected scopes, включая `~/APPS` и `~/.codex`, проверяются server-side.
 
 ## Статус
 
-Архитектура и Product-пакет проектируются до начала реализации. Runtime-кода пока нет.
+Архитектура, Product-пакет, TDD-план, Worker-промпты и GitHub Issues подготовлены для отдельного Controller. Runtime-кода пока нет.
 
 Целевая платформа:
 
@@ -17,6 +17,7 @@
 * [Архитектурный канон](docs/index.md)
 * [Границы v0.1](docs/foundation/scope-and-principles.md)
 * [Модель безопасности](docs/safety/safety-model.md)
+* [Полевой safety-контракт](docs/superpowers/specs/2026-07-17-field-research-safety-contract-design.md)
 * [PRD](docs/product/PRD-codex-mac-cleaner.md)
 * [План реализации](docs/superpowers/plans/2026-07-15-codex-mac-cleaner-v01.md)
 * [Промпты для Workers](docs/prompts/)

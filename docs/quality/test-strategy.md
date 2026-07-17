@@ -16,7 +16,9 @@ date: 2026-07-15
 
 ## Parser fixtures
 
-Версионированные fixtures покрывают приложения, receipts, plist, процессы, открытые файлы, APFS metadata и ошибки разрешений. Обязательны повреждённые, необычно большие, Unicode- и escape-насыщенные входы.
+Версионированные fixtures покрывают приложения, receipts, JSON/YAML/plist, процессы, открытые файлы, APFS metadata и ошибки разрешений. Обязательны повреждённые, необычно большие, Unicode- и escape-насыщенные входы. Raw secret-like values присутствуют только во входном temp fixture и должны отсутствовать в observation, snapshot, логе и test output.
+
+Полевой synthetic pack покрывает Application Support, Containers, Group Containers, HTTPStorages, WebKit, Preferences, Saved Application State, updater, browser profile, messenger/mail data, game save, database, Git project, settings, VPN subscription, системный launch item/helper и TCC denial. Названия, bundle IDs, paths и содержимое не копируют реальный Mac.
 
 ## Golden tests классификатора
 
@@ -24,7 +26,7 @@ date: 2026-07-15
 
 ## Policy tests
 
-Матрица проверяет разделение `label` и `allowedActions`: `orphaned` с контрдоказательством, открытым файлом, risk-категорией или coverage gap не получает `prepare_move`.
+Матрица проверяет разделение `label` и `allowedActions`: `orphaned` с контрдоказательством, открытым файлом, risk-категорией или coverage gap не получает `prepare_move`. Отдельно проверяются name-only, protected owner, `~/APPS`, `~/.codex`, `.git`, sensitive metadata и active-app cache.
 
 ## Property-based и fuzz tests путей
 
@@ -32,7 +34,7 @@ date: 2026-07-15
 
 ## Contract tests MCP
 
-Проверяются точные input/output schemas, запрет неизвестных полей, annotations, `openWorldHint=false`, разделение model-visible и app-visible tools, `audit_cancel`, `StorageSummary`, отсутствие полных путей в `content` и `structuredContent`.
+Проверяются точные input/output schemas, запрет неизвестных полей, annotations, `openWorldHint=false`, разделение model-visible и app-visible tools, `audit_cancel`, `supportLevel`, `ProtectedScopeRule`, `SafeMetadata`, `StorageSummary`, `DiskObservation`, отсутствие полных путей и secret-like values в `content` и `structuredContent`.
 
 ## Temp-directory E2E
 
@@ -46,11 +48,11 @@ date: 2026-07-15
 
 Между preview и действием меняются inode, содержимое, owner, тип объекта, исходный родитель, link boundary, mount ID и active/open-file status. Каждое изменение должно приводить к typed blocking error.
 
-Отдельная матрица покрывает гонку `audit_cancel` с `completed`, `completed_with_warnings` и `failed`. В каждом запуске фиксируется ровно один terminal state; повторная отмена не запускает нового действия.
+Отдельная матрица покрывает гонку `audit_cancel` с `completed`, `completed_with_warnings` и `failed`. В каждом запуске фиксируется ровно один terminal state; повторная отмена не запускает нового действия. Перед mutation также подменяются owner identity, protected-scope match и sensitivity flags; каждый случай завершается fail closed.
 
 ## UI tests
 
-Проверяются три вкладки, состояния загрузки и отмены, coverage warnings, фильтры, evidence `Sheet`, Quarantine Center, пустые состояния, метрики, отсутствие кнопки при запрете policy, точный текст `AlertDialog`, одно действие за подтверждение, keyboard navigation, focus return и корректная обработка expired token. Отдельные negative tests доказывают отсутствие bulk action и невозможность обойти policy прямым tool call.
+Проверяются три вкладки, состояния загрузки и отмены, coverage warnings, `supportLevel`, фильтры, evidence `Sheet`, «Оставить», Quarantine Center, пустые состояния, пять показателей, отсутствие кнопки при запрете policy, точный текст `AlertDialog`, одно действие за подтверждение, keyboard navigation, focus return и корректная обработка expired token. Отдельные negative tests доказывают отсутствие bulk action, shell-команд, tool call при «Оставить» и невозможность обойти policy прямым tool call.
 
 ## Real-Mac smoke
 
@@ -63,13 +65,15 @@ date: 2026-07-15
 * Finder reveal;
 * crash recovery;
 * `audit → cancel` с просматриваемым, но недейственным partial report;
-* Quarantine Center, restore, purge и обновление трёх метрик;
-* отсутствие claim о точно освобождённом месте APFS;
+* Quarantine Center, restore, purge и обновление StorageSummary/DiskObservation;
+* логический/физический размер, quarantine/purge и timestamped состояние диска без claim о причинном APFS delta;
+* `~/APPS` и `~/.codex` недоступны для mutation;
+* clean-room запуск в новой задаче Codex без копирования команд;
 * отсутствие сетевых запросов во время основного сценария.
 
 # Тестовые данные
 
-Fixtures и E2E используют только синтетические bundle IDs, имена и содержимое. Репозиторий и CI artifacts не должны содержать реальные домашние пути, список приложений пользователя, секреты или снимки личной системы.
+Fixtures и E2E используют только синтетические bundle IDs, имена и содержимое. Репозиторий, snapshots, test output, CI и PR artifacts не должны содержать реальные домашние пути, список приложений пользователя, секреты, subscription URLs или снимки личной системы.
 
 # Нефункциональные проверки
 

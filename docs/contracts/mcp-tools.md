@@ -76,6 +76,9 @@ date: 2026-07-15
 * `content` содержит короткое русскоязычное объяснение без полного пути.
 * `_meta` содержит widget-only hydration: полный путь, подробные evidence maps и локальные действия.
 * `audit_results`, `dashboard_open` и `quarantine_list` возвращают серверную `StorageSummary`; UI не пересчитывает её.
+* `audit_results`, `dashboard_open` и результаты quarantine actions возвращают `DiskObservation` рядом с `StorageSummary`; UI не вычисляет free-space delta.
+* Каждая model-visible находка содержит `supportLevel`, безопасные metadata flags и blocking reason, но не raw config data.
+* `unsupported_manual` не содержит mutation actions, готовую shell-команду или sudo-рекомендацию.
 * Каждый tool с `structuredContent` объявляет точный `outputSchema`.
 * Секреты отсутствуют во всех трёх каналах ответа.
 

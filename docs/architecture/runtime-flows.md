@@ -12,15 +12,17 @@ date: 2026-07-15
 
 1. `audit_start` принимает новый `requestId` и профиль `application_remnants`.
 2. Capability Scanner фиксирует доступные корни, разрешения и источники.
-3. Snapshot A фиксирует состояние путей, приложений, процессов и открытых файлов.
-4. Независимые adapters возвращают observations и warnings.
-5. Normalizer связывает observations в находки.
-6. Snapshot B повторно проверяет изменяемые признаки.
-7. Изменившиеся объекты получают `staleDuringAudit: true` и пустой список действий.
-8. Classifier формирует метку, уверенность и объяснение.
-9. Policy Engine вычисляет `allowedActions`.
-10. Local Store сохраняет immutable audit revision.
-11. Dashboard получает краткий `structuredContent` и подробный widget-only `_meta`.
+3. Protected Scope Registry исключает запрещённые prefixes, owner identities и локальные Git-проекты до создания кандидатов.
+4. Snapshot A фиксирует состояние путей, приложений, процессов и открытых файлов.
+5. Независимые candidate adapters и targeted inspection sources возвращают observations и warnings.
+6. Safe Metadata Filter редактирует JSON/YAML/plist до persistence.
+7. Normalizer связывает observations в находки и назначает `supportLevel`.
+8. Snapshot B повторно проверяет изменяемые признаки.
+9. Изменившиеся объекты получают `staleDuringAudit: true` и пустой список действий.
+10. Classifier формирует метку, уверенность и объяснение по независимым owner, activity, receipt, dependency, temporal и data-kind evidence.
+11. Policy Engine вычисляет `allowedActions`; `analysis_only` и `unsupported_manual` не получают mutation actions.
+12. Local Store сохраняет immutable audit revision, `StorageSummary` и `DiskObservation` без сырых конфигурационных значений.
+13. Dashboard получает краткий `structuredContent` и подробный widget-only `_meta`.
 
 Состояния аудита: `queued`, `running`, `cancelling`, `cancelled`, `completed`, `completed_with_warnings`, `failed`.
 
@@ -40,9 +42,10 @@ date: 2026-07-15
 3. `AlertDialog` показывает объект, физический размер, риск и условия восстановления.
 4. После подтверждения App вызывает `quarantine_move` с token и `operationId`.
 5. Action Controller берёт lock и повторяет path, inode, owner, mtime, device, process и open-file checks.
-6. Манифест `prepared` записывается через временный файл, `fsync` и atomic rename.
-7. Исходный объект перемещается в `payload/object` через `rename` на том же томе.
-8. Манифест и append-only journal получают состояние `moved`.
+6. Action Controller повторно проверяет Protected Scope Registry, `supportLevel` и sensitivity flags.
+7. Манифест `prepared` записывается через временный файл, `fsync` и atomic rename.
+8. Исходный объект перемещается в `payload/object` через `rename` на том же томе.
+9. Манифест и append-only journal получают состояние `moved`.
 
 # Восстановление
 
@@ -60,7 +63,15 @@ date: 2026-07-15
 4. Симлинки удаляются как ссылки; сервер не следует по ним.
 5. Journal получает состояние `purged`.
 
-После move, restore и purge сервер возвращает новый `stateVersion` и сводку размера. Failed purge не меняет метрику «Удалено навсегда».
+После move, restore и purge сервер возвращает новый `stateVersion`, `StorageSummary` и свежее `DiskObservation`. Failed purge не меняет метрику «Удалено навсегда». Разница двух `DiskObservation` не называется результатом операции.
+
+# Пользовательский no-op
+
+«Оставить» не вызывает MCP tool. Widget помечает `findingId` просмотренным только для текущей ревизии и UI-сеанса. Новый аудит начинает список заново.
+
+# Unsupported/manual finding
+
+Системный или shared-объект получает `supportLevel=unsupported_manual`, безопасное объяснение границы v0.1 и только действие `inspect`. Сервер и Skill не возвращают shell-команду, `sudo`-совет или mutation preview.
 
 # Recovery после сбоя
 

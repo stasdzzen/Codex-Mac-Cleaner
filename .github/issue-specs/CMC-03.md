@@ -12,42 +12,42 @@ execution_profile: default
 
 ### Goal
 
-Implement strict domain contracts, the JSON/NDJSON store and the model-visible non-destructive tool skeleton.
+Implement strict domain, privacy, storage and model-visible MCP contracts for the local audit foundation.
 
 ### Scope
 
-Create Zod schemas, separate model/widget finding views, atomic file storage, audit cancellation contracts, server-owned storage summaries and the seven model-visible tools defined by the MCP contract. Use the exact files in CMC-03 of the implementation plan.
+Create the CMC-03 plan files: reject-unknown Zod schemas, separate model/widget finding views, `supportLevel`, `SafeMetadata`, immutable `ProtectedScopeRule`, extended `StorageSummary`, `DiskObservation`, audit cancellation, atomic JSON/NDJSON storage and the seven model-visible tools.
 
 ### Acceptance criteria
 
-Unknown input fields are rejected. `audit_cancel` accepts only `auditId` and `requestId`, is non-destructive and idempotent, and the run-state contract includes `cancelling` and `cancelled`. `StorageSummary` exposes non-negative integer `candidatePhysicalBytes`, `quarantinePhysicalBytes` and `purgedPhysicalBytes`. Full paths exist only in widget-only data and local manifests. Directories use `0700`, files use `0600`, writes are atomic, and cleanup mutation tools are absent.
+Unknown fields are rejected. `audit_cancel` accepts only `auditId` and `requestId` and has the canonical states and annotations. `Finding` supports `candidate`, `analysis_only` and `unsupported_manual`; the latter two allow only inspect. `StorageSummary` contains non-negative `candidateLogicalBytes`, `candidatePhysicalBytes`, `quarantinePhysicalBytes`, `purgedPhysicalBytes` and `stateVersion`; `DiskObservation` contains non-negative available/total bytes, an ISO timestamp and `source=statfs`. Model-visible and persisted safe metadata contain no raw JSON/YAML/plist keys or values, secrets, subscription URLs, full paths, volume identities or protected-scope details. Cleanup mutation tools are absent. Storage permissions and atomic writes match the canon.
 
 ### Verification
 
-Run contracts tests, storage tests, MCP schema tests and root `pnpm check` on the final head SHA.
+Run contract, safe-metadata, protected-scope, storage and MCP schema tests plus root `pnpm check` on the final head SHA.
 
 ### Constraints
 
-No adapters, policy, quarantine, SQLite, network transport, arbitrary path input, merge or release.
+No adapters, policy implementation, quarantine, SQLite, network transport, arbitrary path input, merge or release.
 
 ## Русский
 
 ### Цель
 
-Реализовать строгие доменные контракты, JSON/NDJSON store и каркас model-visible недеструктивных tools.
+Реализовать строгие доменные, privacy, storage и model-visible MCP-контракты фундамента аудита.
 
 ### Объём
 
-Создать Zod schemas, отдельные model/widget представления Finding, atomic file store, контракты отмены аудита, server-owned сводку занимаемого места и семь model-visible tools из MCP contract по файлам CMC-03.
+Создать точные файлы CMC-03 из плана: reject-unknown Zod schemas, раздельные model/widget views, `supportLevel`, `SafeMetadata`, неизменяемый `ProtectedScopeRule`, расширенный `StorageSummary`, `DiskObservation`, отмену аудита, атомарный JSON/NDJSON store и семь model-visible tools.
 
 ### Критерии приёмки
 
-Неизвестные поля отклоняются. `audit_cancel` принимает только `auditId` и `requestId`, не является destructive и идемпотентен; run-state contract включает `cancelling` и `cancelled`. `StorageSummary` содержит неотрицательные целые `candidatePhysicalBytes`, `quarantinePhysicalBytes` и `purgedPhysicalBytes`. Полные пути есть только в widget-only данных и локальных manifests. Права `0700`/`0600`, запись атомарна, cleanup mutation tools отсутствуют.
+Неизвестные поля отклоняются. `audit_cancel` принимает только `auditId`/`requestId` и имеет канонические states/annotations. `Finding` поддерживает `candidate`, `analysis_only`, `unsupported_manual`; два последних допускают только inspect. `StorageSummary` содержит неотрицательные целые `candidateLogicalBytes`, `candidatePhysicalBytes`, `quarantinePhysicalBytes`, `purgedPhysicalBytes`, `stateVersion`; `DiskObservation` — available/total bytes, ISO-время и `source=statfs`. Model-visible и persisted safe metadata не содержат raw JSON/YAML/plist keys/values, passwords, tokens, subscription URLs, full paths, volume identities или protected-scope details. Cleanup mutation tools отсутствуют. Права и atomic writes соответствуют канону.
 
 ### Проверка
 
-Запустить contracts, storage и MCP schema tests, затем root `pnpm check` на финальном head SHA.
+Запустить contract, safe-metadata, protected-scope, storage и MCP schema tests, затем root `pnpm check` на финальном head SHA.
 
 ### Ограничения
 
-Не добавлять adapters, policy, quarantine, SQLite, network transport, path input, merge или release.
+Не добавлять adapters, policy implementation, quarantine, SQLite, network transport, arbitrary path input, merge или release.

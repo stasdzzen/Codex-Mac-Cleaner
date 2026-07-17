@@ -12,42 +12,42 @@ execution_profile: default
 
 ### Goal
 
-Build the autonomous dark Audit Dashboard and Quarantine Center against frozen fixtures and server contracts.
+Build the autonomous dark Audit Dashboard with button-only decisions, support levels and honest metrics.
 
 ### Scope
 
-Create the React/Vite widget, three-tab dashboard (`Overview`, `Findings`, `Quarantine`), local shadcn components, bridge abstraction, cancellation states and UI tests from CMC-08.
+Create the CMC-08 React/Vite widget, three tabs, local shadcn components, bridge, cancellation states, session-local Keep action, support-level UI, Quarantine Center, five server-owned indicators and tests against synthetic frozen fixtures.
 
 ### Acceptance criteria
 
-The dashboard uses semantic tokens and approved components, including `Tabs`, `Button` and `Tooltip`, loads no CDN, drops stale state versions, stores no path/token/policy in view state, and renders coverage, risk and blocking reasons without color-only meaning. It shows server-owned `candidatePhysicalBytes`, `quarantinePhysicalBytes` and journal-derived `purgedPhysicalBytes`; it never presents the last value as an exact APFS free-space delta. A cancelled partial report is read-only. Quarantine provides per-entry restore and permanent delete only: no bulk selection, “clear all” or automatic purge.
+The dashboard uses semantic tokens, approved components and no CDN. It drops stale versions and stores no path/token/policy. Actionable findings show `Keep` and `Move to quarantine`; Keep only updates revision-local `reviewedFindingIds`, calls no tool and resets on a new audit. `unsupported_manual` shows a safe explanation without mutation, shell command or sudo. UI displays logical candidate bytes, physical candidate bytes, quarantine bytes, purged bytes and timestamped free-disk observation without calculating an APFS delta. Cancelled results are read-only. Quarantine offers per-entry restore and permanent delete only; no bulk, clear-all or automatic purge.
 
 ### Verification
 
-Run Testing Library tests, widget production build and root `pnpm check`. Inspect the built asset list for external runtime URLs.
+Run Testing Library tests for tabs, cancellation, Keep/no-tool, support levels, five indicators, absence of shell/bulk controls, keyboard/focus, widget production build and root `pnpm check`. Inspect built assets for external URLs.
 
 ### Constraints
 
-UI never computes allowed actions. No server policy, quarantine code, plugin manifest, visual completion claim, merge or release.
+UI never computes policy or metrics. No server policy, quarantine implementation, plugin manifest, visual completion claim, merge or release.
 
 ## Русский
 
 ### Цель
 
-Собрать автономный тёмный Audit Dashboard и Quarantine Center по frozen fixtures и server contracts.
+Собрать автономный тёмный Audit Dashboard с решениями только кнопками, support levels и честными метриками.
 
 ### Объём
 
-Создать React/Vite widget, Dashboard с тремя вкладками «Обзор», «Находки», «Карантин», локальные shadcn components, bridge abstraction, состояния отмены и UI tests из CMC-08.
+Создать React/Vite widget CMC-08, три вкладки, локальные shadcn components, bridge, cancellation states, session-local «Оставить», support-level UI, Quarantine Center, пять server-owned показателей и tests на synthetic frozen fixtures.
 
 ### Критерии приёмки
 
-Dashboard использует semantic tokens и утверждённые components, включая `Tabs`, `Button` и `Tooltip`, не загружает CDN, отбрасывает stale stateVersion, не хранит path/token/policy в view state и показывает coverage/risk/block reason не только цветом. Он выводит server-owned `candidatePhysicalBytes`, `quarantinePhysicalBytes` и вычисленный по журналу `purgedPhysicalBytes`, не называя последнее значение точным изменением свободного места APFS. Частичный отменённый отчёт read-only. В карантине доступны только поэлементные «Восстановить» и «Удалить навсегда»: без bulk selection, «Очистить всё» и автоматической очистки.
+Dashboard использует semantic tokens, утверждённые components и не загружает CDN. Он отбрасывает stale versions и не хранит path/token/policy. Actionable finding показывает «Оставить» и «Переместить в карантин»; «Оставить» меняет только `reviewedFindingIds` текущей ревизии, не вызывает tool и сбрасывается при новом аудите. `unsupported_manual` показывает безопасное объяснение без mutation, shell-команды или sudo. UI отдельно выводит logical candidate bytes, physical candidate bytes, quarantine bytes, purged bytes и timestamped free-disk observation без APFS delta. Cancelled report read-only. Карантин предлагает только поэлементные restore и permanent delete; bulk, clear-all и auto purge отсутствуют.
 
 ### Проверка
 
-Запустить Testing Library tests, production build и root `pnpm check`; проверить built asset list на внешние runtime URLs.
+Запустить Testing Library tests вкладок, cancellation, «Оставить» без tool, support levels, пяти показателей, отсутствия shell/bulk controls, keyboard/focus, production build и root `pnpm check`; проверить assets на внешние URLs.
 
 ### Ограничения
 
-UI не вычисляет allowed actions. Не менять server policy, quarantine, plugin manifest, не заявлять visual completion, не выполнять merge/release.
+UI не вычисляет policy или метрики. Не менять server policy, quarantine implementation, plugin manifest, не заявлять visual completion, не выполнять merge/release.

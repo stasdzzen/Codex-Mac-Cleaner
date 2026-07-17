@@ -25,13 +25,16 @@ date: 2026-07-15
 | Код | Severity | Реакция |
 |---|---|---|
 | `CAPABILITY_UNAVAILABLE` | warning | Показать непроверенный источник |
-| `PERMISSION_DENIED` | warning или blocking | Показать недоступную область и способ расширить доступ |
+| `PERMISSION_DENIED` | warning или blocking | Показать coverage gap без совета использовать `sudo` или обходить TCC |
 | `AUDIT_STALE` | blocking | Повторить аудит |
 | `SOURCE_CHANGED` | blocking | Не менять объект; повторить аудит |
 | `ACTIVE_PROCESS` | blocking | Закрыть приложение и проверить снова |
 | `OPEN_FILE` | blocking | Закрыть потребителя и проверить снова |
 | `PATH_OUTSIDE_ALLOWLIST` | blocking | Действие недоступно |
 | `PROTECTED_PATH` | blocking | Действие недоступно |
+| `PROTECTED_SCOPE` | blocking | Оставить объект без изменений; защищённая область не раскрывается модели |
+| `SENSITIVE_DATA` | blocking | Оставить объект; показать безопасную категорию риска без значения секрета |
+| `UNSUPPORTED_MANUAL` | blocking | Показать объяснение границы v0.1 без готовой команды |
 | `SYMLINK_BOUNDARY` | blocking | Оставить объект без изменений |
 | `CROSS_VOLUME` | blocking | Карантин недоступен в v0.1 |
 | `MOUNT_POINT_DETECTED` | blocking | Карантин недоступен |

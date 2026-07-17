@@ -20,14 +20,19 @@ date: 2026-07-15
 | `REQ-EVID-01` | Named rules, evidence и counter-evidence | [Компоненты](../architecture/components.md) | `CMC-05` | C |
 | `REQ-POL-01` | Только server policy вычисляет действия | [Модель безопасности](../safety/safety-model.md) | `CMC-05` | D |
 | `REQ-PATH-01` | Allowlist и запрет link/mount escape | [Политика путей](../safety/path-policy.md) | `CMC-05`, `CMC-06` | D, E |
+| `REQ-PROT-01` | Неизменяемые protected scopes для `~/APPS`, `~/.codex`, protected owners и Git-проектов | [ADR-0010](../decisions/ADR-0010-field-research-safety-contract.md) | `CMC-03`, `CMC-04`, `CMC-05`, `CMC-10` | C, D, H |
+| `REQ-META-01` | SafeMetadata и redaction JSON/YAML/plist до persistence | [ADR-0010](../decisions/ADR-0010-field-research-safety-contract.md) | `CMC-03`, `CMC-04`, `CMC-05`, `CMC-09`, `CMC-10` | C, D, G, H |
+| `REQ-SUPP-01` | `candidate`, `analysis_only`, `unsupported_manual` без system mutation и shell-команд | [Доменная модель](../contracts/domain-model.md) | `CMC-03`, `CMC-04`, `CMC-05`, `CMC-08`, `CMC-09`, `CMC-10` | C, D, G, H |
 | `REQ-MOVE-01` | Поэлементный durable atomic quarantine | [Runtime flows](../architecture/runtime-flows.md) | `CMC-06` | E |
 | `REQ-REST-01` | Restore только в исходный свободный путь | [Манифест](../contracts/quarantine-manifest.md) | `CMC-07` | E |
 | `REQ-PURGE-01` | Только ручной поэлементный purge | [Runtime flows](../architecture/runtime-flows.md) | `CMC-07` | F |
 | `REQ-QCTR-01` | Quarantine Center с поэлементным restore/purge | [ADR-0009](../decisions/ADR-0009-v01-safety-ux-completion.md) | `CMC-07`, `CMC-08`, `CMC-09` | E, F, G |
-| `REQ-SIZE-01` | Серверные метрики без ложного APFS claim | [Доменная модель](../contracts/domain-model.md) | `CMC-03`, `CMC-07`, `CMC-08`, `CMC-09`, `CMC-10` | F, G, H |
+| `REQ-SIZE-01` | Логический/физический размер, карантин, purge и DiskObservation без ложного APFS claim | [Доменная модель](../contracts/domain-model.md) | `CMC-03`, `CMC-07`, `CMC-08`, `CMC-09`, `CMC-10` | F, G, H |
 | `REQ-MCP-01` | Model/app visibility и точные schemas | [MCP contract](../contracts/mcp-tools.md) | `CMC-03`, `CMC-09` | D |
 | `REQ-PRIV-01` | Без сети, телеметрии и полных путей модели | [Threat model](../safety/threat-model.md) | `CMC-03`, `CMC-09`, `CMC-10` | G |
 | `REQ-UI-01` | Тёмный shadcn Audit Dashboard с тремя вкладками | [ADR-0006](../decisions/ADR-0006-dark-shadcn-dashboard.md), [ADR-0009](../decisions/ADR-0009-v01-safety-ux-completion.md) | `CMC-08`, `CMC-09` | G |
+| `REQ-KEEP-01` | «Оставить» — session-local no-op текущей ревизии | [ADR-0010](../decisions/ADR-0010-field-research-safety-contract.md) | `CMC-08`, `CMC-09`, `CMC-10` | G, H |
+| `REQ-NOCLI-01` | Установка, аудит и решения без копирования shell-команд | [ADR-0010](../decisions/ADR-0010-field-research-safety-contract.md) | `CMC-08`, `CMC-09`, `CMC-10` | G, H |
 | `REQ-DIST-01` | GitHub Releases и repository marketplace | [ADR-0007](../decisions/ADR-0007-github-distribution.md) | `CMC-09`, `CMC-10` | H |
 | `REQ-REC-01` | Fault-injection recovery fail closed | [Модель угроз](../safety/threat-model.md) | `CMC-06`, `CMC-10` | E, H |
 

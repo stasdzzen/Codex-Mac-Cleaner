@@ -12,42 +12,42 @@ execution_profile: default
 
 ### Goal
 
-Integrate the complete MCP App surface and build the repository marketplace plugin package.
+Integrate the complete MCP App and a repository marketplace plugin with a no-terminal product flow.
 
 ### Scope
 
-Register seven model-visible tools, app-only cleanup mutation tools, versioned dashboard resource, plugin manifest, stdio MCP config, Skill and contract tests from CMC-09.
+Register seven model-visible tools, app-only cleanup tools, safe finding/summary/disk outputs, the versioned dashboard resource, plugin manifest, stdio MCP config, Skill, redaction/visibility/no-terminal tests and package entries from CMC-09.
 
 ### Acceptance criteria
 
-Cleanup mutation tools are app-only and accept no paths. `audit_cancel` remains model-visible, non-destructive and idempotent with the exact MCP annotations. Model-visible output contains no full paths. The dashboard receives server-owned storage summaries and audit cancellation states, loads through `dashboard-v1.html`, and manifests reference existing build entries. The Skill may cancel an audit only after an explicit user request.
+Cleanup tools are app-only and accept no paths. Mutation starts only after an app-visible button click. `audit_cancel` keeps the exact canonical annotations. Model output contains support level and safe flags but no full paths, raw config values, secrets or protected-scope details. Unsupported findings contain no mutation, shell or sudo guidance. Dashboard receives extended `StorageSummary` and `DiskObservation`. The Skill starts only `application_remnants`, opens the Dashboard, never calls app-only cleanup tools, emits no shell command and never asks the user to reply `ready`; cancellation requires an explicit request. Manifests reference existing production entries.
 
 ### Verification
 
-Run MCP schema/visibility tests, plugin contract tests and root `pnpm check` on the final head SHA.
+Run MCP schema/visibility/redaction tests, no-terminal Skill tests, plugin contract tests and root `pnpm check` on the final head SHA.
 
 ### Constraints
 
-No network transport, telemetry, public Plugin Directory claim, core policy weakening, merge or release.
+No network transport, telemetry, public Plugin Directory claim, core safety weakening, merge or release.
 
 ## Русский
 
 ### Цель
 
-Интегрировать полный MCP App surface и собрать plugin package для repository marketplace.
+Интегрировать полный MCP App и repository marketplace plugin с продуктовым сценарием без терминала.
 
 ### Объём
 
-Зарегистрировать семь model-visible tools, app-only cleanup mutation tools, versioned dashboard resource, plugin manifest, stdio MCP config, Skill и tests из CMC-09.
+Зарегистрировать семь model-visible tools, app-only cleanup tools, безопасные finding/summary/disk outputs, versioned Dashboard resource, plugin manifest, stdio MCP config, Skill, redaction/visibility/no-terminal tests и package entries из CMC-09.
 
 ### Критерии приёмки
 
-Cleanup mutation tools app-only и не принимают paths. `audit_cancel` остаётся model-visible, non-destructive и idempotent с точными annotations MCP contract. Model-visible output без полных путей. Dashboard получает server-owned storage summaries и состояния отмены аудита, загружается как `dashboard-v1.html`, manifests ссылаются на существующие build entries. Skill может отменить аудит только по явному запросу пользователя.
+Cleanup tools app-only и не принимают paths. Mutation начинается только после app-visible button click. `audit_cancel` сохраняет точные annotations. Model output содержит support level и safe flags, но не full paths, raw config values, secrets или protected-scope details. Unsupported findings не содержат mutation, shell или sudo. Dashboard получает расширенный `StorageSummary` и `DiskObservation`. Skill запускает только `application_remnants`, открывает Dashboard, не вызывает app-only cleanup tools, не выдаёт shell-команду и не просит ответить «готово»; отмена — только по явному запросу. Manifests ссылаются на существующие production entries.
 
 ### Проверка
 
-Запустить MCP schema/visibility tests, plugin contract tests и root `pnpm check` на финальном head SHA.
+Запустить MCP schema/visibility/redaction tests, no-terminal Skill tests, plugin contract tests и root `pnpm check` на финальном head SHA.
 
 ### Ограничения
 
-Запрещены network transport, telemetry, заявление public Plugin Directory, ослабление policy, merge и release.
+Запрещены network transport, telemetry, заявление public Plugin Directory, ослабление core safety, merge и release.

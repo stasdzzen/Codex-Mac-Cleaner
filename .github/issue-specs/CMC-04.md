@@ -12,42 +12,42 @@ execution_profile: default
 
 ### Goal
 
-Collect read-only observations and produce an honest capability and coverage report.
+Collect read-only field-derived observations while protecting excluded areas and producing honest support and coverage data.
 
 ### Scope
 
-Implement installed-app, allowlisted Library, process/open-file, autostart, receipt and filesystem metadata adapters plus Snapshot A/B coordination and cooperative audit cancellation through `AbortSignal`.
+Implement installed-app, nine-root Library, process/open-file, user autostart, targeted system/shared inspection, receipt, filesystem/APFS and safe JSON/YAML/plist adapters, Snapshot A/B coordination and cooperative cancellation. Add only synthetic field fixtures for remnants, caches, personal data and system/shared components.
 
 ### Acceptance criteria
 
-Adapters never mutate scanned data. One adapter failure becomes a typed warning and coverage gap. The scan stays inside approved roots, excludes quarantine/developer/external/network areas, and marks changed objects stale with no actions. Cancellation closes adapter writers, reaches exactly one terminal `cancelled` state, and preserves a read-only partial report whose `allowedActions` arrays are empty. A cancel request racing with a terminal state is idempotent.
+Adapters never mutate scanned data. Candidate traversal stays inside the nine roots and never enumerates `~/APPS`, `~/.codex`, developer/external/network areas or local Git projects. System LaunchAgents/Daemons/helpers and receipts produce only `unsupported_manual` with inspect and no shell or sudo guidance. `Operation not permitted` becomes a coverage warning. JSON/YAML/plist are reduced to `SafeMetadata` before persistence; raw keys/values and secret-like inputs are absent from observations and test output. Cancellation closes writers, reaches one terminal state and leaves empty actions. Real owner paths, bundle IDs, app inventory and secrets are absent from fixtures and PR evidence.
 
 ### Verification
 
-Run all synthetic fixture tests, read-only tree comparison tests and root `pnpm check`.
+Run synthetic field fixtures, redaction, protected-root, inspection-only, cancellation and read-only tree-comparison tests plus root `pnpm check`.
 
 ### Constraints
 
-No whole-home scan, shell interpolation, user data fixtures, policy decisions, mutation, merge or release.
+No whole-home scan, shell interpolation, real-Mac fixtures, policy decisions, mutation, merge or release.
 
 ## Русский
 
 ### Цель
 
-Собрать read-only observations и сформировать честный capability/coverage report.
+Собрать read-only observations из полевых сценариев, защитить исключённые области и вернуть честные support/coverage данные.
 
 ### Объём
 
-Реализовать adapters приложений, allowlisted Library, processes/open files, autostart, receipts, filesystem metadata, координацию Snapshot A/B и кооперативную отмену аудита через `AbortSignal`.
+Реализовать adapters installed apps, девяти Library roots, processes/open files, user autostart, targeted system/shared inspection, receipts, filesystem/APFS, безопасного JSON/YAML/plist, Snapshot A/B и cooperative cancellation. Добавить только синтетические field fixtures для остатков, кэшей, личных данных и system/shared-компонентов.
 
 ### Критерии приёмки
 
-Adapters не меняют данные. Ошибка одного источника становится typed warning и coverage gap. Обход не выходит за утверждённые корни, исключает карантин/developer/external/network области и помечает изменения stale без actions. Отмена закрывает writers adapters, приводит ровно к одному terminal state `cancelled` и сохраняет read-only частичный отчёт с пустыми `allowedActions`. Гонка отмены с terminal state идемпотентна.
+Adapters не меняют данные. Candidate traversal остаётся в девяти roots и не перечисляет `~/APPS`, `~/.codex`, developer/external/network области или локальные Git-проекты. System LaunchAgents/Daemons/helpers и receipts дают только `unsupported_manual` с inspect, без shell/sudo. `Operation not permitted` становится coverage warning. JSON/YAML/plist сводятся к `SafeMetadata` до persistence; raw keys/values и secret-like inputs отсутствуют в observations и test output. Отмена закрывает writers, фиксирует один terminal state и пустые actions. Реальные пути, bundle IDs, app inventory и секреты владельца отсутствуют в fixtures и PR evidence.
 
 ### Проверка
 
-Запустить synthetic fixtures, read-only tree comparison tests и root `pnpm check`.
+Запустить synthetic field fixtures, redaction, protected-root, inspection-only, cancellation и read-only tree-comparison tests, затем root `pnpm check`.
 
 ### Ограничения
 
-Запрещены whole-home scan, shell interpolation, реальные пользовательские fixtures, policy, mutation, merge и release.
+Запрещены whole-home scan, shell interpolation, real-Mac fixtures, policy decisions, mutation, merge и release.

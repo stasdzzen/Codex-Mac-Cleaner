@@ -20,11 +20,19 @@ date: 2026-07-15
 
 Нормализованная находка внутри одной ревизии.
 
-Обязательные поля: `findingId`, `auditId`, `revision`, `displayName`, `canonicalPath`, `artifactKind`, `category`, `logicalSize`, `physicalSize`, `ownerCandidates`, `label`, `confidence`, `evidenceSet`, `risk`, `snapshotFingerprint`, `allowedActions`.
+Обязательные поля: `findingId`, `auditId`, `revision`, `displayName`, `canonicalPath`, `artifactKind`, `category`, `supportLevel`, `logicalSize`, `physicalSize`, `ownerCandidates`, `safeMetadata`, `label`, `confidence`, `evidenceSet`, `risk`, `snapshotFingerprint`, `allowedActions`.
 
 `artifactKind`: `file`, `directory`, `bundle`, `plist`, `launch_item`, `receipt` или `unknown`. `category`: `cache`, `log`, `webkit`, `http_storage`, `saved_state`, `application_support`, `container`, `group_container`, `preference`, `database`, `sync_data`, `vpn_data`, `personal_file`, `autostart` или `unknown`. Размеры измеряются в байтах и относятся к ревизии аудита.
 
 `canonicalPath` остаётся локальным и передаётся модели только в обезличенной форме.
+
+`supportLevel`: `candidate`, `analysis_only` или `unsupported_manual`. Для `analysis_only` и `unsupported_manual` допустим только `inspect`; остальные действия отсутствуют.
+
+# `SafeMetadata`
+
+Содержит `format`, `parseStatus`, `byteLength`, `modifiedAt`, `declaredOwnerDisplayName` и `sensitivityFlags`. Допустимые sensitivity flags: `credentials`, `tokens`, `subscription_url`, `personal_data`, `database`, `local_project`.
+
+Сырые ключи и значения JSON/YAML/plist, содержимое, секреты, stderr и полный путь в сущность не входят.
 
 # `Evidence`
 
@@ -52,6 +60,10 @@ date: 2026-07-15
 
 Классификация `orphaned` не гарантирует `prepare_move`.
 
+# `ProtectedScopeRule`
+
+Встроенное server-only правило с `ruleId`, `kind: canonical_prefix | owner_identity | local_git_repository`, безопасным объяснением и непустым `effects` из `exclude_from_candidates | block_mutation`. Hard exclusions содержат оба эффекта. Публичного API для изменения правил нет.
+
 # `SnapshotFingerprint`
 
 Содержит признаки, достаточные для обнаружения гонки: `device`, `inode`, `mode`, `uid`, `gid`, `size`, `mtimeNs`, `ctimeNs`, `fileType`, `mountId` и признак симлинка.
@@ -62,13 +74,18 @@ date: 2026-07-15
 
 # `StorageSummary`
 
-Серверная сводка содержит `candidatePhysicalBytes`, `quarantinePhysicalBytes`, `purgedPhysicalBytes` и `stateVersion`.
+Серверная сводка содержит `candidateLogicalBytes`, `candidatePhysicalBytes`, `quarantinePhysicalBytes`, `purgedPhysicalBytes` и `stateVersion`.
 
+* `candidateLogicalBytes` — logical size находок текущей завершённой ревизии;
 * `candidatePhysicalBytes` — physical size находок текущей завершённой ревизии;
 * `quarantinePhysicalBytes` — physical size payload в состоянии `moved`;
 * `purgedPhysicalBytes` — physical size записей `purged` в действующем локальном журнале.
 
 Все поля — неотрицательные целые байты. `purgedPhysicalBytes` не равен изменению свободного места APFS.
+
+# `DiskObservation`
+
+Server-owned наблюдение содержит неотрицательные целые `availableBytes`, `totalBytes`, ISO-время `observedAt` и `source: statfs`. Оно относится к серверному snapshot, но не доказывает, что изменение свободного места вызвано последней операцией. Имена и идентификаторы томов в model-visible форму не входят.
 
 # `CapabilityReport`
 

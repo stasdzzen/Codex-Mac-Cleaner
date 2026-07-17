@@ -28,6 +28,9 @@ date: 2026-07-15
 * Coverage gaps видимы и не интерпретируются как «остатков нет».
 * Classification воспроизводима named rules и golden tests.
 * Обычный аудит не выходит за allowlisted user Library roots.
+* `~/APPS` и `~/.codex` не перечисляются как кандидаты; field fixtures используют только синтетические identities и paths.
+* JSON/YAML/plist дают только `SafeMetadata`; raw keys/values и secrets отсутствуют в persisted observations.
+* Targeted system/shared inspection создаёт только `unsupported_manual` и не расширяет candidate roots.
 * `audit_cancel` идемпотентно переводит активный аудит в `cancelled` и не оставляет незакрытых потоков записи.
 * Частичные находки `cancelled` видимы только для чтения и имеют пустые `allowedActions`.
 
@@ -37,6 +40,8 @@ date: 2026-07-15
 * Model-visible tools не могут вызвать mutation напрямую.
 * Запрещённая категория, stale revision, changed fingerprint, active process, open file, link, mount point и coverage gap блокируют действие.
 * Прямая подделка UI state или tool request не меняет `allowedActions`.
+* Built-in protected scopes нельзя ослабить через UI, model input, config или forged finding ID; сервер возвращает `PROTECTED_SCOPE`.
+* Name-only, sensitive/personal data, local Git project и кэш активного приложения блокируют mutation.
 
 # Gate E — карантин и восстановление
 
@@ -57,12 +62,14 @@ date: 2026-07-15
 
 # Gate G — приватность и UI
 
-* Полные пути и подробные evidence отсутствуют в model-visible ответах и обычных логах.
+* Полные пути, raw config values, пароли, tokens и subscription URLs отсутствуют в model-visible ответах, обычных логах, fixtures и PR evidence.
 * В основном пользовательском сценарии нет сетевых запросов и телеметрии.
 * Dashboard использует semantic tokens, тёмную тему и утверждённые shadcn/ui components.
 * Coverage warning, риск, уверенность и причина запрета действия различимы без опоры только на цвет.
 * Dashboard имеет три вкладки; Quarantine Center показывает поэлементные restore/purge без bulk action.
-* UI показывает `candidatePhysicalBytes`, `quarantinePhysicalBytes` и `purgedPhysicalBytes` без самостоятельного пересчёта и без обещания точного прироста свободного места APFS.
+* UI показывает `candidateLogicalBytes`, `candidatePhysicalBytes`, `quarantinePhysicalBytes`, `purgedPhysicalBytes` и timestamped `DiskObservation` без самостоятельного пересчёта и причинного APFS delta.
+* «Оставить» — session-local no-op: tool call, filesystem mutation и persistent ignore отсутствуют.
+* `unsupported_manual` содержит только объяснение границы, без mutation, `sudo` и готовой shell-команды.
 * Вкладки, диалоги и действия доступны с клавиатуры и возвращают focus после закрытия.
 
 # Gate H — распространение
@@ -70,8 +77,10 @@ date: 2026-07-15
 * Clean-room установка из repository marketplace работает по опубликованной инструкции.
 * `.codex-plugin/plugin.json`, `.mcp.json` и `SKILL.md` проходят schema и smoke checks.
 * GitHub Release содержит checksum, SBOM и provenance, связанные с tag и commit.
+* Clean-room запуск в новой задаче Codex открывает аудит и Dashboard без копирования команд в терминал.
+* Все решения пользователя выполняются отдельными кнопками для одного объекта; terminal confirmation flow отсутствует.
 * Real-Mac smoke на macOS 26 Apple Silicon подписан отдельным проверяющим или приложен как воспроизводимый протокол.
 
 # Решение о готовности
 
-Любой невыполненный пункт Gate D, E или F блокирует merge и release. Невыполненные `REQ-CANCEL-01`, `REQ-QCTR-01` или `REQ-SIZE-01` блокируют release. Ручной gate нельзя обозначить выполненным без факта проверки. Временное исключение возможно только через отдельный ADR, который не ослабляет инварианты безопасности.
+Любой невыполненный пункт Gate D, E или F блокирует merge и release. Невыполненные `REQ-CANCEL-01`, `REQ-QCTR-01`, `REQ-SIZE-01`, `REQ-PROT-01`, `REQ-META-01` или `REQ-NOCLI-01` блокируют release. Ручной gate нельзя обозначить выполненным без факта проверки. Временное исключение возможно только через отдельный ADR, который не ослабляет инварианты безопасности.
