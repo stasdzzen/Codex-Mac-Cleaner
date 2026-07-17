@@ -14,6 +14,7 @@ import {
   FindingRevealInputSchema,
   FindingRevealOutputSchema,
   ModelSafeTextSchema,
+  containsSecretLikeValue,
 } from "@codex-mac-cleaner/contracts";
 import {
   assertSupportedPlatform,
@@ -103,10 +104,7 @@ const WidgetMetaSchema = z
           .max(4096)
           .regex(/^\//u)
           .refine(
-            (value) =>
-              !/(?:token|password|secret|api[_-]?key|subscription[_-]?url)\s*[:=]/iu.test(
-                value,
-              ),
+            (value) => !containsSecretLikeValue(value),
             { message: "Secret-like значение запрещено" },
           ),
       })

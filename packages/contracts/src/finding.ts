@@ -56,6 +56,11 @@ const NON_MUTATING_ANALYSIS_ACTIONS = new Set<z.infer<typeof AllowedActionSchema
   "inspect",
   "exclude",
 ]);
+const MUTATION_ACTIONS = new Set<z.infer<typeof AllowedActionSchema>>([
+  "prepare_move",
+  "prepare_restore",
+  "prepare_purge",
+]);
 
 export const ThreeStateSchema = z.enum(["present", "absent", "unknown"]);
 
@@ -141,6 +146,16 @@ export const FindingModelViewSchema = z
       context.addIssue({
         code: "custom",
         message: "Этот supportLevel не разрешает filesystem mutation actions",
+        path: ["allowedActions"],
+      });
+    }
+    if (
+      finding.safeMetadata.sensitivityFlags.length > 0 &&
+      finding.allowedActions.some((action) => MUTATION_ACTIONS.has(action))
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Sensitive metadata блокирует filesystem mutation actions",
         path: ["allowedActions"],
       });
     }

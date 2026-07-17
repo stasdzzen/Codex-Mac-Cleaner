@@ -1,8 +1,28 @@
 import { z } from "zod";
 
-const FULL_PATH_PATTERN = /(?:^|[\s"'(])(?:\/(?:[^/\s]+\/)*[^/\s]+|[A-Za-z]:\\[^\s]+)/u;
+const POSIX_PATH_PATTERN = /(?:^|[\s:="'(])\/(?!\/)[^\s"'<>]+/u;
+const FILE_URI_PATTERN = /\bfile:\/{3}[^\s"'<>]+/iu;
+const WINDOWS_PATH_PATTERN =
+  /(?:^|[\s:="'(])[A-Za-z]:\\(?:[^\\\s"'<>]+\\)*[^\\\s"'<>]+/u;
 const SECRET_ASSIGNMENT_PATTERN =
-  /(?:token|password|secret|api[_-]?key|subscription[_-]?url)\s*[:=]\s*\S+/iu;
+  /["']?(?:token|password|secret|api[_-]?key|subscription[_-]?url)["']?\s*[:=]\s*(?:["'][^"']*["']|\S+)/iu;
+const AUTHORIZATION_BEARER_PATTERN =
+  /["']?authorization["']?\s*:\s*["']?bearer\s+[^\s"']+/iu;
+
+export function containsFullPath(value: string): boolean {
+  return (
+    POSIX_PATH_PATTERN.test(value) ||
+    FILE_URI_PATTERN.test(value) ||
+    WINDOWS_PATH_PATTERN.test(value)
+  );
+}
+
+export function containsSecretLikeValue(value: string): boolean {
+  return (
+    SECRET_ASSIGNMENT_PATTERN.test(value) ||
+    AUTHORIZATION_BEARER_PATTERN.test(value)
+  );
+}
 
 export const SafeIntegerSchema = z
   .number()
@@ -25,10 +45,10 @@ export const ModelSafeTextSchema = z
   .min(1)
   .max(500)
   .superRefine((value, context) => {
-    if (FULL_PATH_PATTERN.test(value)) {
+    if (containsFullPath(value)) {
       context.addIssue({ code: "custom", message: "Полный путь запрещён" });
     }
-    if (SECRET_ASSIGNMENT_PATTERN.test(value)) {
+    if (containsSecretLikeValue(value)) {
       context.addIssue({ code: "custom", message: "Secret-like значение запрещено" });
     }
   });

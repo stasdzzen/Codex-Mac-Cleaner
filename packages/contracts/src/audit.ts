@@ -124,12 +124,12 @@ export const AuditReportSchema = z
   .strict()
   .superRefine((report, context) => {
     if (
-      report.audit.state === "cancelled" &&
+      !ACTIONABLE_STATES.has(report.audit.state) &&
       report.findings.some((finding) => finding.model.allowedActions.length > 0)
     ) {
       context.addIssue({
         code: "custom",
-        message: "Отменённый аудит не может содержать actionable findings",
+        message: "Незавершённый или неуспешный аудит не может содержать allowedActions",
         path: ["findings"],
       });
     }

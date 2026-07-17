@@ -46,6 +46,55 @@ describe("Finding model/widget views", () => {
     },
   );
 
+  it.each(
+    ["credentials", "tokens", "subscription_url", "personal_data", "database", "local_project"].flatMap(
+      (sensitivityFlag) =>
+        ["prepare_move", "prepare_restore", "prepare_purge"].map(
+          (mutationAction) => [sensitivityFlag, mutationAction] as const,
+        ),
+    ),
+  )(
+    "sensitivity flag %s запрещает %s",
+    (sensitivityFlag, mutationAction) => {
+      expect(() =>
+        FindingSchema.parse({
+          ...findingFixture,
+          model: {
+            ...findingFixture.model,
+            allowedActions: ["inspect", "exclude", mutationAction],
+            safeMetadata: {
+              ...findingFixture.model.safeMetadata,
+              sensitivityFlags: [sensitivityFlag],
+            },
+          },
+        }),
+      ).toThrow();
+    },
+  );
+
+  it("sensitive finding сохраняет только inspect/exclude", () => {
+    expect(
+      FindingSchema.parse({
+        ...findingFixture,
+        model: {
+          ...findingFixture.model,
+          allowedActions: ["inspect", "exclude"],
+          safeMetadata: {
+            ...findingFixture.model.safeMetadata,
+            sensitivityFlags: [
+              "credentials",
+              "tokens",
+              "subscription_url",
+              "personal_data",
+              "database",
+              "local_project",
+            ],
+          },
+        },
+      }).model.allowedActions,
+    ).toEqual(["inspect", "exclude"]);
+  });
+
   it("фиксирует трёхзначные facts и честную reclaim-оценку", () => {
     expect(
       FindingFactsSchema.parse(findingFixture.widget.findingFacts).receiptState,

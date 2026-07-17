@@ -8,10 +8,25 @@ import {
   AuditRunStateSchema,
   AuditStartInputSchema,
   DiskObservationSchema,
+  ModelSafeTextSchema,
   StorageSummarySchema,
   ToolErrorSchema,
 } from "../src/index.js";
 import { completedAuditFixture, findingFixture } from "./fixtures.js";
+
+const syntheticMacHome = ["", "Users", "demo", "private"].join("/");
+const syntheticWindowsHome = ["C:", "Users", "demo", "private"].join("\\");
+const unsafeModelTexts = [
+  `path:${syntheticMacHome}`,
+  `file://${syntheticMacHome}`,
+  `path=${syntheticWindowsHome}`,
+  '{"token":"synthetic-token"}',
+  '{"password":"synthetic-password"}',
+  '{"secret":"synthetic-secret"}',
+  '{"api_key":"synthetic-key"}',
+  '{"subscription_url":"synthetic-url"}',
+  "Authorization: Bearer synthetic-token",
+];
 
 describe("контракты аудита", () => {
   it("отклоняет неизвестные и path-поля во входах", () => {
@@ -46,29 +61,82 @@ describe("контракты аудита", () => {
     expect(AuditRunSchema.parse(completedAuditFixture).revision).toBe(1);
   });
 
-  it("не делает отменённый отчёт actionable", () => {
-    const cancelledAudit = {
-      ...completedAuditFixture,
-      state: "cancelled",
-      revision: null,
-      cancelRequestedAt: "2026-07-17T00:00:30.000Z",
-    };
-    const actionableFinding = findingFixture;
+  it.each([
+    ["queued", null, null, null],
+    ["running", "2026-07-17T00:00:00.000Z", null, null],
+    [
+      "cancelling",
+      "2026-07-17T00:00:00.000Z",
+      null,
+      "2026-07-17T00:00:30.000Z",
+    ],
+    [
+      "cancelled",
+      "2026-07-17T00:00:00.000Z",
+      "2026-07-17T00:01:00.000Z",
+      "2026-07-17T00:00:30.000Z",
+    ],
+    [
+      "failed",
+      "2026-07-17T00:00:00.000Z",
+      "2026-07-17T00:01:00.000Z",
+      null,
+    ],
+  ] as const)(
+    "%s отчёт запрещает любые allowedActions",
+    (state, startedAt, finishedAt, cancelRequestedAt) => {
+      const audit = {
+        ...completedAuditFixture,
+        state,
+        startedAt,
+        finishedAt,
+        cancelRequestedAt,
+        revision: null,
+      };
+      const findingWithAction = {
+        ...findingFixture,
+        model: { ...findingFixture.model, allowedActions: ["inspect"] },
+      };
 
-    expect(() =>
-      AuditReportSchema.parse({ audit: cancelledAudit, findings: [actionableFinding] }),
-    ).toThrow();
-    expect(
-      AuditReportSchema.parse({
-        audit: cancelledAudit,
-        findings: [
-          {
-            ...findingFixture,
-            model: { ...findingFixture.model, allowedActions: [] },
-          },
-        ],
-      }).audit.state,
-    ).toBe("cancelled");
+      expect(() =>
+        AuditReportSchema.parse({ audit, findings: [findingWithAction] }),
+      ).toThrow();
+      expect(
+        AuditReportSchema.parse({
+          audit,
+          findings: [
+            {
+              ...findingFixture,
+              model: { ...findingFixture.model, allowedActions: [] },
+            },
+          ],
+        }).audit.state,
+      ).toBe(state);
+    },
+  );
+
+  it.each(["completed", "completed_with_warnings"] as const)(
+    "%s отчёт сохраняет разрешённые actions",
+    (state) => {
+      expect(
+        AuditReportSchema.parse({
+          audit: { ...completedAuditFixture, state },
+          findings: [findingFixture],
+        }).findings[0]?.model.allowedActions,
+      ).toEqual(findingFixture.model.allowedActions);
+    },
+  );
+});
+
+describe("model-visible текст", () => {
+  it.each(unsafeModelTexts)("fail closed отклоняет %j", (unsafeText) => {
+    expect(() => ModelSafeTextSchema.parse(unsafeText)).toThrow();
+  });
+
+  it("сохраняет обычный безопасный русский текст", () => {
+    expect(ModelSafeTextSchema.parse("Аудит завершён без предупреждений")).toBe(
+      "Аудит завершён без предупреждений",
+    );
   });
 });
 

@@ -8,6 +8,20 @@ import {
   createMcpServer,
 } from "../src/server.js";
 
+const syntheticMacHome = ["", "Users", "demo", "private"].join("/");
+const syntheticWindowsHome = ["C:", "Users", "demo", "private"].join("\\");
+const unsafeModelTexts = [
+  `path:${syntheticMacHome}`,
+  `file://${syntheticMacHome}`,
+  `path=${syntheticWindowsHome}`,
+  '{"token":"synthetic-token"}',
+  '{"password":"synthetic-password"}',
+  '{"secret":"synthetic-secret"}',
+  '{"api_key":"synthetic-key"}',
+  '{"subscription_url":"synthetic-url"}',
+  "Authorization: Bearer synthetic-token",
+];
+
 const expectedAnnotations = {
   audit_start: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   audit_status: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
@@ -19,6 +33,27 @@ const expectedAnnotations = {
 } as const;
 
 describe("model-visible MCP skeleton", () => {
+  const findingModel = {
+    findingId: "finding-1",
+    displayName: "Синтетический кэш",
+    category: "cache",
+    supportLevel: "candidate",
+    logicalSize: 84,
+    physicalSize: 42,
+    label: "orphaned",
+    confidence: "high",
+    risk: "low",
+    allowedActions: ["inspect"],
+    safeMetadata: {
+      format: "plist",
+      parseStatus: "parsed",
+      byteLength: 128,
+      modifiedAt: "2026-07-17T00:00:00.000Z",
+      sensitivityFlags: [],
+    },
+    blockingReasons: [],
+  } as const;
+
   it("регистрирует ровно семь канонических tools с точными annotations", () => {
     expect(Object.keys(MODEL_VISIBLE_TOOL_DEFINITIONS)).toEqual([
       "audit_start",
@@ -133,17 +168,55 @@ describe("model-visible MCP skeleton", () => {
     ).toThrow();
   });
 
+  it.each(unsafeModelTexts)("отклоняет утечку %j во всех model-visible каналах", (unsafeText) => {
+    expect(() =>
+      buildToolResult(
+        "audit_start",
+        { auditId: "audit-1", state: "queued", stateVersion: 1 },
+        unsafeText,
+      ),
+    ).toThrow();
+    expect(() =>
+      buildToolResult(
+        "finding_inspect",
+        {
+          findingId: "finding-1",
+          auditRevision: 1,
+          stateVersion: 1,
+          finding: findingModel,
+          evidenceSummaries: [unsafeText],
+          stale: false,
+        },
+        "Проверка завершена",
+      ),
+    ).toThrow();
+  });
+
+  it.each([
+    '/synthetic/{"token":"synthetic-token"}',
+    "/synthetic/Authorization: Bearer synthetic-token",
+  ])("запрещает secret-like widget meta %j", (canonicalPath) => {
+    expect(() =>
+      buildToolResult(
+        "audit_start",
+        { auditId: "audit-1", state: "queued", stateVersion: 1 },
+        "Аудит поставлен в очередь",
+        { widget: { canonicalPath } },
+      ),
+    ).toThrow();
+  });
+
   it("разрешает canonicalPath только в widget-only _meta", () => {
     const result = buildToolResult(
       "audit_start",
       { auditId: "audit-1", state: "queued", stateVersion: 1 },
       "Аудит поставлен в очередь",
-      { widget: { canonicalPath: "/synthetic/Library/Caches/example" } },
+      { widget: { canonicalPath: syntheticMacHome } },
     );
 
-    expect(JSON.stringify(result.structuredContent)).not.toContain("/synthetic/");
+    expect(JSON.stringify(result.structuredContent)).not.toContain(syntheticMacHome);
     expect(result._meta).toEqual({
-      widget: { canonicalPath: "/synthetic/Library/Caches/example" },
+      widget: { canonicalPath: syntheticMacHome },
     });
   });
 });
