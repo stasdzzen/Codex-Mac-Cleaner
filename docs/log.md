@@ -1,5 +1,9 @@
 # История архитектурного канона
 
+## 2026-07-18
+
+* **Lockfile scope**: CMC-18 добавил зависимость и корневой `pnpm-lock.yaml` в локальный контракт CMC-03, синхронизировал roadmap и закрепил frozen-lockfile gate для Worker.
+
 ## 2026-07-17
 
 * **Workspace hygiene**: CMC-17 добавил `node_modules/` в Git ignore до установки pnpm workspace и стал dependency CMC-02.
