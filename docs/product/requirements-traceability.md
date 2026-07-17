@@ -39,7 +39,7 @@ Issue и PR не могут объявить требование выполне
 
 | ID | GitHub Issue | Текущий operational label |
 |---|---|---|
-| `CMC-01` | [#1 — Apache-2.0](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/1) | `cto:blocked` |
+| `CMC-01` | [#1 — Apache-2.0](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/1) | `cto:ready`, legal permission получено |
 | `CMC-02` | [#2 — workspace и platform guard](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/2) | `cto:ready`, ожидает `#1` |
 | `CMC-03` | [#3 — contracts, store и MCP](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/3) | `cto:ready`, ожидает `#2` |
 | `CMC-04` | [#4 — source adapters](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/4) | `cto:ready`, ожидает `#3` |

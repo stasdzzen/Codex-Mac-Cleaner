@@ -16,7 +16,7 @@ Replace the temporary MIT license with the exact Apache License 2.0 text before 
 
 ### Scope
 
-Change `LICENSE` and the license section of `README.md`. Verify ADR-0008 without changing its decision. Create `NOTICE` only when a real attribution requires it.
+Change `LICENSE` and the license section of `README.md`. Verify ADR-0008 without changing its decision. Create `NOTICE` only when a real attribution requires it. Direct owner authorization for this protected legal action was granted on 2026-07-17. It authorizes CMC-01 execution only after a separately launched Controller assigns the Worker; it does not authorize merge, publication or release.
 
 ### Acceptance criteria
 
@@ -28,7 +28,7 @@ Run the license header search and `git diff --check` from the CMC-01 implementat
 
 ### Constraints
 
-Do not start without a separate direct owner authorization. Do not create an empty `NOTICE`, change product scope, merge, publish, or release.
+The owner authorization recorded above satisfies the legal gate. Do not start until a separately launched Controller assigns CMC-01. Do not create an empty `NOTICE`, change product scope, merge, publish, or release.
 
 ## Русский
 
@@ -38,7 +38,7 @@ Do not start without a separate direct owner authorization. Do not create an emp
 
 ### Объём
 
-Изменить `LICENSE` и раздел лицензии `README.md`. Проверить ADR-0008 без смены решения. Создать `NOTICE` только при реальной необходимости attribution.
+Изменить `LICENSE` и раздел лицензии `README.md`. Проверить ADR-0008 без смены решения. Создать `NOTICE` только при реальной необходимости attribution. Прямое разрешение владельца на это protected legal action получено 17 июля 2026 года. Оно разрешает выполнение только CMC-01 после назначения Worker отдельно запущенным Controller и не разрешает merge, publication или release.
 
 ### Критерии приёмки
 
@@ -50,4 +50,4 @@ Do not start without a separate direct owner authorization. Do not create an emp
 
 ### Ограничения
 
-Без отдельного прямого разрешения владельца остановиться без изменений. Не создавать пустой `NOTICE`, не менять scope, не выполнять merge, publication или release.
+Зафиксированное выше разрешение владельца закрывает legal gate. Не начинать до назначения CMC-01 отдельно запущенным Controller. Не создавать пустой `NOTICE`, не менять scope, не выполнять merge, publication или release.
