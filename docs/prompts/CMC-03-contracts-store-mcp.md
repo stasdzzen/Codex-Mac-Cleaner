@@ -17,6 +17,8 @@ date: 2026-07-15
 
 Создай строгие Zod schemas с reject-unknown, отдельные model/widget представления Finding, atomic JSON/NDJSON/versioned-state primitives и model-visible skeleton. Добавь `supportLevel`, `FindingFacts`, `ReclaimEstimate`, `SafeMetadata`, universal immutable `ProtectedScopeRule`, `UserExclusion`, `ScheduleIntent`/`ScheduleState`, `audit_cancel`, `StorageSummary` и `DiskObservation`. Персональные app/path rules запрещены. Полные пути допускаются только в widget-only _meta и локальном manifest; raw config values и protected-scope details не допускаются ни в одном MCP output. Cleanup mutation implementation, произвольные path inputs, SQLite и сеть в scope не входят.
 
+При добавлении закреплённых зависимостей Zod и MCP SDK обязательно обнови и закоммить корневой `pnpm-lock.yaml`. На финальном head выполни `corepack pnpm install --frozen-lockfile`; frozen-lockfile проверка должна пройти без изменения lockfile.
+
 Проверь atomic writes, права 0700/0600, schemaVersion/migration primitives, strict cancellation/support/finding/exclusion/schedule/metadata/summary/disk schemas, отсутствие full path, personal inventory и secret-like values в content/structuredContent и точные output schemas. Следуй TDD и шагам плана; все ошибки должны соответствовать docs/contracts/errors.md.
 
 Открой один PR. В русском отчёте приложи Issue/PR, ветку/head SHA, tests и typecheck с фактическими результатами, список незавершённых gates. Не называй manual smoke выполненным.

@@ -1,8 +1,8 @@
 ```cto-issue
 schema: 1
-dependencies: #2
+dependencies: #2, #23
 conflicts: none
-touched_paths: apps/mcp-server/; packages/contracts/; packages/storage/
+touched_paths: apps/mcp-server/; packages/contracts/; packages/storage/; pnpm-lock.yaml
 risk: medium
 parallel_safety: serial
 execution_profile: default
