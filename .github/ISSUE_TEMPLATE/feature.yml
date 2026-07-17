@@ -1,0 +1,34 @@
+name: Предложение
+description: Предложить ограниченное и проверяемое улучшение
+title: "[FEATURE] "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Проблема
+      description: Какую наблюдаемую проблему пользователя нужно решить
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: Ожидаемый результат
+      description: Как проверить, что проблема решена
+    validations:
+      required: true
+  - type: textarea
+    id: safety
+    attributes:
+      label: Ограничения безопасности
+      description: Какие данные, пути и действия должны остаться защищёнными
+    validations:
+      required: true
+  - type: textarea
+    id: boundaries
+    attributes:
+      label: Границы
+      description: Что точно не входит в предложение
+    validations:
+      required: true

@@ -1,0 +1,65 @@
+name: Ошибка
+description: Сообщить о воспроизводимой ошибке Codex Mac Cleaner
+title: "[BUG] "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: Не публикуйте secrets, реальные полные пути и сведения об уязвимостях. Для уязвимостей используйте Private vulnerability reporting.
+  - type: input
+    id: version
+    attributes:
+      label: Commit или версия
+      description: Точный commit SHA либо версия установленного Release
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Среда
+      description: Версии macOS и Codex, модель Mac и архитектура
+    validations:
+      required: true
+  - type: input
+    id: profile
+    attributes:
+      label: Профиль
+      description: Например, application_remnants
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Шаги воспроизведения
+      description: Минимальные действия и синтетические входные данные без secrets и реальных путей
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Ожидаемый результат
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Фактический результат
+    validations:
+      required: true
+  - type: textarea
+    id: safe_evidence
+    attributes:
+      label: Безопасное доказательство
+      description: Только относящийся фрагмент без содержимого файлов, tokens, app inventory и полного environment dump
+    validations:
+      required: true
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Проверка приватности
+      options:
+        - label: Я удалил secrets, реальные полные пути и персональные данные.
+          required: true
+        - label: Это не закрытый отчёт об уязвимости.
+          required: true

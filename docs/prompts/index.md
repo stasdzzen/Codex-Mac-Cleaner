@@ -16,3 +16,4 @@
 * [CMC-13 — ежемесячный read-only audit](CMC-13-monthly-schedule.md), GitHub [#13](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/13)
 * [CMC-14 — Advanced Cleanup v0.2 research](CMC-14-advanced-cleanup-research.md), GitHub [#14](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/14), `cto:blocked`
 * [CMC-15 — Browser/Developer Storage v0.2 research](CMC-15-browser-developer-research.md), GitHub [#15](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/15), `cto:blocked`
+* [CMC-16 — защита публичного репозитория](CMC-16-public-repository-hardening.md), GitHub [#17](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/17)

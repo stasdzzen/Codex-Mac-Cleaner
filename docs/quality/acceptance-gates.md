@@ -14,6 +14,10 @@ date: 2026-07-15
 * PRD и implementation plan ссылаются на архитектурный канон без дублирующих противоречивых правил.
 * Корневой `LICENSE` заменён на официальный Apache-2.0 до первого implementation commit.
 * Package metadata и release metadata указывают Apache-2.0.
+* Community profile, private vulnerability reporting и публичный support channel доступны.
+* `main` принимает изменения только через squash PR со строгим repository check, linear history и ruleset без bypass.
+* GitHub Actions ограничены GitHub-owned actions с full-SHA pinning; release tags нельзя обновить или удалить.
+* Dependabot, secret scanning, push protection и CodeQL default setup подтверждены live API перед release.
 
 # Gate B — платформа и сборка
 

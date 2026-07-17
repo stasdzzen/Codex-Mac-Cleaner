@@ -15,7 +15,7 @@ date: 2026-07-15
 
 Сначала прочитай AGENTS.md, docs/development/execution-contract.md, docs/decisions/ADR-0008-apache-license.md, docs/quality/acceptance-gates.md и раздел CMC-01 в docs/superpowers/plans/2026-07-15-codex-mac-cleaner-v01.md. Проверь Issue через codex-cto-orchestrator issue_contract.py.
 
-Это protected legal action. Прямое разрешение владельца заменить MIT на Apache-2.0 получено 17 июля 2026 года и зафиксировано в live Issue #1. До изменений проверь, что эта запись присутствует в текущем теле Issue и Issue имеет label `cto:ready`. Если запись или label отсутствуют, остановись без изменений и отчитайся как blocked. Разрешение относится только к CMC-01 и не даёт полномочий на merge, publication или release.
+Это protected legal action. Прямое разрешение владельца заменить MIT на Apache-2.0 получено 17 июля 2026 года и зафиксировано в live Issue #1. До изменений проверь, что CMC-11 и CMC-16 закрыты, запись разрешения присутствует в текущем теле Issue и Issue имеет label `cto:ready`. Если dependency, запись или label отсутствуют, остановись без изменений и отчитайся как blocked. Разрешение относится только к CMC-01 и не даёт полномочий на merge, publication или release.
 
 При наличии разрешения замени LICENSE точным официальным текстом Apache-2.0, синхронизируй только раздел лицензии README и не создавай пустой NOTICE. Не добавляй runtime-код и не меняй другие ADR.
 
