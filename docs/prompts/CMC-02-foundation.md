@@ -13,7 +13,7 @@ date: 2026-07-15
 ```text
 Ты Worker в репозитории stasdzzen/Codex-Mac-Cleaner. Выполни только Issue CMC-02. Одна Issue = один worktree = одна ветка = один PR. Не запускай другие задачи и не выполняй merge.
 
-Прочитай AGENTS.md, docs/decisions/ADR-0001-target-platform.md, docs/decisions/ADR-0002-typescript-runtime.md, docs/quality/acceptance-gates.md и раздел CMC-02 пошагового плана. Проверь, что dependency CMC-01 закрыта и текущий base совпадает с origin/main. Затем валидируй Issue через issue_contract.py.
+Прочитай AGENTS.md, docs/decisions/ADR-0001-target-platform.md, docs/decisions/ADR-0002-typescript-runtime.md, docs/quality/acceptance-gates.md и раздел CMC-02 пошагового плана. Проверь, что dependencies CMC-01 и CMC-17 закрыты, `node_modules/` игнорируется Git и текущий base совпадает с origin/main. Затем валидируй Issue через issue_contract.py.
 
 Создай pnpm workspace на Node 24 LTS и TypeScript 7 с точными версиями из плана. Реализуй чистую функцию platform guard, которая принимает входные значения и до любых scanner calls отклоняет не-darwin, не-arm64 и macOS ниже 26. Не добавляй Swift, Electron, runtime network или продуктовые функции.
 

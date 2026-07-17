@@ -1,6 +1,6 @@
 ```cto-issue
 schema: 1
-dependencies: #1
+dependencies: #1, #20
 conflicts: none
 touched_paths: package.json; pnpm-lock.yaml; pnpm-workspace.yaml; tsconfig.base.json; tsconfig.json; packages/platform/
 risk: medium
