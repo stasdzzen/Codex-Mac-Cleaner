@@ -1,0 +1,149 @@
+import { describe, expect, it } from "vitest";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+
+import {
+  MODEL_VISIBLE_TOOL_DEFINITIONS,
+  buildToolResult,
+  createMcpServer,
+} from "../src/server.js";
+
+const expectedAnnotations = {
+  audit_start: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  audit_status: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  audit_cancel: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  audit_results: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  dashboard_open: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  finding_inspect: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  finding_reveal: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+} as const;
+
+describe("model-visible MCP skeleton", () => {
+  it("регистрирует ровно семь канонических tools с точными annotations", () => {
+    expect(Object.keys(MODEL_VISIBLE_TOOL_DEFINITIONS)).toEqual([
+      "audit_start",
+      "audit_status",
+      "audit_cancel",
+      "audit_results",
+      "dashboard_open",
+      "finding_inspect",
+      "finding_reveal",
+    ]);
+    for (const [name, annotations] of Object.entries(expectedAnnotations)) {
+      expect(MODEL_VISIBLE_TOOL_DEFINITIONS[name as keyof typeof expectedAnnotations].annotations).toEqual(
+        annotations,
+      );
+    }
+  });
+
+  it("реальный SDK tools/list видит те же семь strict schemas", async () => {
+    const server = createMcpServer({
+      platform: "darwin",
+      arch: "arm64",
+      release: "26.0.0",
+    });
+    const client = new Client({ name: "contract-test", version: "1.0.0" });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+
+    await Promise.all([
+      server.connect(serverTransport),
+      client.connect(clientTransport),
+    ]);
+    try {
+      const listed = await client.listTools();
+      expect(listed.tools.map((tool) => tool.name)).toEqual(
+        Object.keys(MODEL_VISIBLE_TOOL_DEFINITIONS),
+      );
+      for (const tool of listed.tools) {
+        expect(tool.annotations).toEqual(
+          expectedAnnotations[tool.name as keyof typeof expectedAnnotations],
+        );
+        expect(tool.inputSchema).toMatchObject({
+          type: "object",
+          additionalProperties: false,
+        });
+        expect(tool.outputSchema).toMatchObject({
+          type: "object",
+          additionalProperties: false,
+        });
+      }
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it("audit_cancel принимает только auditId/requestId", () => {
+    const schema = MODEL_VISIBLE_TOOL_DEFINITIONS.audit_cancel.inputSchema;
+    expect(schema.parse({ auditId: "audit-1", requestId: "request-1" })).toEqual({
+      auditId: "audit-1",
+      requestId: "request-1",
+    });
+    for (const forbidden of ["path", "profile", "revision", "operationId"] as const) {
+      expect(() =>
+        schema.parse({
+          auditId: "audit-1",
+          requestId: "request-1",
+          [forbidden]: "synthetic",
+        }),
+      ).toThrow();
+    }
+  });
+
+  it("каждый tool имеет strict input и точный output schema", () => {
+    for (const definition of Object.values(MODEL_VISIBLE_TOOL_DEFINITIONS)) {
+      expect(definition.inputSchema).toBeDefined();
+      expect(definition.outputSchema).toBeDefined();
+      expect(() => definition.inputSchema.parse({ unknown: true })).toThrow();
+      expect(() => definition.outputSchema.parse({ unknown: true })).toThrow();
+    }
+  });
+
+  it("проверяет platform guard до создания server", () => {
+    expect(() =>
+      createMcpServer({ platform: "linux", arch: "arm64", release: "26.0.0" }),
+    ).toThrow("UNSUPPORTED_PLATFORM");
+    expect(
+      createMcpServer({ platform: "darwin", arch: "arm64", release: "26.0.0" }),
+    ).toBeDefined();
+  });
+
+  it("не допускает full path и secret-like values в content/structuredContent", () => {
+    const safeOutput = {
+      auditId: "audit-1",
+      state: "queued",
+      stateVersion: 1,
+    };
+    expect(
+      buildToolResult("audit_start", safeOutput, "Аудит поставлен в очередь"),
+    ).toMatchObject({ structuredContent: safeOutput });
+    expect(() =>
+      buildToolResult("audit_start", safeOutput, "Объект: /synthetic/private/file"),
+    ).toThrow();
+    expect(() =>
+      buildToolResult("audit_start", { ...safeOutput, path: "/synthetic/private" }, "Готово"),
+    ).toThrow();
+    expect(() =>
+      buildToolResult("audit_start", safeOutput, "token=synthetic-secret"),
+    ).toThrow();
+    expect(() =>
+      buildToolResult("audit_start", safeOutput, "Готово", {
+        widget: { canonicalPath: "/synthetic/token=synthetic-secret" },
+      }),
+    ).toThrow();
+  });
+
+  it("разрешает canonicalPath только в widget-only _meta", () => {
+    const result = buildToolResult(
+      "audit_start",
+      { auditId: "audit-1", state: "queued", stateVersion: 1 },
+      "Аудит поставлен в очередь",
+      { widget: { canonicalPath: "/synthetic/Library/Caches/example" } },
+    );
+
+    expect(JSON.stringify(result.structuredContent)).not.toContain("/synthetic/");
+    expect(result._meta).toEqual({
+      widget: { canonicalPath: "/synthetic/Library/Caches/example" },
+    });
+  });
+});
