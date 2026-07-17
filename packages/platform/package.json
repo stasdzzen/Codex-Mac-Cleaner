@@ -1,0 +1,14 @@
+{
+  "name": "@codex-mac-cleaner/platform",
+  "private": true,
+  "type": "module",
+  "exports": "./src/assert-supported-platform.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run test"
+  },
+  "devDependencies": {
+    "typescript": "7.0.2",
+    "vitest": "4.1.10"
+  }
+}
