@@ -2,7 +2,7 @@
 schema: 1
 dependencies: #5
 conflicts: none
-touched_paths: apps/widget/
+touched_paths: apps/widget/; pnpm-lock.yaml
 risk: medium
 parallel_safety: safe
 execution_profile: default

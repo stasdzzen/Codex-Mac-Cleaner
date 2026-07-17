@@ -2,7 +2,7 @@
 schema: 1
 dependencies: #4
 conflicts: none
-touched_paths: packages/evidence/; packages/classifier/; packages/policy/
+touched_paths: packages/evidence/; packages/classifier/; packages/policy/; pnpm-lock.yaml
 risk: high
 parallel_safety: serial
 execution_profile: deep

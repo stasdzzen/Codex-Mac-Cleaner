@@ -2,7 +2,7 @@
 schema: 1
 dependencies: #5
 conflicts: none
-touched_paths: packages/quarantine/
+touched_paths: packages/quarantine/; pnpm-lock.yaml
 risk: high
 parallel_safety: serial
 execution_profile: deep
