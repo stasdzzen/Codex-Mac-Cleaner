@@ -12,9 +12,9 @@ date: 2026-07-15
 
 Один запуск аудита.
 
-Обязательные поля: `auditId`, `requestId`, `profile`, `state`, `stateVersion`, `startedAt`, `finishedAt`, `capabilities`, `coverage`, `warnings`, `revision`, `schemaVersion`.
+Обязательные поля: `auditId`, `requestId`, `profile`, `state`, `stateVersion`, `startedAt`, `finishedAt`, `cancelRequestedAt`, `capabilities`, `coverage`, `warnings`, `revision`, `schemaVersion`.
 
-После состояния `completed` или `completed_with_warnings` ревизия неизменяема.
+Допустимые состояния: `queued`, `running`, `cancelling`, `cancelled`, `completed`, `completed_with_warnings`, `failed`. После terminal state отчёт неизменяем. Только `completed` и `completed_with_warnings` могут содержать actionable revision; в `cancelled` все `allowedActions` пусты.
 
 # `Finding`
 
@@ -59,6 +59,16 @@ date: 2026-07-15
 # `QuarantineOperation`
 
 Связывает `operationId`, действие, audit revision, finding, preview token, исходный путь, payload, fingerprint, подтверждение, состояние и журнал событий.
+
+# `StorageSummary`
+
+Серверная сводка содержит `candidatePhysicalBytes`, `quarantinePhysicalBytes`, `purgedPhysicalBytes` и `stateVersion`.
+
+* `candidatePhysicalBytes` — physical size находок текущей завершённой ревизии;
+* `quarantinePhysicalBytes` — physical size payload в состоянии `moved`;
+* `purgedPhysicalBytes` — physical size записей `purged` в действующем локальном журнале.
+
+Все поля — неотрицательные целые байты. `purgedPhysicalBytes` не равен изменению свободного места APFS.
 
 # `CapabilityReport`
 

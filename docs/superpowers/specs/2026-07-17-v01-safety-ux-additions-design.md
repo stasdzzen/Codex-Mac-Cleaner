@@ -3,7 +3,7 @@ type: Architecture
 title: Safety/UX-дополнения Codex Mac Cleaner v0.1
 description: Дизайн Quarantine Center, честных метрик размера и безопасной отмены read-only аудита.
 tags: [architecture, product, quarantine, audit, ui, safety]
-status: draft
+status: approved
 owner: Architect
 date: 2026-07-17
 ---

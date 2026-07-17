@@ -16,11 +16,11 @@ Complete security and privacy verification and produce deterministic release evi
 
 ### Scope
 
-Add security tests, non-publishing CI, deterministic packaging verification, SBOM/checksum/provenance inputs and an uncompleted real-Mac smoke protocol from CMC-10.
+Add security tests, audit-cancellation race tests, quarantine-metric and purge-failure tests, non-publishing CI, deterministic packaging verification, SBOM/checksum/provenance inputs and an uncompleted real-Mac smoke protocol from CMC-10.
 
 ### Acceptance criteria
 
-Automated gates A–H that do not require a real Mac pass on the final SHA. The package contains only approved production files and no secrets or build paths. Manual smoke, tag and release remain explicitly incomplete.
+Automated gates A–H that do not require a real Mac pass on the final SHA. They prove a cancelled partial report has no actions, a terminal-state cancellation race is idempotent, a failed purge leaves the entry and storage summary unchanged, no bulk purge exists, and UI copy does not claim an exact APFS free-space delta. The package contains only approved production files and no secrets or build paths. Manual smoke, tag and release remain explicitly incomplete.
 
 ### Verification
 
@@ -38,11 +38,11 @@ Do not create a tag, release, publication, deploy, credential change, false manu
 
 ### Объём
 
-Добавить security tests, CI без публикации, packaging verification, SBOM/checksum/provenance inputs и незаполненный real-Mac smoke protocol из CMC-10.
+Добавить security tests, tests гонки отмены аудита, метрик карантина и неуспешного purge, CI без публикации, packaging verification, SBOM/checksum/provenance inputs и незаполненный real-Mac smoke protocol из CMC-10.
 
 ### Критерии приёмки
 
-Автоматические части gates A–H проходят на финальном SHA. Package содержит только утверждённые production files без secrets/build paths. Manual smoke, tag и release явно остаются незавершёнными.
+Автоматические части gates A–H проходят на финальном SHA. Они доказывают, что частичный отменённый отчёт не содержит actions, гонка отмены с terminal state идемпотентна, неуспешный purge не меняет запись и сводку места, bulk purge отсутствует, а UI не заявляет точное изменение свободного места APFS. Package содержит только утверждённые production files без secrets/build paths. Manual smoke, tag и release явно остаются незавершёнными.
 
 ### Проверка
 

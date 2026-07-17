@@ -22,7 +22,16 @@ date: 2026-07-15
 10. Local Store сохраняет immutable audit revision.
 11. Dashboard получает краткий `structuredContent` и подробный widget-only `_meta`.
 
-Состояния аудита: `queued`, `running`, `completed`, `completed_with_warnings`, `failed`.
+Состояния аудита: `queued`, `running`, `cancelling`, `cancelled`, `completed`, `completed_with_warnings`, `failed`.
+
+# Отмена аудита
+
+1. Codex или Dashboard вызывает `audit_cancel` с `auditId` и новым `requestId`.
+2. Coordinator атомарно переводит `queued` или `running` в `cancelling` и передаёт cancellation signal adapters.
+3. Adapters завершают текущий безопасный шаг, закрывают потоки записи и не начинают новый источник.
+4. Local Store сохраняет частичный отчёт как `cancelled`; все находки получают пустые `allowedActions`.
+5. Если terminal state записано до запроса отмены, сервер возвращает это состояние без нового действия.
+6. Повторный `audit_cancel` с тем же `requestId` идемпотентен.
 
 # Перемещение в карантин
 
@@ -50,6 +59,8 @@ date: 2026-07-15
 3. `quarantine_purge` удаляет только payload внутри проверенного quarantine root.
 4. Симлинки удаляются как ссылки; сервер не следует по ним.
 5. Journal получает состояние `purged`.
+
+После move, restore и purge сервер возвращает новый `stateVersion` и сводку размера. Failed purge не меняет метрику «Удалено навсегда».
 
 # Recovery после сбоя
 

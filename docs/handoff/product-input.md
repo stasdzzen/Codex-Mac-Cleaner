@@ -37,6 +37,9 @@ date: 2026-07-15
 15. Документация — OKF bundle, зафиксированный на Google knowledge-catalog commit `d44368c15e38e7c92481c5992e4f9b5b421a801d`.
 16. Канал v0.1 — GitHub Releases и repository marketplace; публичная Plugin Directory отложена.
 17. Лицензия — Apache-2.0; существующий MIT `LICENSE` нужно заменить до первого implementation commit.
+18. Dashboard имеет три вкладки; Quarantine Center даёт только поэлементные restore/purge.
+19. `audit_cancel` кооперативно останавливает read-only аудит; partial report не разрешает mutation.
+20. Сводка разделяет найденный, карантинный и окончательно удалённый объём без обещания точного свободного места APFS.
 
 # Ожидаемые артефакты
 
@@ -59,7 +62,7 @@ Product-чат должен подготовить:
 5. Audit MCP tools и JSON/NDJSON store.
 6. Quarantine transaction, journal и crash recovery.
 7. Restore и отдельный purge flow.
-8. MCP App resource, dashboard и app-only actions.
+8. MCP App resource, трёхвкладочный Dashboard, Quarantine Center и app-only actions.
 9. Plugin manifest, Skill и repository marketplace packaging.
 10. Security, privacy, fault-injection, clean-room и real-Mac release gates.
 

@@ -34,12 +34,17 @@ date: 2026-07-15
 * [ ] Restore не перезаписывает объект и сохраняет проверяемые metadata/xattrs.
 * [ ] Purge ручной, поэлементный и не следует ссылкам.
 * [ ] Повреждённый manifest блокирует destructive-tools.
+* [ ] `audit_cancel` и race tests дают один terminal state; в `cancelled` нет `allowedActions`.
+* [ ] Failed purge не скрывает payload и не меняет `purgedPhysicalBytes`.
 
 # Privacy и UI
 
 * [ ] Model-visible ответы и обычные логи не содержат полных путей.
 * [ ] Основной сценарий не выполняет сетевых запросов и не отправляет телеметрию.
 * [ ] Dashboard работает без CDN и показывает coverage, риск и причины запрета не только цветом.
+* [ ] Dashboard имеет вкладки «Обзор», «Находки», «Карантин» и не имеет bulk purge.
+* [ ] Метрики приходят с сервера; `purgedPhysicalBytes` не назван точно освобождённым местом APFS.
+* [ ] Tabs, dialogs и actions проходят keyboard/focus tests.
 * [ ] App-only mutation tools недоступны модели.
 
 # Распространение

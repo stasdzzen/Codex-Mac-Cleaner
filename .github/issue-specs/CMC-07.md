@@ -16,11 +16,11 @@ Add safe original-path restore and explicit single-entry purge to the quarantine
 
 ### Scope
 
-Implement prepare/execute flows for restore and purge plus conflict, metadata, xattr and symlink tests from CMC-07.
+Implement prepare/execute flows for restore and purge, a server-owned quarantine summary, and conflict, metadata, xattr and symlink tests from CMC-07.
 
 ### Acceptance criteria
 
-Restore never creates parents, overwrites a path or uses an alternate destination. Purge is manual, single-entry, quarantine-contained and never follows links. Metadata and synthetic xattrs survive restore.
+Restore never creates parents, overwrites a path or uses an alternate destination. Purge is manual, single-entry, quarantine-contained and never follows links. Move, restore and purge return the new `stateVersion` and `StorageSummary`. A successful purge increases journal-derived `purgedPhysicalBytes`; a failed purge keeps the entry and summary unchanged. Metadata and synthetic xattrs survive restore.
 
 ### Verification
 
@@ -38,11 +38,11 @@ No bulk or timed purge, overwrite, alternate restore, UI, plugin packaging, merg
 
 ### Объём
 
-Реализовать prepare/execute flows restore и purge, conflict, metadata, xattr и symlink tests из CMC-07.
+Реализовать prepare/execute flows restore и purge, server-owned сводку карантина, conflict, metadata, xattr и symlink tests из CMC-07.
 
 ### Критерии приёмки
 
-Restore не создаёт parents, не перезаписывает путь и не использует alternate destination. Purge ручной, поэлементный, ограничен карантином и не следует links. Metadata и synthetic xattrs сохраняются.
+Restore не создаёт parents, не перезаписывает путь и не использует alternate destination. Purge ручной, поэлементный, ограничен карантином и не следует links. Move, restore и purge возвращают новый `stateVersion` и `StorageSummary`. Успешный purge увеличивает вычисленный по локальному журналу `purgedPhysicalBytes`; неуспешный purge сохраняет запись и сводку без изменений. Metadata и synthetic xattrs сохраняются.
 
 ### Проверка
 

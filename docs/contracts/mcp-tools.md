@@ -18,6 +18,7 @@ date: 2026-07-15
 |---|---|---|---|
 | `audit_start` | Начать read-only аудит | `requestId`, `profile=application_remnants` | `auditId`, `state`, `stateVersion` |
 | `audit_status` | Получить прогресс | `auditId` | state, progress, coverage warnings |
+| `audit_cancel` | Отменить read-only аудит | `auditId`, `requestId` | state, stateVersion, cancelRequestedAt |
 | `audit_results` | Получить страницу результатов | `auditId`, `revision`, `cursor`, filters | summary, finding IDs, next cursor |
 | `dashboard_open` | Открыть Audit Dashboard | `auditId`, `revision` | widget snapshot |
 | `finding_inspect` | Повторно проверить находку | `findingId`, `auditRevision` | evidence, policy, stale flag |
@@ -31,7 +32,7 @@ date: 2026-07-15
 |---|---|---|
 | `quarantine_prepare_move` | Подготовить preview token для одной находки | Нет |
 | `quarantine_move` | Переместить одну находку в карантин | Да, хотя действие обратимо |
-| `quarantine_list` | Получить записи карантина | Нет |
+| `quarantine_list` | Получить записи и `StorageSummary` | Нет |
 | `quarantine_prepare_restore` | Подготовить восстановление одной записи | Нет |
 | `quarantine_restore` | Вернуть payload без перезаписи | Нет |
 | `quarantine_prepare_purge` | Подготовить необратимую очистку одной записи | Нет |
@@ -45,6 +46,7 @@ date: 2026-07-15
 |---|---:|---:|---:|
 | `audit_start` | `false` | `false` | `true` |
 | `audit_status` | `true` | `false` | `true` |
+| `audit_cancel` | `false` | `false` | `true` |
 | `audit_results` | `true` | `false` | `true` |
 | `dashboard_open` | `true` | `false` | `true` |
 | `finding_inspect` | `true` | `false` | `true` |
@@ -57,12 +59,13 @@ date: 2026-07-15
 | `quarantine_prepare_purge` | `false` | `false` | `true` |
 | `quarantine_purge` | `false` | `true` | `true` |
 
-`audit_start` имеет `readOnlyHint: false`, потому что создаёт локальный отчёт, хотя не меняет сканируемые данные. Prepare-tools создают одноразовые tokens. `finding_reveal` меняет состояние Finder. Все операции идемпотентны по `requestId`, `operationId` или точному входному snapshot.
+`audit_start` и `audit_cancel` имеют `readOnlyHint: false`, потому что меняют локальный отчёт, хотя не меняют сканируемые данные. Prepare-tools создают одноразовые tokens. `finding_reveal` меняет состояние Finder. Все операции идемпотентны по `requestId`, `operationId` или точному входному snapshot.
 
 # Правила входов
 
 * Mutation-tools не принимают путь.
 * `findingId`, `auditRevision`, `operationId` и preview token обязательны там, где применимы.
+* `audit_cancel` не принимает profile, path, revision или mutation-параметры.
 * Preview token привязан к действию, UI session, finding или quarantine entry, fingerprint и сроку пять минут.
 * Token одноразовый. Повтор с тем же `operationId` возвращает прежний результат.
 * Любой неизвестный input field отклоняется schema validation.
@@ -72,6 +75,7 @@ date: 2026-07-15
 * `structuredContent` содержит краткие model-visible данные и `stateVersion`.
 * `content` содержит короткое русскоязычное объяснение без полного пути.
 * `_meta` содержит widget-only hydration: полный путь, подробные evidence maps и локальные действия.
+* `audit_results`, `dashboard_open` и `quarantine_list` возвращают серверную `StorageSummary`; UI не пересчитывает её.
 * Каждый tool с `structuredContent` объявляет точный `outputSchema`.
 * Секреты отсутствуют во всех трёх каналах ответа.
 

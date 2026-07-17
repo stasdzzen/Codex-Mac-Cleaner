@@ -12,6 +12,7 @@
 * [ADR-0006: тёмный Audit Dashboard на shadcn/ui](ADR-0006-dark-shadcn-dashboard.md)
 * [ADR-0007: GitHub Releases и repository marketplace](ADR-0007-github-distribution.md)
 * [ADR-0008: Apache License 2.0](ADR-0008-apache-license.md)
+* [ADR-0009: safety/UX-дополнения v0.1](ADR-0009-v01-safety-ux-completion.md)
 
 ## Правило изменения
 

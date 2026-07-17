@@ -12,15 +12,15 @@ execution_profile: default
 
 ### Goal
 
-Build the autonomous dark Audit Dashboard against frozen fixtures and server contracts.
+Build the autonomous dark Audit Dashboard and Quarantine Center against frozen fixtures and server contracts.
 
 ### Scope
 
-Create the React/Vite widget, local shadcn components, bridge abstraction and UI tests from CMC-08.
+Create the React/Vite widget, three-tab dashboard (`Overview`, `Findings`, `Quarantine`), local shadcn components, bridge abstraction, cancellation states and UI tests from CMC-08.
 
 ### Acceptance criteria
 
-The dashboard uses semantic tokens and approved components, loads no CDN, drops stale state versions, stores no path/token/policy in view state, and renders coverage, risk and blocking reasons without color-only meaning.
+The dashboard uses semantic tokens and approved components, including `Tabs`, `Button` and `Tooltip`, loads no CDN, drops stale state versions, stores no path/token/policy in view state, and renders coverage, risk and blocking reasons without color-only meaning. It shows server-owned `candidatePhysicalBytes`, `quarantinePhysicalBytes` and journal-derived `purgedPhysicalBytes`; it never presents the last value as an exact APFS free-space delta. A cancelled partial report is read-only. Quarantine provides per-entry restore and permanent delete only: no bulk selection, “clear all” or automatic purge.
 
 ### Verification
 
@@ -34,15 +34,15 @@ UI never computes allowed actions. No server policy, quarantine code, plugin man
 
 ### Цель
 
-Собрать автономный тёмный Audit Dashboard по frozen fixtures и server contracts.
+Собрать автономный тёмный Audit Dashboard и Quarantine Center по frozen fixtures и server contracts.
 
 ### Объём
 
-Создать React/Vite widget, локальные shadcn components, bridge abstraction и UI tests из CMC-08.
+Создать React/Vite widget, Dashboard с тремя вкладками «Обзор», «Находки», «Карантин», локальные shadcn components, bridge abstraction, состояния отмены и UI tests из CMC-08.
 
 ### Критерии приёмки
 
-Dashboard использует semantic tokens и утверждённые components, не загружает CDN, отбрасывает stale stateVersion, не хранит path/token/policy в view state и показывает coverage/risk/block reason не только цветом.
+Dashboard использует semantic tokens и утверждённые components, включая `Tabs`, `Button` и `Tooltip`, не загружает CDN, отбрасывает stale stateVersion, не хранит path/token/policy в view state и показывает coverage/risk/block reason не только цветом. Он выводит server-owned `candidatePhysicalBytes`, `quarantinePhysicalBytes` и вычисленный по журналу `purgedPhysicalBytes`, не называя последнее значение точным изменением свободного места APFS. Частичный отменённый отчёт read-only. В карантине доступны только поэлементные «Восстановить» и «Удалить навсегда»: без bulk selection, «Очистить всё» и автоматической очистки.
 
 ### Проверка
 

@@ -32,7 +32,7 @@ date: 2026-07-15
 
 ## Contract tests MCP
 
-Проверяются точные input/output schemas, запрет неизвестных полей, annotations, `openWorldHint=false`, разделение model-visible и app-visible tools, отсутствие полных путей в `content` и `structuredContent`.
+Проверяются точные input/output schemas, запрет неизвестных полей, annotations, `openWorldHint=false`, разделение model-visible и app-visible tools, `audit_cancel`, `StorageSummary`, отсутствие полных путей в `content` и `structuredContent`.
 
 ## Temp-directory E2E
 
@@ -46,9 +46,11 @@ date: 2026-07-15
 
 Между preview и действием меняются inode, содержимое, owner, тип объекта, исходный родитель, link boundary, mount ID и active/open-file status. Каждое изменение должно приводить к typed blocking error.
 
+Отдельная матрица покрывает гонку `audit_cancel` с `completed`, `completed_with_warnings` и `failed`. В каждом запуске фиксируется ровно один terminal state; повторная отмена не запускает нового действия.
+
 ## UI tests
 
-Проверяются состояния загрузки, coverage warnings, фильтры, evidence Sheet, отсутствие кнопки при запрете policy, точный текст AlertDialog, одно действие за подтверждение и корректная обработка expired token. Дополнительно проверяется, что прямой вызов tool не обходит серверную policy.
+Проверяются три вкладки, состояния загрузки и отмены, coverage warnings, фильтры, evidence `Sheet`, Quarantine Center, пустые состояния, метрики, отсутствие кнопки при запрете policy, точный текст `AlertDialog`, одно действие за подтверждение, keyboard navigation, focus return и корректная обработка expired token. Отдельные negative tests доказывают отсутствие bulk action и невозможность обойти policy прямым tool call.
 
 ## Real-Mac smoke
 
@@ -60,6 +62,9 @@ date: 2026-07-15
 * сохранение xattrs и metadata;
 * Finder reveal;
 * crash recovery;
+* `audit → cancel` с просматриваемым, но недейственным partial report;
+* Quarantine Center, restore, purge и обновление трёх метрик;
+* отсутствие claim о точно освобождённом месте APFS;
 * отсутствие сетевых запросов во время основного сценария.
 
 # Тестовые данные

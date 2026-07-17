@@ -16,11 +16,11 @@ Integrate the complete MCP App surface and build the repository marketplace plug
 
 ### Scope
 
-Register model-visible and app-only tools, versioned dashboard resource, plugin manifest, stdio MCP config, Skill and contract tests from CMC-09.
+Register seven model-visible tools, app-only cleanup mutation tools, versioned dashboard resource, plugin manifest, stdio MCP config, Skill and contract tests from CMC-09.
 
 ### Acceptance criteria
 
-Mutation tools are app-only and accept no paths. Annotations exactly match the MCP contract. Model-visible output contains no full paths. The autonomous dashboard loads through `dashboard-v1.html`, and manifests reference existing build entries.
+Cleanup mutation tools are app-only and accept no paths. `audit_cancel` remains model-visible, non-destructive and idempotent with the exact MCP annotations. Model-visible output contains no full paths. The dashboard receives server-owned storage summaries and audit cancellation states, loads through `dashboard-v1.html`, and manifests reference existing build entries. The Skill may cancel an audit only after an explicit user request.
 
 ### Verification
 
@@ -38,11 +38,11 @@ No network transport, telemetry, public Plugin Directory claim, core policy weak
 
 ### Объём
 
-Зарегистрировать model-visible/app-only tools, versioned dashboard resource, plugin manifest, stdio MCP config, Skill и tests из CMC-09.
+Зарегистрировать семь model-visible tools, app-only cleanup mutation tools, versioned dashboard resource, plugin manifest, stdio MCP config, Skill и tests из CMC-09.
 
 ### Критерии приёмки
 
-Mutation tools app-only и не принимают paths. Annotations совпадают с contract. Model-visible output без полных путей. Dashboard загружается как `dashboard-v1.html`, manifests ссылаются на существующие build entries.
+Cleanup mutation tools app-only и не принимают paths. `audit_cancel` остаётся model-visible, non-destructive и idempotent с точными annotations MCP contract. Model-visible output без полных путей. Dashboard получает server-owned storage summaries и состояния отмены аудита, загружается как `dashboard-v1.html`, manifests ссылаются на существующие build entries. Skill может отменить аудит только по явному запросу пользователя.
 
 ### Проверка
 
