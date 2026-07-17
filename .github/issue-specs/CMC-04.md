@@ -1,8 +1,8 @@
 ```cto-issue
 schema: 1
-dependencies: #3
+dependencies: #3, #26
 conflicts: none
-touched_paths: packages/adapters/
+touched_paths: packages/adapters/; pnpm-lock.yaml
 risk: medium
 parallel_safety: safe
 execution_profile: default

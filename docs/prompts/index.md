@@ -19,3 +19,4 @@
 * [CMC-16 — защита публичного репозитория](CMC-16-public-repository-hardening.md), GitHub [#17](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/17)
 * [CMC-17 — generated artifacts workspace](CMC-17-generated-artifacts.md), GitHub [#20](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/20)
 * [CMC-18 — синхронизация lockfile scope](CMC-18-lockfile-scope.md), GitHub [#23](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/23)
+* [CMC-19 — синхронизация lockfile scope очереди v0.1](CMC-19-lockfile-queue.md), GitHub [#26](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/26)

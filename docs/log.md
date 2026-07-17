@@ -2,6 +2,7 @@
 
 ## 2026-07-18
 
+* **Lockfile scope очереди v0.1**: CMC-19 добавил корневой `pnpm-lock.yaml` в локальные контракты CMC-04/05/06/08/09, вставил dependency gate перед CMC-04 и закрепил frozen-install gate в пяти Worker-промптах.
 * **Lockfile scope**: CMC-18 добавил зависимость и корневой `pnpm-lock.yaml` в локальный контракт CMC-03, синхронизировал roadmap и закрепил frozen-lockfile gate для Worker.
 
 ## 2026-07-17

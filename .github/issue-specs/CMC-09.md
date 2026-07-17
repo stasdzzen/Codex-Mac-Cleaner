@@ -2,7 +2,7 @@
 schema: 1
 dependencies: #7, #8, #12
 conflicts: none
-touched_paths: apps/mcp-server/; .codex-plugin/; .mcp.json; skills/; tests/plugin/
+touched_paths: apps/mcp-server/; .codex-plugin/; .mcp.json; skills/; tests/plugin/; pnpm-lock.yaml
 risk: medium
 parallel_safety: serial
 execution_profile: default
