@@ -1,7 +1,11 @@
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 
-import type { QueryScope } from "@codex-mac-cleaner/contracts";
+import type {
+  CorrelationSubjectRole,
+  OwnerBindingSourceKind,
+  QueryScope,
+} from "@codex-mac-cleaner/contracts";
 
 export type RawIdentityClaim =
   | Readonly<{
@@ -14,15 +18,8 @@ export type RawIdentityClaim =
       gid: number;
       fingerprint: string;
     }>
-  | Readonly<{
-      kind: "bundle";
-      bundleIdentifier: string;
-      metadataFingerprint: string;
-    }>
-  | Readonly<{
-      kind: "package";
-      packageIdentifier: string;
-    }>
+  | Readonly<{ kind: "bundle"; bundleIdentifier: string; metadataFingerprint: string }>
+  | Readonly<{ kind: "package"; packageIdentifier: string }>
   | Readonly<{
       kind: "signing";
       designatedRequirement: string;
@@ -41,10 +38,7 @@ export type RawIdentityClaim =
       targetFilesystemFingerprint: string;
       processGeneration: string;
     }>
-  | Readonly<{
-      kind: "startup_target";
-      executableFingerprint: string;
-    }>
+  | Readonly<{ kind: "startup_target"; executableFingerprint: string }>
   | Readonly<{
       kind: "receipt_payload";
       packageIdentifier: string;
@@ -62,13 +56,32 @@ export type RawIdentityClaim =
       relationFingerprint: string;
     }>
   | Readonly<{
+      kind: "container_metadata";
+      bundleIdentifier: string;
+      targetFilesystemFingerprint: string;
+      individualContainer: boolean;
+    }>
+  | Readonly<{
+      kind: "historical_binding";
+      keyId: string;
+      derivationVersion: number;
+      artifactDigest: `hmac-sha256:v1:${string}`;
+      ownerTypeDigest: `hmac-sha256:v1:${string}`;
+      rootDigest: `hmac-sha256:v1:${string}`;
+      ownerBundleDigest: `hmac-sha256:v1:${string}`;
+      ownerSigningDigest: `hmac-sha256:v1:${string}`;
+      ownerExecutableDigest: `hmac-sha256:v1:${string}`;
+      bindingFingerprint: string;
+    }>
+  | Readonly<{
       kind: "hint";
-      hintKind: "path" | "basename" | "display_name";
+      hintKind: "path" | "basename" | "display_name" | "user_attestation";
       value: string;
     }>;
 
 export interface RawIdentitySubject {
   readonly localId: string;
+  readonly subjectRole: CorrelationSubjectRole;
   readonly subjectKind:
     | "filesystem_object"
     | "app_bundle"
@@ -79,6 +92,7 @@ export interface RawIdentitySubject {
     | "open_file"
     | "startup_item"
     | "dependency";
+  readonly bindingSourceKind?: OwnerBindingSourceKind;
   readonly claims: readonly RawIdentityClaim[];
 }
 
@@ -95,8 +109,9 @@ export type RawQueryState =
 export interface RawSourceQuery {
   readonly queryId: string;
   readonly sourceAdapter: string;
-  readonly sourceSchemaVersion: 1;
+  readonly sourceSchemaVersion: 2;
   readonly queryScope: QueryScope;
+  readonly coverageKind: "canonical" | "candidate_specific" | "supplemental";
   readonly snapshotId: string;
   readonly startedAt: string;
   readonly completedAt: string | null;
@@ -108,16 +123,37 @@ export interface RawCorrelationSnapshot {
   readonly candidateFingerprint: string;
   readonly parentFingerprint: string;
   readonly ownerTypeFingerprint: string;
-  readonly executableFingerprint: string;
+  readonly ownerExecutableFingerprint: string;
   readonly processFingerprint: string;
   readonly openFileFingerprint: string;
   readonly receiptFingerprint: string;
   readonly dependencyFingerprint: string;
+  readonly ownerBindingFingerprint: string;
+  readonly requirementProfileFingerprint: string;
 }
 
+export type CorrelationArtifactCategory =
+  | "cache"
+  | "log"
+  | "application_support"
+  | "container"
+  | "group_container"
+  | "preference"
+  | "webkit"
+  | "http_storage"
+  | "saved_state"
+  | "database"
+  | "sync_data"
+  | "vpn_data"
+  | "personal_file"
+  | "autostart"
+  | "unknown";
+
 export interface RawCorrelationPayload {
-  readonly schemaVersion: 1;
+  readonly schemaVersion: 2;
   readonly snapshotId: string;
+  readonly artifactCategory: CorrelationArtifactCategory;
+  readonly artifactPrivateNonExecutable: boolean;
   readonly candidate: RawIdentitySubject;
   readonly queries: readonly RawSourceQuery[];
   readonly snapshotA: RawCorrelationSnapshot;
@@ -146,9 +182,19 @@ export type SyntheticPositiveFact =
   | "officialUninstaller"
   | "dependency";
 
+export interface SyntheticKeyedDeriver {
+  readonly keyId: string;
+  readonly derivationVersion: number;
+  derive(domain: string, kind: string, value: string): `hmac-sha256:v1:${string}`;
+}
+
 export interface SyntheticCorrelationOptions {
   readonly seed: string;
   readonly tempRoot: string;
+  readonly deriver?: SyntheticKeyedDeriver;
+  readonly artifactCategory?: CorrelationArtifactCategory;
+  readonly artifactPrivateNonExecutable?: boolean;
+  readonly bindingSource?: OwnerBindingSourceKind | "missing" | "mismatch";
   readonly installedVariant?: SyntheticInstalledVariant;
   readonly positiveFacts?: readonly SyntheticPositiveFact[];
   readonly queryStates?: Partial<Record<QueryScope, RawQueryState>>;
@@ -156,6 +202,8 @@ export interface SyntheticCorrelationOptions {
   readonly ownerMissing?: boolean;
   readonly ownerMismatch?: boolean;
   readonly querySnapshotMismatch?: QueryScope;
+  readonly ownerExecutablePresent?: boolean;
+  /** Legacy test alias; false means owner executable is absent. */
   readonly targetExecutablePresent?: boolean;
   readonly snapshotMutation?:
     | "candidate"
@@ -165,15 +213,18 @@ export interface SyntheticCorrelationOptions {
     | "process"
     | "open_file"
     | "receipt"
-    | "dependency";
+    | "dependency"
+    | "owner_binding"
+    | "profile";
 }
 
 export const MANDATORY_QUERY_SCOPES = [
+  "owner_bindings",
   "installed_apps",
+  "owner_executables",
   "processes",
   "open_files",
   "startup_targets",
-  "target_executables",
   "receipts",
   "official_uninstallers",
   "dependencies",
@@ -186,9 +237,11 @@ export type CorrelationInputErrorCode =
   | "CORRELATION_COVERAGE_INCOMPLETE"
   | "CORRELATION_MISSING"
   | "CORRELATION_SNAPSHOT_STALE"
-  | "CORRELATION_SCHEMA_UNSUPPORTED";
+  | "CORRELATION_SCHEMA_UNSUPPORTED"
+  | "OWNER_BINDING_MISSING"
+  | "OWNER_BINDING_STALE"
+  | "REQUIREMENT_PROFILE_UNSUPPORTED";
 
-/** Safe typed failure: сообщение и поля никогда не содержат raw identity. */
 export class CorrelationInputError extends Error {
   readonly severity = "blocking" as const;
   readonly retryable = false;
@@ -222,6 +275,8 @@ const RAW_CLAIM_KINDS = new Set<string>([
   "receipt_payload",
   "official_uninstaller",
   "dependency",
+  "container_metadata",
+  "historical_binding",
   "hint",
 ]);
 
@@ -233,7 +288,21 @@ function validateSubject(subject: RawIdentitySubject): void {
   if (
     typeof subject !== "object" ||
     subject === null ||
-    !Array.isArray(subject.claims)
+    !Array.isArray(subject.claims) ||
+    !new Set(["library_artifact", "owner_application", "evidence_subject"])
+      .has(subject.subjectRole)
+  ) {
+    failInput("CORRELATION_SCHEMA_UNSUPPORTED");
+  }
+  if (
+    subject.subjectRole === "library_artifact" &&
+    subject.subjectKind !== "filesystem_object"
+  ) {
+    failInput("CORRELATION_SCHEMA_UNSUPPORTED");
+  }
+  if (
+    subject.subjectRole === "owner_application" &&
+    !new Set(["app_bundle", "package"]).has(subject.subjectKind)
   ) {
     failInput("CORRELATION_SCHEMA_UNSUPPORTED");
   }
@@ -254,15 +323,12 @@ function validateSubject(subject: RawIdentitySubject): void {
   }
 }
 
-/**
- * Fail-closed проверка server-only payload до построения любых scope maps.
- * Ошибки намеренно не включают query IDs, пути или identity claims.
- */
 export function validateRawCorrelationPayload(payload: RawCorrelationPayload): void {
   if (
-    payload.schemaVersion !== 1 ||
+    payload.schemaVersion !== 2 ||
     !Array.isArray(payload.queries) ||
-    typeof payload.snapshotId !== "string"
+    typeof payload.snapshotId !== "string" ||
+    payload.candidate.subjectRole !== "library_artifact"
   ) {
     failInput("CORRELATION_SCHEMA_UNSUPPORTED");
   }
@@ -276,12 +342,14 @@ export function validateRawCorrelationPayload(payload: RawCorrelationPayload): v
     if (
       typeof query !== "object" ||
       query === null ||
-      query.sourceSchemaVersion !== 1 ||
+      query.sourceSchemaVersion !== 2 ||
       typeof query.queryId !== "string" ||
       query.queryId.length === 0 ||
       typeof query.sourceAdapter !== "string" ||
       query.sourceAdapter.length === 0 ||
       !mandatoryScopes.has(query.queryScope) ||
+      !new Set(["canonical", "candidate_specific", "supplemental"])
+        .has(query.coverageKind) ||
       !RAW_QUERY_STATES.has(query.state) ||
       !Array.isArray(query.subjects)
     ) {
@@ -289,7 +357,6 @@ export function validateRawCorrelationPayload(payload: RawCorrelationPayload): v
     }
     if (queryIds.has(query.queryId)) failInput("CORRELATION_SCHEMA_UNSUPPORTED");
     queryIds.add(query.queryId);
-
     const provenanceId = `provenance-${query.queryScope.replaceAll("_", "-")}`;
     if (scopes.has(query.queryScope) || provenanceIds.has(provenanceId)) {
       failInput("CORRELATION_AMBIGUOUS");
@@ -308,7 +375,7 @@ export function validateRawCorrelationPayload(payload: RawCorrelationPayload): v
 }
 
 interface SafeBoundaryDescriptor {
-  readonly schemaVersion: 1;
+  readonly schemaVersion: 2;
   readonly snapshotId: string;
   readonly queryCount: number;
 }
@@ -324,11 +391,9 @@ export class EphemeralCorrelationInput {
 
   describe(): SafeBoundaryDescriptor {
     const payload = this.payload;
-    if (payload === undefined) {
-      throw new TypeError("Raw correlation input уже потреблён");
-    }
+    if (payload === undefined) throw new TypeError("Raw correlation input уже потреблён");
     return Object.freeze({
-      schemaVersion: 1,
+      schemaVersion: 2,
       snapshotId: payload.snapshotId,
       queryCount: payload.queries.length,
     });
@@ -348,9 +413,7 @@ export class EphemeralCorrelationInput {
 
   [CONSUME]<T>(consumer: (payload: RawCorrelationPayload) => T): T {
     const payload = this.payload;
-    if (payload === undefined) {
-      throw new TypeError("Raw correlation input уже потреблён");
-    }
+    if (payload === undefined) throw new TypeError("Raw correlation input уже потреблён");
     this.payload = undefined;
     return consumer(payload);
   }
@@ -371,6 +434,29 @@ function rawValue(seed: string, domain: string): string {
   return hash(seed, domain).slice(0, 24);
 }
 
+function fallbackDeriver(seed: string): SyntheticKeyedDeriver {
+  return {
+    keyId: `key-${hash(seed, "key-id").slice(0, 24)}`,
+    derivationVersion: 1,
+    derive(domain, kind, value) {
+      return `hmac-sha256:v1:${createHash("sha256")
+        .update([seed, domain, kind, value].join("\u0000"))
+        .digest("hex")}`;
+    },
+  };
+}
+
+function stable(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stable).join(",")}]`;
+  if (typeof value === "object" && value !== null) {
+    return `{${Object.entries(value)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, entry]) => `${JSON.stringify(key)}:${stable(entry)}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
 function makeQuery(
   scope: QueryScope,
   subjects: readonly RawIdentitySubject[],
@@ -380,8 +466,9 @@ function makeQuery(
   return {
     queryId: `query-${scope.replaceAll("_", "-")}`,
     sourceAdapter: scope,
-    sourceSchemaVersion: 1,
+    sourceSchemaVersion: 2,
     queryScope: scope,
+    coverageKind: scope === "owner_bindings" ? "candidate_specific" : "canonical",
     snapshotId,
     startedAt: "2026-07-18T00:00:00.000Z",
     completedAt: state === "timeout" || state === "cancelled"
@@ -392,33 +479,26 @@ function makeQuery(
   };
 }
 
-function installedSubjects(
-  variant: SyntheticInstalledVariant,
-  values: Readonly<{
-    rawPath: string;
-    basename: string;
-    displayName: string;
-    bundle: string;
-    packageId: string;
-    signing: string;
-    team: string;
-    executable: string;
-    uid: number;
-    gid: number;
-  }>,
-  seed: string,
-): readonly RawIdentitySubject[] {
-  const base = (suffix: string, claims: readonly RawIdentityClaim[]): RawIdentitySubject => ({
-    localId: `installed-${suffix}`,
-    subjectKind: "app_bundle",
-    claims,
-  });
-  const resolvedClaims: readonly RawIdentityClaim[] = [
-    {
-      kind: "bundle",
-      bundleIdentifier: values.bundle,
-      metadataFingerprint: rawValue(seed, "bundle-metadata"),
-    },
+interface SyntheticOwnerValues {
+  readonly rawPath: string;
+  readonly basename: string;
+  readonly displayName: string;
+  readonly bundle: string;
+  readonly packageId: string;
+  readonly signing: string;
+  readonly team: string;
+  readonly executable: string;
+  readonly filesystem: string;
+  readonly ownerType: string;
+  readonly root: string;
+  readonly uid: number;
+  readonly gid: number;
+}
+
+function ownerClaims(values: SyntheticOwnerValues, seed: string): readonly RawIdentityClaim[] {
+  return [
+    { kind: "bundle", bundleIdentifier: values.bundle, metadataFingerprint: rawValue(seed, "bundle-metadata") },
+    { kind: "package", packageIdentifier: values.packageId },
     {
       kind: "signing",
       designatedRequirement: values.signing,
@@ -427,68 +507,68 @@ function installedSubjects(
     },
     { kind: "executable", executableFingerprint: values.executable },
   ];
+}
 
+function installedSubjects(
+  variant: SyntheticInstalledVariant,
+  values: SyntheticOwnerValues,
+  seed: string,
+): readonly RawIdentitySubject[] {
+  const base = (suffix: string, claims: readonly RawIdentityClaim[]): RawIdentitySubject => ({
+    localId: `installed-${suffix}`,
+    subjectRole: "evidence_subject",
+    subjectKind: "app_bundle",
+    claims,
+  });
+  const resolved = ownerClaims(values, seed);
   switch (variant) {
-    case "none":
-      return [];
-    case "path_only":
-      return [base("path", [{ kind: "hint", hintKind: "path", value: values.rawPath }])];
-    case "basename_only":
-      return [base("basename", [{
-        kind: "hint",
-        hintKind: "basename",
-        value: values.basename,
-      }])];
-    case "display_name_only":
-      return [base("display", [{
-        kind: "hint",
-        hintKind: "display_name",
-        value: values.displayName,
-      }])];
-    case "bundle_only":
-      return [base("bundle", [resolvedClaims[0]!])];
-    case "package_only":
-      return [base("package", [{ kind: "package", packageIdentifier: values.packageId }])];
-    case "signer_only":
-      return [base("signer", [resolvedClaims[1] as RawIdentityClaim])];
-    case "owner_only":
-      return [base("owner", [{ kind: "owner", uid: values.uid, gid: values.gid }])];
-    case "duplicate":
-      return [base("duplicate-a", resolvedClaims), base("duplicate-b", resolvedClaims)];
+    case "none": return [];
+    case "path_only": return [base("path", [{ kind: "hint", hintKind: "path", value: values.rawPath }])];
+    case "basename_only": return [base("basename", [{ kind: "hint", hintKind: "basename", value: values.basename }])];
+    case "display_name_only": return [base("display", [{ kind: "hint", hintKind: "display_name", value: values.displayName }])];
+    case "bundle_only": return [base("bundle", [resolved[0]!])];
+    case "package_only": return [base("package", [resolved[1]!])];
+    case "signer_only": return [base("signer", [resolved[2]!])];
+    case "owner_only": return [base("owner", [{ kind: "owner", uid: values.uid, gid: values.gid }])];
+    case "duplicate": return [base("duplicate-a", resolved), base("duplicate-b", resolved)];
     case "shared_signer":
       return ["a", "b"].map((suffix) => {
-        const otherExecutable = rawValue(seed, `shared-executable-${suffix}`);
-        return base(`shared-signer-${suffix}`, [
-          {
-            kind: "bundle",
-            bundleIdentifier: `org.synthetic.shared.${suffix}`,
-            metadataFingerprint: rawValue(seed, `shared-bundle-${suffix}`),
-          },
-          {
-            kind: "signing",
-            designatedRequirement: values.signing,
-            teamIdentifier: values.team,
-            executableFingerprint: otherExecutable,
-          },
-          { kind: "executable", executableFingerprint: otherExecutable },
+        const executable = rawValue(seed, `shared-${suffix}`);
+        return base(`shared-${suffix}`, [
+          { kind: "bundle", bundleIdentifier: `org.synthetic.shared.${suffix}`, metadataFingerprint: rawValue(seed, `bundle-${suffix}`) },
+          { kind: "signing", designatedRequirement: values.signing, teamIdentifier: values.team, executableFingerprint: executable },
+          { kind: "executable", executableFingerprint: executable },
         ]);
       });
     case "mismatch":
-      return [
-        base("mismatch", [
-          resolvedClaims[0]!,
-          {
-            kind: "signing",
-            designatedRequirement: `requirement-${rawValue(seed, "mismatch-signing")}`,
-            teamIdentifier: values.team,
-            executableFingerprint: values.executable,
-          },
-          resolvedClaims[2]!,
-        ]),
-      ];
-    case "resolved":
-      return [base("resolved", resolvedClaims)];
+      return [base("mismatch", [
+        resolved[0]!,
+        { kind: "signing", designatedRequirement: `mismatch-${values.signing}`, teamIdentifier: values.team, executableFingerprint: values.executable },
+        resolved[3]!,
+      ])];
+    case "resolved": return [base("resolved", resolved)];
   }
+}
+
+function historicalBindingClaim(
+  deriver: SyntheticKeyedDeriver,
+  values: SyntheticOwnerValues,
+  seed: string,
+): Extract<RawIdentityClaim, { kind: "historical_binding" }> {
+  const claimDigest = (kind: string, value: unknown) =>
+    deriver.derive("cmc:correlation:query-claim:v2", kind, stable(value));
+  return {
+    kind: "historical_binding",
+    keyId: deriver.keyId,
+    derivationVersion: deriver.derivationVersion,
+    artifactDigest: deriver.derive("cmc:owner-history:v1", "artifact", values.filesystem),
+    ownerTypeDigest: deriver.derive("cmc:owner-history:v1", "owner-type", values.ownerType),
+    rootDigest: deriver.derive("cmc:owner-history:v1", "root", values.root),
+    ownerBundleDigest: claimDigest("bundle", ownerClaims(values, seed)[0]),
+    ownerSigningDigest: claimDigest("signing", ownerClaims(values, seed)[2]),
+    ownerExecutableDigest: claimDigest("executable", ownerClaims(values, seed)[3]),
+    bindingFingerprint: rawValue(seed, "historical-binding"),
+  };
 }
 
 export function buildSyntheticCorrelationInput(
@@ -497,8 +577,9 @@ export function buildSyntheticCorrelationInput(
   if (!options.seed || !options.tempRoot) {
     throw new TypeError("Synthetic correlation builder требует seed и tempRoot");
   }
+  const deriver = options.deriver ?? fallbackDeriver(options.seed);
   const positiveFacts = new Set(options.positiveFacts ?? []);
-  const values = {
+  const values: SyntheticOwnerValues = {
     rawPath: join(options.tempRoot, rawValue(options.seed, "candidate-path")),
     basename: rawValue(options.seed, "basename"),
     displayName: rawValue(options.seed, "display"),
@@ -508,12 +589,14 @@ export function buildSyntheticCorrelationInput(
     team: `team-${rawValue(options.seed, "team")}`,
     executable: rawValue(options.seed, "executable"),
     filesystem: rawValue(options.seed, "filesystem"),
+    ownerType: rawValue(options.seed, "owner-type"),
+    root: rawValue(options.seed, "parent"),
     uid: 501,
     gid: 20,
-  } as const;
-
+  };
   const candidate: RawIdentitySubject = {
     localId: "candidate-synthetic",
+    subjectRole: "library_artifact",
     subjectKind: "filesystem_object",
     claims: [
       {
@@ -526,159 +609,145 @@ export function buildSyntheticCorrelationInput(
         gid: values.gid,
         fingerprint: values.filesystem,
       },
-      {
-        kind: "bundle",
-        bundleIdentifier: values.bundle,
-        metadataFingerprint: rawValue(options.seed, "bundle-metadata"),
-      },
-      { kind: "package", packageIdentifier: values.packageId },
-      {
-        kind: "signing",
-        designatedRequirement: values.signing,
-        teamIdentifier: values.team,
-        executableFingerprint: values.executable,
-      },
       ...(options.ownerMissing
         ? []
-        : [{
-            kind: "owner" as const,
-            uid: options.ownerMismatch ? values.uid + 1 : values.uid,
-            gid: values.gid,
-          }]),
-      { kind: "executable", executableFingerprint: values.executable },
+        : [{ kind: "owner" as const, uid: options.ownerMismatch ? values.uid + 1 : values.uid, gid: values.gid }]),
       { kind: "hint", hintKind: "basename", value: values.basename },
       { kind: "hint", hintKind: "display_name", value: values.displayName },
     ],
   };
-
   const subject = (
     localId: string,
     subjectKind: RawIdentitySubject["subjectKind"],
     claims: readonly RawIdentityClaim[],
-  ): RawIdentitySubject => ({ localId, subjectKind, claims });
-  const maybe = (
-    fact: SyntheticPositiveFact,
-    value: RawIdentitySubject,
-  ): readonly RawIdentitySubject[] => positiveFacts.has(fact) ? [value] : [];
-
-  const queries: readonly RawSourceQuery[] = [
-    makeQuery(
-      "installed_apps",
-      installedSubjects(options.installedVariant ?? "none", values, options.seed),
-      options.queryStates?.installed_apps ?? "complete",
-    ),
-    makeQuery(
-      "processes",
-      maybe("activity", subject("process-synthetic", "process", [{
-        kind: "process",
-        executableFingerprint: values.executable,
-        pidGeneration: rawValue(options.seed, "pid-generation"),
-      }])),
-      options.queryStates?.processes ?? "complete",
-    ),
-    makeQuery(
-      "open_files",
-      maybe("openFile", subject("open-file-synthetic", "open_file", [{
-        kind: "open_file",
-        targetFilesystemFingerprint: values.filesystem,
-        processGeneration: rawValue(options.seed, "process-generation"),
-      }])),
-      options.queryStates?.open_files ?? "complete",
-    ),
-    makeQuery(
-      "startup_targets",
-      maybe("startupTarget", subject("startup-synthetic", "startup_item", [{
-        kind: "startup_target",
-        executableFingerprint: values.executable,
-      }])),
-      options.queryStates?.startup_targets ?? "complete",
-    ),
-    makeQuery(
-      "target_executables",
-      options.targetExecutablePresent === false
-        ? []
-        : [subject("executable-synthetic", "executable", [{
-            kind: "executable",
-            executableFingerprint: values.executable,
-          }])],
-      options.queryStates?.target_executables ?? "complete",
-    ),
-    makeQuery(
-      "receipts",
-      maybe("receipt", subject("receipt-synthetic", "receipt", [{
+    subjectRole: CorrelationSubjectRole = "evidence_subject",
+  ): RawIdentitySubject => ({ localId, subjectRole, subjectKind, claims });
+  const bindingSource = options.bindingSource ?? "signed_process_open_file_history";
+  const bindingSubjects: RawIdentitySubject[] = [];
+  if (bindingSource === "signed_process_open_file_history") {
+    bindingSubjects.push({
+      localId: "owner-history-synthetic",
+      subjectRole: "owner_application",
+      subjectKind: "app_bundle",
+      bindingSourceKind: bindingSource,
+      claims: [historicalBindingClaim(deriver, values, options.seed)],
+    });
+  } else if (bindingSource === "exact_receipt_payload") {
+    bindingSubjects.push({
+      localId: "owner-receipt-synthetic",
+      subjectRole: "owner_application",
+      subjectKind: "package",
+      bindingSourceKind: bindingSource,
+      claims: [
+        { kind: "package", packageIdentifier: values.packageId },
+        { kind: "receipt_payload", packageIdentifier: values.packageId, targetFilesystemFingerprint: values.filesystem },
+      ],
+    });
+  } else if (bindingSource === "os_container_metadata") {
+    bindingSubjects.push({
+      localId: "owner-container-synthetic",
+      subjectRole: "owner_application",
+      subjectKind: "app_bundle",
+      bindingSourceKind: bindingSource,
+      claims: [
+        ownerClaims(values, options.seed)[0]!,
+        { kind: "container_metadata", bundleIdentifier: values.bundle, targetFilesystemFingerprint: values.filesystem, individualContainer: true },
+      ],
+    });
+  } else if (bindingSource === "mismatch") {
+    bindingSubjects.push({
+      localId: "owner-mismatch-synthetic",
+      subjectRole: "owner_application",
+      subjectKind: "package",
+      bindingSourceKind: "exact_receipt_payload",
+      claims: [
+        { kind: "package", packageIdentifier: values.packageId },
+        { kind: "receipt_payload", packageIdentifier: values.packageId, targetFilesystemFingerprint: "mismatch" },
+      ],
+    });
+  }
+  const maybe = (fact: SyntheticPositiveFact, value: RawIdentitySubject) =>
+    positiveFacts.has(fact) ? [value] : [];
+  const ownerExecutablePresent = options.ownerExecutablePresent ??
+    options.targetExecutablePresent ??
+    options.installedVariant === "resolved";
+  const receiptRecords = bindingSource === "exact_receipt_payload" || positiveFacts.has("receipt")
+    ? [subject("receipt-synthetic", "receipt", [{
         kind: "receipt_payload",
         packageIdentifier: values.packageId,
         targetFilesystemFingerprint: values.filesystem,
-      }])),
-      options.queryStates?.receipts ?? "complete",
-    ),
+      }])]
+    : [];
+  const queries: readonly RawSourceQuery[] = [
+    makeQuery("owner_bindings", bindingSubjects, options.queryStates?.owner_bindings ?? "complete"),
+    makeQuery("installed_apps", installedSubjects(options.installedVariant ?? "none", values, options.seed), options.queryStates?.installed_apps ?? "complete"),
     makeQuery(
-      "official_uninstallers",
-      maybe("officialUninstaller", subject("uninstaller-synthetic", "executable", [{
-        kind: "official_uninstaller",
-        bundleIdentifier: values.bundle,
-        designatedRequirement: values.signing,
-        executableFingerprint: values.executable,
-      }])),
-      options.queryStates?.official_uninstallers ?? "complete",
+      "owner_executables",
+      ownerExecutablePresent
+        ? [subject("owner-executable-synthetic", "executable", [ownerClaims(values, options.seed)[3]!])]
+        : [],
+      options.queryStates?.owner_executables ?? "complete",
     ),
-    makeQuery(
-      "dependencies",
-      maybe("dependency", subject("dependency-synthetic", "dependency", [{
-        kind: "dependency",
-        dependeeExecutableFingerprint: values.executable,
-        relationFingerprint: rawValue(options.seed, "dependency-relation"),
-      }])),
-      options.queryStates?.dependencies ?? "complete",
-    ),
-  ].map((query) =>
-    query.queryScope === options.querySnapshotMismatch
-      ? { ...query, snapshotId: "snapshot-synthetic-mismatch" }
-      : query,
-  );
+    makeQuery("processes", maybe("activity", subject("process-synthetic", "process", [{ kind: "process", executableFingerprint: values.executable, pidGeneration: rawValue(options.seed, "pid") }])), options.queryStates?.processes ?? "complete"),
+    makeQuery("open_files", maybe("openFile", subject("open-synthetic", "open_file", [{ kind: "open_file", targetFilesystemFingerprint: values.filesystem, processGeneration: rawValue(options.seed, "process") }])), options.queryStates?.open_files ?? "complete"),
+    makeQuery("startup_targets", maybe("startupTarget", subject("startup-synthetic", "startup_item", [{ kind: "startup_target", executableFingerprint: values.executable }])), options.queryStates?.startup_targets ?? "complete"),
+    makeQuery("receipts", receiptRecords, options.queryStates?.receipts ?? "complete"),
+    makeQuery("official_uninstallers", maybe("officialUninstaller", subject("uninstaller-synthetic", "executable", [{ kind: "official_uninstaller", bundleIdentifier: values.bundle, designatedRequirement: values.signing, executableFingerprint: values.executable }])), options.queryStates?.official_uninstallers ?? "complete"),
+    makeQuery("dependencies", maybe("dependency", subject("dependency-synthetic", "dependency", [{ kind: "dependency", dependeeExecutableFingerprint: values.executable, relationFingerprint: rawValue(options.seed, "dependency") }])), options.queryStates?.dependencies ?? "complete"),
+  ].map((query) => query.queryScope === options.querySnapshotMismatch
+    ? { ...query, snapshotId: "snapshot-synthetic-mismatch" }
+    : query);
 
   const snapshotA: RawCorrelationSnapshot = {
     candidateFingerprint: values.filesystem,
     parentFingerprint: rawValue(options.seed, "parent"),
-    ownerTypeFingerprint: rawValue(options.seed, "owner-type"),
-    executableFingerprint: values.executable,
+    ownerTypeFingerprint: values.ownerType,
+    ownerExecutableFingerprint: values.executable,
     processFingerprint: rawValue(options.seed, "process-snapshot"),
     openFileFingerprint: rawValue(options.seed, "open-snapshot"),
     receiptFingerprint: rawValue(options.seed, "receipt-snapshot"),
     dependencyFingerprint: rawValue(options.seed, "dependency-snapshot"),
+    ownerBindingFingerprint: bindingSubjects.length === 1
+      ? rawValue(options.seed, "historical-binding")
+      : rawValue(options.seed, "binding-missing"),
+    requirementProfileFingerprint: rawValue(options.seed, "private-regenerable-profile"),
   };
-  const snapshotMutation = options.snapshotMutation ??
-    (options.mutateSnapshotB ? "candidate" : undefined);
-  const snapshotField = snapshotMutation === "candidate"
+  const mutation = options.snapshotMutation ?? (options.mutateSnapshotB ? "candidate" : undefined);
+  const snapshotField: keyof RawCorrelationSnapshot | undefined = mutation === "candidate"
     ? "candidateFingerprint"
-    : snapshotMutation === "parent"
+    : mutation === "parent"
       ? "parentFingerprint"
-      : snapshotMutation === "owner_type"
+      : mutation === "owner_type"
         ? "ownerTypeFingerprint"
-        : snapshotMutation === "executable"
-          ? "executableFingerprint"
-          : snapshotMutation === "process"
+        : mutation === "executable"
+          ? "ownerExecutableFingerprint"
+          : mutation === "process"
             ? "processFingerprint"
-            : snapshotMutation === "open_file"
+            : mutation === "open_file"
               ? "openFileFingerprint"
-              : snapshotMutation === "receipt"
+              : mutation === "receipt"
                 ? "receiptFingerprint"
-                : snapshotMutation === "dependency"
+                : mutation === "dependency"
                   ? "dependencyFingerprint"
-                  : undefined;
-  const snapshotB: RawCorrelationSnapshot = snapshotField === undefined
+                  : mutation === "owner_binding"
+                    ? "ownerBindingFingerprint"
+                    : mutation === "profile"
+                      ? "requirementProfileFingerprint"
+                      : undefined;
+  const snapshotB = snapshotField === undefined
     ? { ...snapshotA }
-    : {
-        ...snapshotA,
-        [snapshotField]: rawValue(options.seed, `${snapshotMutation}-replaced`),
-      };
+    : { ...snapshotA, [snapshotField]: rawValue(options.seed, `${mutation}-replaced`) };
 
-  return new EphemeralCorrelationInput({
-    schemaVersion: 1,
+  const payload: RawCorrelationPayload = {
+    schemaVersion: 2,
     snapshotId: "snapshot-synthetic",
+    artifactCategory: options.artifactCategory ?? "cache",
+    artifactPrivateNonExecutable: options.artifactPrivateNonExecutable ?? true,
     candidate,
     queries,
     snapshotA,
     snapshotB,
-  });
+  };
+  validateRawCorrelationPayload(payload);
+  return new EphemeralCorrelationInput(payload);
 }

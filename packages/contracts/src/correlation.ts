@@ -22,6 +22,12 @@ export const CorrelationResolutionStateSchema = z.enum([
   "mismatch",
 ]);
 
+export const CorrelationSubjectRoleSchema = z.enum([
+  "library_artifact",
+  "owner_application",
+  "evidence_subject",
+]);
+
 export const CorrelationClaimKindSchema = z.enum([
   "filesystem",
   "bundle",
@@ -35,6 +41,8 @@ export const CorrelationClaimKindSchema = z.enum([
   "receipt_payload",
   "official_uninstaller",
   "dependency",
+  "historical_binding",
+  "container_metadata",
 ]);
 
 const ClaimDigestSchema = z
@@ -50,8 +58,9 @@ function uniqueValues(values: readonly string[]): boolean {
 
 export const CorrelationSubjectSchema = z
   .object({
-    schemaVersion: z.literal(1),
+    schemaVersion: z.literal(2),
     subjectId: KeyedDigestSchema,
+    subjectRole: CorrelationSubjectRoleSchema,
     subjectKind: z.enum([
       "filesystem_object",
       "app_bundle",
@@ -77,15 +86,38 @@ export const CorrelationSubjectSchema = z
     identityFingerprint: Sha256DigestSchema,
     resolutionState: CorrelationResolutionStateSchema,
   })
-  .strict();
+  .strict()
+  .superRefine((subject, context) => {
+    if (
+      subject.subjectRole === "library_artifact" &&
+      subject.subjectKind !== "filesystem_object"
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["subjectKind"],
+        message: "Library artifact должен оставаться filesystem object",
+      });
+    }
+    if (
+      subject.subjectRole === "owner_application" &&
+      !new Set(["app_bundle", "package"]).has(subject.subjectKind)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["subjectKind"],
+        message: "Owner application должен быть app bundle либо package",
+      });
+    }
+  });
 
 export const CorrelationEdgeSchema = z
   .object({
-    schemaVersion: z.literal(1),
+    schemaVersion: z.literal(2),
     edgeId: OpaqueIdSchema,
     fromSubjectId: KeyedDigestSchema,
     toSubjectId: KeyedDigestSchema,
     relation: z.enum([
+      "remnant_of",
       "belongs_to",
       "installed_as",
       "executes",
@@ -120,14 +152,46 @@ export const CorrelationEdgeSchema = z
         message: "Hint не может образовать resolved authority edge",
       });
     }
+    if (edge.relation === "remnant_of" && edge.strength !== "authoritative") {
+      context.addIssue({
+        code: "custom",
+        path: ["strength"],
+        message: "remnant_of требует authoritative strength",
+      });
+    }
   });
 
+export const OwnerBindingSourceKindSchema = z.enum([
+  "exact_receipt_payload",
+  "os_container_metadata",
+  "signed_process_open_file_history",
+]);
+
+export const OwnerBindingSchema = z
+  .object({
+    schemaVersion: z.literal(2),
+    bindingId: OpaqueIdSchema,
+    artifactSubjectId: KeyedDigestSchema,
+    ownerSubjectId: KeyedDigestSchema,
+    ruleId: OpaqueIdSchema,
+    ruleVersion: SafeIntegerSchema.min(1),
+    sourceKind: OwnerBindingSourceKindSchema,
+    claimDigests: z.array(KeyedDigestSchema).min(2).refine(uniqueValues),
+    provenanceIds: z.array(OpaqueIdSchema).min(1).refine(uniqueValues),
+    createdAt: IsoDateTimeSchema,
+    lastValidatedAt: IsoDateTimeSchema,
+    bindingFingerprint: Sha256DigestSchema,
+    resolutionState: CorrelationResolutionStateSchema,
+  })
+  .strict();
+
 export const QueryScopeSchema = z.enum([
+  "owner_bindings",
   "installed_apps",
+  "owner_executables",
   "processes",
   "open_files",
   "startup_targets",
-  "target_executables",
   "receipts",
   "official_uninstallers",
   "dependencies",
@@ -145,14 +209,15 @@ export const CoverageGapCodeSchema = z.enum([
   "missing",
   "mismatch",
   "snapshot_stale",
+  "unsupported_profile",
 ]);
 
 export const SourceProvenanceSchema = z
   .object({
-    schemaVersion: z.literal(1),
+    schemaVersion: z.literal(2),
     provenanceId: OpaqueIdSchema,
     sourceAdapter: OpaqueIdSchema,
-    sourceSchemaVersion: SafeIntegerSchema.min(1),
+    sourceSchemaVersion: SafeIntegerSchema.min(2),
     queryId: OpaqueIdSchema,
     queryScope: QueryScopeSchema,
     snapshotId: OpaqueIdSchema,
@@ -171,9 +236,7 @@ export const SourceProvenanceSchema = z
     ]),
     parseState: z.enum(["complete", "loss"]),
     truncated: z.boolean(),
-    warningCodes: z
-      .array(CoverageGapCodeSchema)
-      .refine(uniqueValues, { message: "Warning codes не должны повторяться" }),
+    warningCodes: z.array(CoverageGapCodeSchema).refine(uniqueValues),
   })
   .strict()
   .superRefine((value, context) => {
@@ -188,7 +251,7 @@ export const SourceProvenanceSchema = z
 
 export const CoverageCertificateSchema = z
   .object({
-    schemaVersion: z.literal(1),
+    schemaVersion: z.literal(2),
     certificateId: OpaqueIdSchema,
     sourceAdapter: OpaqueIdSchema,
     queryScope: QueryScopeSchema,
@@ -206,15 +269,13 @@ export const CoverageCertificateSchema = z
   })
   .strict();
 
-export const CorrelationFactStateSchema = z.enum([
-  "present",
-  "absent",
-  "unknown",
-]);
+export const CorrelationFactStateSchema = z.enum(["present", "absent", "unknown"]);
 
 export const CorrelationFactReasonCodeSchema = z.enum([
   "positive_relation",
+  "snapshot_stable",
   "complete_empty",
+  "not_applicable",
   ...CoverageGapCodeSchema.options,
 ]);
 
@@ -222,7 +283,7 @@ export const CorrelationFactSchema = z.discriminatedUnion("state", [
   z
     .object({
       state: z.literal("present"),
-      reasonCode: z.literal("positive_relation"),
+      reasonCode: z.enum(["positive_relation", "snapshot_stable"]),
     })
     .strict(),
   z
@@ -235,14 +296,127 @@ export const CorrelationFactSchema = z.discriminatedUnion("state", [
   z
     .object({
       state: z.literal("unknown"),
+      reasonCode: z.enum(["not_applicable", ...CoverageGapCodeSchema.options]),
+    })
+    .strict(),
+]);
+
+export const ReceiptLifecycleFactSchema = z.discriminatedUnion("lifecycle", [
+  z.object({ lifecycle: z.literal("live"), reasonCode: z.literal("exact_payload_live") }).strict(),
+  z
+    .object({
+      lifecycle: z.literal("stale"),
+      reasonCode: z.literal("exact_payload_owner_absent"),
+      certificateId: OpaqueIdSchema,
+    })
+    .strict(),
+  z
+    .object({
+      lifecycle: z.literal("absent"),
+      reasonCode: z.literal("complete_empty"),
+      certificateId: OpaqueIdSchema,
+    })
+    .strict(),
+  z
+    .object({
+      lifecycle: z.literal("unknown"),
       reasonCode: CoverageGapCodeSchema,
     })
     .strict(),
 ]);
 
+export const CorrelationRequirementIdSchema = z.enum([
+  "artifact_existence",
+  "owner_application",
+  "owner_executable",
+  "activity",
+  "open_file",
+  "startup_target",
+  "receipt",
+  "official_uninstaller",
+  "dependency",
+]);
+
+export const RequirementApplicabilitySchema = z.enum([
+  "required",
+  "not_applicable",
+  "unsupported",
+]);
+
+export const RequirementApplicabilityMapSchema = z
+  .object({
+    artifact_existence: RequirementApplicabilitySchema,
+    owner_application: RequirementApplicabilitySchema,
+    owner_executable: RequirementApplicabilitySchema,
+    activity: RequirementApplicabilitySchema,
+    open_file: RequirementApplicabilitySchema,
+    startup_target: RequirementApplicabilitySchema,
+    receipt: RequirementApplicabilitySchema,
+    official_uninstaller: RequirementApplicabilitySchema,
+    dependency: RequirementApplicabilitySchema,
+  })
+  .strict();
+
+const RequirementSchema = z
+  .object({
+    requirementId: CorrelationRequirementIdSchema,
+    applicability: RequirementApplicabilitySchema,
+    reasonCode: z.enum([
+      "profile_required",
+      "private_non_executable_artifact",
+      "inspection_only_category",
+    ]),
+  })
+  .strict();
+
+export const CorrelationRequirementProfileSchema = z
+  .object({
+    schemaVersion: z.literal(2),
+    profileId: z.enum(["private_regenerable_remnant_v1", "inspection_only_v1"]),
+    profileVersion: SafeIntegerSchema.min(1),
+    requirements: z.array(RequirementSchema),
+    profileFingerprint: Sha256DigestSchema,
+  })
+  .strict()
+  .superRefine((profile, context) => {
+    const ids = profile.requirements.map(({ requirementId }) => requirementId);
+    if (
+      ids.length !== CorrelationRequirementIdSchema.options.length ||
+      !uniqueValues(ids) ||
+      CorrelationRequirementIdSchema.options.some((id) => !ids.includes(id))
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["requirements"],
+        message: "Profile должен определить каждый requirement ровно один раз",
+      });
+      return;
+    }
+    const byId = new Map(profile.requirements.map((item) => [item.requirementId, item]));
+    if (profile.profileId === "private_regenerable_remnant_v1") {
+      for (const requirementId of CorrelationRequirementIdSchema.options) {
+        const expected = requirementId === "dependency" ? "not_applicable" : "required";
+        if (byId.get(requirementId)?.applicability !== expected) {
+          context.addIssue({
+            code: "custom",
+            path: ["requirements"],
+            message: "Actionable profile имеет фиксированную applicability",
+          });
+          break;
+        }
+      }
+    } else if (profile.requirements.some(({ applicability }) => applicability !== "unsupported")) {
+      context.addIssue({
+        code: "custom",
+        path: ["requirements"],
+        message: "Inspection-only profile не может создавать prerequisites",
+      });
+    }
+  });
+
 export const CorrelationRevisionSchema = z
   .object({
-    schemaVersion: z.literal(1),
+    schemaVersion: z.literal(2),
     derivationVersion: SafeIntegerSchema.min(1),
     correlationRevisionId: OpaqueIdSchema,
     auditId: OpaqueIdSchema,
@@ -253,18 +427,22 @@ export const CorrelationRevisionSchema = z
     subjectSetDigest: Sha256DigestSchema,
     edgeSetDigest: Sha256DigestSchema,
     coverageReportDigest: Sha256DigestSchema,
-    ruleSetVersion: SafeIntegerSchema.min(1),
-    policyVersion: SafeIntegerSchema.min(1),
+    ownerBindingFingerprint: Sha256DigestSchema,
+    requirementProfileId: z.enum([
+      "private_regenerable_remnant_v1",
+      "inspection_only_v1",
+    ]),
+    requirementProfileVersion: SafeIntegerSchema.min(1),
+    requirementProfileFingerprint: Sha256DigestSchema,
+    ruleSetVersion: SafeIntegerSchema.min(2),
+    policyVersion: SafeIntegerSchema.min(2),
     exclusionStateVersion: SafeIntegerSchema,
     staleDuringAudit: z.boolean(),
     createdAt: IsoDateTimeSchema,
   })
   .strict()
   .superRefine((value, context) => {
-    if (
-      !value.staleDuringAudit &&
-      value.snapshotAFingerprint !== value.snapshotBFingerprint
-    ) {
+    if (!value.staleDuringAudit && value.snapshotAFingerprint !== value.snapshotBFingerprint) {
       context.addIssue({
         code: "custom",
         path: ["staleDuringAudit"],
@@ -275,12 +453,12 @@ export const CorrelationRevisionSchema = z
 
 export const CorrelationFactSetSchema = z
   .object({
-    installedApp: CorrelationFactSchema,
+    artifactExistence: CorrelationFactSchema,
+    ownerApplication: CorrelationFactSchema,
+    ownerExecutable: CorrelationFactSchema,
     activity: CorrelationFactSchema,
     openFile: CorrelationFactSchema,
     startupTarget: CorrelationFactSchema,
-    targetExecutable: CorrelationFactSchema,
-    receipt: CorrelationFactSchema,
     officialUninstaller: CorrelationFactSchema,
     dependency: CorrelationFactSchema,
   })
@@ -288,18 +466,21 @@ export const CorrelationFactSetSchema = z
 
 export const SafeCorrelationViewSchema = z
   .object({
-    schemaVersion: z.literal(1),
+    schemaVersion: z.literal(2),
     findingId: OpaqueIdSchema,
     auditRevision: SafeIntegerSchema.min(1),
     correlationRevisionId: OpaqueIdSchema,
+    ownerBindingState: z.enum(["resolved", "ambiguous", "missing", "mismatch", "stale"]),
+    ownerBindingSourceClass: z.enum(["receipt_payload", "os_metadata", "signed_history", "none"]),
+    requirementProfileId: z.enum(["private_regenerable_remnant_v1", "inspection_only_v1"]),
     facts: CorrelationFactSetSchema,
+    receiptLifecycle: ReceiptLifecycleFactSchema,
+    requirementApplicability: RequirementApplicabilityMapSchema,
     coverageSummary: z
       .object({
         completeSourceCount: SafeIntegerSchema,
         gapCount: SafeIntegerSchema,
-        gapCodes: z
-          .array(CoverageGapCodeSchema)
-          .refine(uniqueValues, { message: "Gap codes не должны повторяться" }),
+        gapCodes: z.array(CoverageGapCodeSchema).refine(uniqueValues),
       })
       .strict()
       .superRefine((summary, context) => {
@@ -320,45 +501,64 @@ export const SafeCorrelationViewSchema = z
         "correlation_missing",
         "correlation_mismatch",
         "snapshot_stale",
+        "owner_binding_required",
+        "unsupported_profile",
+        "unsupported_requirement",
         "official_uninstaller_required",
       ]),
-    ),
-    allowedActions: z
-      .array(AllowedActionSchema)
-      .refine(uniqueValues, { message: "Actions не должны повторяться" }),
+    ).refine(uniqueValues),
+    allowedActions: z.array(AllowedActionSchema).refine(uniqueValues),
   })
   .strict()
   .superRefine((view, context) => {
-    const hasMutationAction = view.allowedActions.some((action) =>
-      action.startsWith("prepare_"),
-    );
-    const hasUnsafeFact = Object.entries(view.facts).some(
-      ([factName, fact]) =>
-        fact.state === "unknown" ||
-        (fact.state === "present" && factName !== "targetExecutable"),
-    );
-    if (
-      hasMutationAction &&
-      (view.staleDuringAudit ||
-        view.blockingReasonCodes.length > 0 ||
-        hasUnsafeFact)
-    ) {
+    const hasMutationAction = view.allowedActions.some((action) => action.startsWith("prepare_"));
+    if (!hasMutationAction) return;
+    const facts = view.facts;
+    const requiredNegative = [
+      facts.ownerApplication,
+      facts.ownerExecutable,
+      facts.activity,
+      facts.openFile,
+      facts.startupTarget,
+      facts.officialUninstaller,
+    ];
+    const actionable =
+      view.ownerBindingState === "resolved" &&
+      view.requirementProfileId === "private_regenerable_remnant_v1" &&
+      facts.artifactExistence.state === "present" &&
+      requiredNegative.every(({ state }) => state === "absent") &&
+      facts.dependency.state === "unknown" &&
+      facts.dependency.reasonCode === "not_applicable" &&
+      view.requirementApplicability.dependency === "not_applicable" &&
+      (view.receiptLifecycle.lifecycle === "absent" ||
+        view.receiptLifecycle.lifecycle === "stale") &&
+      !view.staleDuringAudit &&
+      view.blockingReasonCodes.length === 0;
+    if (!actionable) {
       context.addIssue({
         code: "custom",
         path: ["allowedActions"],
-        message: "Blocking view не может содержать mutation actions",
+        message: "Только полный actionable Library profile допускает mutation",
       });
     }
   });
 
 export type CorrelationSubject = z.infer<typeof CorrelationSubjectSchema>;
+export type CorrelationSubjectRole = z.infer<typeof CorrelationSubjectRoleSchema>;
 export type CorrelationEdge = z.infer<typeof CorrelationEdgeSchema>;
+export type OwnerBinding = z.infer<typeof OwnerBindingSchema>;
+export type OwnerBindingSourceKind = z.infer<typeof OwnerBindingSourceKindSchema>;
 export type CorrelationClaimKind = z.infer<typeof CorrelationClaimKindSchema>;
 export type QueryScope = z.infer<typeof QueryScopeSchema>;
 export type CoverageGapCode = z.infer<typeof CoverageGapCodeSchema>;
 export type SourceProvenance = z.infer<typeof SourceProvenanceSchema>;
 export type CoverageCertificate = z.infer<typeof CoverageCertificateSchema>;
 export type CorrelationFact = z.infer<typeof CorrelationFactSchema>;
+export type ReceiptLifecycleFact = z.infer<typeof ReceiptLifecycleFactSchema>;
+export type CorrelationRequirementId = z.infer<typeof CorrelationRequirementIdSchema>;
+export type RequirementApplicability = z.infer<typeof RequirementApplicabilitySchema>;
+export type RequirementApplicabilityMap = z.infer<typeof RequirementApplicabilityMapSchema>;
+export type CorrelationRequirementProfile = z.infer<typeof CorrelationRequirementProfileSchema>;
 export type CorrelationFactSet = z.infer<typeof CorrelationFactSetSchema>;
 export type CorrelationRevision = z.infer<typeof CorrelationRevisionSchema>;
 export type SafeCorrelationView = z.infer<typeof SafeCorrelationViewSchema>;

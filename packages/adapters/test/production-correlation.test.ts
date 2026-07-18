@@ -1,3 +1,6 @@
+import { createHash } from "node:crypto";
+
+import { InstallationKey, type KeyedOwnerBindingHistoryRecord } from "@codex-mac-cleaner/storage";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -7,47 +10,206 @@ import {
   createMacOSProductionCorrelationAdapter,
   type ArgvExecutor,
   type MacOSCorrelationReadOnlyFileSystem,
+  type MacOSOwnerBindingHistory,
+  type RawCorrelationPayload,
 } from "../src/index.js";
 
-const now = "2026-07-18T00:00:00.000Z";
-const rawCanary = "PRIVATE-PRODUCTION-CORRELATION-CANARY";
+const fixedNow = "2026-07-18T00:00:00.000Z";
+const rawCanary = "PRIVATE-PRODUCTION-LIBRARY-CANARY";
+const home = `/private/${rawCanary}/home`;
+const candidatePath = `${home}/Library/Caches/Owner/private-cache`;
+const parentPath = `${home}/Library/Caches/Owner`;
+const ownerApp = "/Applications/Owner.app";
+const ownerExecutable = `${ownerApp}/Contents/MacOS/Owner`;
 
-describe("concrete macOS production correlation collector", () => {
-  it("строится только из low-level runner/registry/filesystem и владеет argv/parsing", async () => {
-    const calls: Array<{
-      executable: string;
-      argv: readonly string[];
-      shell: boolean;
-    }> = [];
-    const candidatePath = `/private/${rawCanary}/Candidate.app`;
-    const executablePath = `${candidatePath}/Contents/MacOS/Candidate`;
-    const executor: ArgvExecutor = async (executable, argv, options) => {
-      calls.push({ executable, argv, shell: options.shell });
-      if (executable === "/usr/bin/plutil") {
-        return {
-          stdout: JSON.stringify({
-            CFBundleIdentifier: `org.private.${rawCanary}`,
-            CFBundleExecutable: "Candidate",
-          }),
-          stderr: "",
-          exitCode: 0,
-        };
+class MemoryHistory implements MacOSOwnerBindingHistory {
+  records: readonly KeyedOwnerBindingHistoryRecord[] = [];
+  async list() { return this.records; }
+  async replace(records: readonly KeyedOwnerBindingHistoryRecord[]) { this.records = records; }
+}
+
+function id(path: string): string {
+  return createHash("sha256").update(path).digest("hex").slice(0, 16);
+}
+
+function harness() {
+  let ownerInstalled = true;
+  let ownerRunning = true;
+  let ownerOpen = true;
+  const calls: Array<{ executable: string; argv: readonly string[]; shell: boolean }> = [];
+  const executor: ArgvExecutor = async (executable, argv, options) => {
+    calls.push({ executable, argv, shell: options.shell });
+    if (executable === "/usr/sbin/pkgutil" && argv[0] === "--pkgs") {
+      return { stdout: "", stderr: "", exitCode: 0 };
+    }
+    if (executable === "/usr/sbin/pkgutil" && argv[0] === "--file-info") {
+      return { stdout: "", stderr: "", exitCode: 0 };
+    }
+    if (executable === "/usr/bin/plutil") {
+      return {
+        stdout: JSON.stringify({
+          CFBundleIdentifier: `org.private.${rawCanary}`,
+          CFBundleExecutable: "Owner",
+          CFBundleName: "Owner",
+        }),
+        stderr: "",
+        exitCode: 0,
+      };
+    }
+    if (executable === "/usr/bin/codesign") {
+      return {
+        stdout: "",
+        stderr: "designated => identifier org.private.owner and anchor apple generic\nTeamIdentifier=TEAMPRIVATE\n",
+        exitCode: 0,
+      };
+    }
+    if (executable === "/bin/ps") {
+      return {
+        stdout: ownerRunning ? `42 Sat Jul 18 00:00:00 2026 ${ownerExecutable}\n` : "",
+        stderr: "",
+        exitCode: 0,
+      };
+    }
+    if (executable === "/usr/sbin/lsof") {
+      return {
+        stdout: ownerOpen ? `p42\ncOwner\nn${candidatePath}\n` : "",
+        stderr: "",
+        exitCode: 0,
+      };
+    }
+    return { stdout: "", stderr: "", exitCode: 0 };
+  };
+  const filesystem: MacOSCorrelationReadOnlyFileSystem = {
+    canonicalize: async (path) => path,
+    stat: async (path) => ({
+      device: "device-a",
+      inode: id(path),
+      fileType: path.endsWith(".app") ? "bundle" : path === ownerExecutable ? "file" : "directory",
+      uid: 501,
+      gid: 20,
+      size: 1,
+      modifiedAtMs: 1,
+    }),
+    readDirectory: async (path) => {
+      if (path === "/Applications") {
+        return ownerInstalled ? [{ path: ownerApp, fileType: "bundle" }] : [];
       }
-      if (executable === "/usr/bin/codesign") {
-        return {
-          stdout: "",
-          stderr: "designated => requirement-private\nTeamIdentifier=TEAMPRIVATE\n",
-          exitCode: 0,
-        };
+      if (
+        path === "/System/Applications" ||
+        path === `${home}/Applications` ||
+        path === "/Library/LaunchAgents" ||
+        path === "/Library/LaunchDaemons" ||
+        path === `${home}/Library/LaunchAgents`
+      ) return [];
+      return [];
+    },
+  };
+  const history = new MemoryHistory();
+  const key = new InstallationKey(new Uint8Array(32).fill(7));
+  const adapter = createMacOSProductionCorrelationAdapter({
+    commands: createCommandRunner(executor),
+    candidates: createMacOSCandidateRegistry({
+      candidates: new Map([["candidate-ref-library", candidatePath]]),
+      userHome: home,
+    }),
+    filesystem,
+    installationKey: key,
+    ownerBindingHistory: history,
+    now: () => fixedNow,
+  });
+  return {
+    adapter,
+    calls,
+    history,
+    removeOwner() {
+      ownerInstalled = false;
+      ownerRunning = false;
+      ownerOpen = false;
+    },
+  };
+}
+
+async function payloadFrom(adapter: ReturnType<typeof createMacOSProductionCorrelationAdapter>, snapshotId: string) {
+  const input = await adapter.buildInput({
+    candidateRef: "candidate-ref-library",
+    snapshotId,
+    signal: new AbortController().signal,
+  });
+  return consumeEphemeralCorrelationInput(input, (payload) => payload);
+}
+
+describe("concrete macOS production correlation collector v2", () => {
+  it("оставляет candidate Library artifact и владеет canonical argv/parsing", async () => {
+    const test = harness();
+    const payload = await payloadFrom(test.adapter, "snapshot-library-a");
+
+    expect(payload.schemaVersion).toBe(2);
+    expect(payload.artifactCategory).toBe("cache");
+    expect(payload.artifactPrivateNonExecutable).toBe(true);
+    expect(payload.candidate).toMatchObject({
+      subjectRole: "library_artifact",
+      subjectKind: "filesystem_object",
+    });
+    expect(payload.candidate.claims.map(({ kind }) => kind)).toEqual(["filesystem", "owner"]);
+    expect(payload.queries.map(({ queryScope }) => queryScope)).toEqual([
+      "owner_bindings",
+      "installed_apps",
+      "owner_executables",
+      "processes",
+      "open_files",
+      "startup_targets",
+      "receipts",
+      "official_uninstallers",
+      "dependencies",
+    ]);
+    expect(test.calls).toEqual(expect.arrayContaining([
+      { executable: "/usr/sbin/pkgutil", argv: ["--pkgs"], shell: false },
+      { executable: "/usr/sbin/pkgutil", argv: ["--file-info", candidatePath], shell: false },
+      { executable: "/bin/ps", argv: ["-axo", "pid=,lstart=,comm="], shell: false },
+      { executable: "/usr/sbin/lsof", argv: ["-nP", "-Fpcn", "-d", "cwd,txt"], shell: false },
+      { executable: "/usr/bin/codesign", argv: ["-d", "-r-", "--verbose=4", ownerApp], shell: false },
+    ]));
+    expect(JSON.stringify({
+      candidate: payload.candidate.subjectRole,
+      scopes: payload.queries.map(({ queryScope, state }) => ({ queryScope, state })),
+    })).not.toContain(rawCanary);
+  });
+
+  it("создаёт signed process/open history в N и использует только в N+1", async () => {
+    const test = harness();
+    const revisionN = await payloadFrom(test.adapter, "snapshot-library-n");
+    expect(revisionN.queries.find(({ queryScope }) => queryScope === "owner_bindings")?.subjects).toEqual([]);
+    expect(test.history.records).toHaveLength(1);
+
+    test.removeOwner();
+    const revisionN1 = await payloadFrom(test.adapter, "snapshot-library-n1");
+    const binding = revisionN1.queries.find(({ queryScope }) => queryScope === "owner_bindings")!;
+    expect(binding.state).toBe("complete");
+    expect(binding.subjects).toHaveLength(1);
+    expect(binding.subjects[0]).toMatchObject({
+      subjectRole: "owner_application",
+      bindingSourceKind: "signed_process_open_file_history",
+    });
+    expect(revisionN1.queries.find(({ queryScope }) => queryScope === "installed_apps")?.subjects).toEqual([]);
+    expect(revisionN1.queries.find(({ queryScope }) => queryScope === "owner_executables")?.subjects).toEqual([]);
+    expect(revisionN1.snapshotA).toEqual(revisionN1.snapshotB);
+    expect(JSON.stringify(test.history.records)).not.toContain(rawCanary);
+    expect(JSON.stringify(test.history.records)).not.toContain(candidatePath);
+  });
+
+  it("canonical package failure не превращается в complete/absent", async () => {
+    const executor: ArgvExecutor = async (executable, argv) => {
+      if (executable === "/usr/sbin/pkgutil" && argv[0] === "--pkgs") {
+        throw Object.assign(new Error("denied"), { code: "EACCES" });
       }
       return { stdout: "", stderr: "", exitCode: 0 };
     };
     const filesystem: MacOSCorrelationReadOnlyFileSystem = {
       canonicalize: async (path) => path,
       stat: async (path) => ({
-        device: "device-low-level",
-        inode: path === executablePath ? "inode-executable" : `inode-${path.length}`,
-        fileType: path.endsWith(".app") ? "bundle" : path === executablePath ? "file" : "directory",
+        device: "device-failure",
+        inode: id(path),
+        fileType: "directory",
         uid: 501,
         gid: 20,
         size: 1,
@@ -55,254 +217,33 @@ describe("concrete macOS production correlation collector", () => {
       }),
       readDirectory: async () => [],
     };
-    let clockTick = 0;
     const adapter = createMacOSProductionCorrelationAdapter({
       commands: createCommandRunner(executor),
       candidates: createMacOSCandidateRegistry({
-        candidates: new Map([["candidate-ref-low-level", candidatePath]]),
-        userHome: `/private/${rawCanary}/synthetic-user-root`,
+        candidates: new Map([["candidate-ref-library", candidatePath]]),
+        userHome: home,
       }),
       filesystem,
-      now: () => new Date(Date.parse(now) + clockTick++).toISOString(),
+      now: () => fixedNow,
     });
-
-    const input = await adapter.buildInput({
-      candidateRef: "candidate-ref-low-level",
-      snapshotId: "snapshot-low-level",
-      signal: new AbortController().signal,
-    });
-
-    expect(input.describe()).toEqual({
-      schemaVersion: 1,
-      snapshotId: "snapshot-low-level",
-      queryCount: 8,
-    });
-    consumeEphemeralCorrelationInput(input, (payload) => {
-      expect(payload.queries.map(({ queryScope }) => queryScope)).toEqual([
-        "installed_apps",
-        "processes",
-        "open_files",
-        "startup_targets",
-        "target_executables",
-        "receipts",
-        "official_uninstallers",
-        "dependencies",
-      ]);
-      expect(payload.candidate.claims.map(({ kind }) => kind)).toEqual(
-        expect.arrayContaining(["filesystem", "bundle", "signing", "owner", "executable"]),
-      );
-      expect(payload.snapshotA).toEqual(payload.snapshotB);
-    });
-    expect(calls).toEqual(expect.arrayContaining([
-      {
-        executable: "/usr/bin/mdfind",
-        argv: ["kMDItemContentType == 'com.apple.application-bundle'"],
-        shell: false,
-      },
-      {
-        executable: "/bin/ps",
-        argv: ["-axo", "pid=,lstart=,comm="],
-        shell: false,
-      },
-      {
-        executable: "/usr/sbin/lsof",
-        argv: ["-nP", "-Fpcn", "-d", "cwd,txt"],
-        shell: false,
-      },
-      {
-        executable: "/usr/sbin/pkgutil",
-        argv: ["--file-info", candidatePath],
-        shell: false,
-      },
-    ]));
-    expect(calls.every(({ shell }) => shell === false)).toBe(true);
+    const payload = await payloadFrom(adapter, "snapshot-failure");
+    const states = Object.fromEntries(payload.queries.map(({ queryScope, state }) => [queryScope, state]));
+    expect(states.installed_apps).toBe("permission_denied");
+    expect(states.receipts).toBe("permission_denied");
+    expect(states.official_uninstallers).toBe("permission_denied");
+    expect(states.owner_executables).toBe("permission_denied");
+    expect(states.owner_bindings).toBe("permission_denied");
   });
 
-  it("нормализует native outputs во все восемь candidate-specific scopes", async () => {
-    const candidatePath = `/private/${rawCanary}/Candidate.app`;
-    const candidateExecutable = `${candidatePath}/Contents/MacOS/Candidate`;
-    const dependentPath = `/private/${rawCanary}/Dependent.app`;
-    const dependentExecutable = `${dependentPath}/Contents/MacOS/Dependent`;
-    const startupPlist = `/private/${rawCanary}/synthetic-user-root/Library/LaunchAgents/private.plist`;
-    const calls: Array<{ executable: string; argv: readonly string[]; shell: boolean }> = [];
-    const executor: ArgvExecutor = async (executable, argv, options) => {
-      calls.push({ executable, argv, shell: options.shell });
-      if (executable === "/usr/bin/mdfind") {
-        return {
-          stdout: `${candidatePath}\n${dependentPath}\n`,
-          stderr: "",
-          exitCode: 0,
-        };
-      }
-      if (executable === "/bin/ps") {
-        return {
-          stdout: `101 Mon Jul 18 12:00:00 2026 ${candidateExecutable}\n`,
-          stderr: "",
-          exitCode: 0,
-        };
-      }
-      if (executable === "/usr/sbin/lsof") {
-        return {
-          stdout: `p101\ncCandidate\nn${candidatePath}\n`,
-          stderr: "",
-          exitCode: 0,
-        };
-      }
-      if (executable === "/usr/sbin/pkgutil") {
-        return {
-          stdout: "pkgid: package.private.candidate\n",
-          stderr: "",
-          exitCode: 0,
-        };
-      }
-      if (executable === "/usr/bin/otool") {
-        return {
-          stdout: `${dependentExecutable}:\n\t${candidateExecutable} (compatibility version 1.0.0, current version 1.0.0)\n`,
-          stderr: "",
-          exitCode: 0,
-        };
-      }
-      if (executable === "/usr/bin/plutil") {
-        const target = argv.at(-1);
-        if (target === startupPlist) {
-          return {
-            stdout: JSON.stringify({ Program: candidateExecutable }),
-            stderr: "",
-            exitCode: 0,
-          };
-        }
-        const dependent = target?.startsWith(dependentPath) === true;
-        return {
-          stdout: JSON.stringify(dependent
-            ? {
-                CFBundleIdentifier: "org.private.dependent",
-                CFBundleExecutable: "Dependent",
-              }
-            : {
-                CFBundleIdentifier: "org.private.candidate",
-                CFBundleExecutable: "Candidate",
-                CodexMacCleanerOfficialUninstallerExecutable: "Candidate",
-              }),
-          stderr: "",
-          exitCode: 0,
-        };
-      }
-      if (executable === "/usr/bin/codesign") {
-        const dependent = argv.at(-1) === dependentPath;
-        return {
-          stdout: "",
-          stderr: dependent
-            ? "designated => requirement-dependent\nTeamIdentifier=TEAMDEPENDENT\n"
-            : "designated => requirement-candidate\nTeamIdentifier=TEAMCANDIDATE\n",
-          exitCode: 0,
-        };
-      }
-      return { stdout: "", stderr: "", exitCode: 0 };
-    };
-    const filesystem: MacOSCorrelationReadOnlyFileSystem = {
-      canonicalize: async (path) => path,
-      stat: async (path) => ({
-        device: "device-all-scopes",
-        inode: `inode-${path.length}`,
-        fileType: path.endsWith(".app")
-          ? "bundle"
-          : path.includes("/Contents/MacOS/") ? "file" : "directory",
-        uid: 501,
-        gid: 20,
-        size: 1,
-        modifiedAtMs: 1,
-      }),
-      readDirectory: async (path) => path.endsWith("Library/LaunchAgents")
-        ? [{ path: startupPlist, fileType: "file" }]
-        : [],
-    };
-    const adapter = createMacOSProductionCorrelationAdapter({
-      commands: createCommandRunner(executor),
-      candidates: createMacOSCandidateRegistry({
-        candidates: new Map([["candidate-ref-all-scopes", candidatePath]]),
-        userHome: `/private/${rawCanary}/synthetic-user-root`,
-      }),
-      filesystem,
-      now: () => now,
-    });
-    const input = await adapter.buildInput({
-      candidateRef: "candidate-ref-all-scopes",
-      snapshotId: "snapshot-all-scopes",
-      signal: new AbortController().signal,
-    });
-
-    consumeEphemeralCorrelationInput(input, (payload) => {
-      expect(Object.fromEntries(payload.queries.map((query) => [
-        query.queryScope,
-        { state: query.state, count: query.subjects.length },
-      ]))).toEqual({
-        installed_apps: { state: "complete", count: 2 },
-        processes: { state: "complete", count: 1 },
-        open_files: { state: "complete", count: 1 },
-        startup_targets: { state: "complete", count: 1 },
-        target_executables: { state: "complete", count: 1 },
-        receipts: { state: "complete", count: 1 },
-        official_uninstallers: { state: "complete", count: 1 },
-        dependencies: { state: "complete", count: 1 },
-      });
-      expect(payload.candidate.claims.map(({ kind }) => kind)).toEqual(
-        expect.arrayContaining([
-          "filesystem",
-          "bundle",
-          "package",
-          "signing",
-          "owner",
-          "executable",
-        ]),
-      );
-      expect(payload.snapshotA).toEqual(payload.snapshotB);
-    });
-    expect(calls.some(({ executable, argv }) =>
-      executable === "/usr/bin/otool" && argv[0] === "-L"
-    )).toBe(true);
-    expect(calls.every(({ shell }) => shell === false)).toBe(true);
-  });
-
-  it("повторный collection cycle фиксирует process race в Snapshot A/B", async () => {
-    const candidatePath = `/private/${rawCanary}/Race.app`;
-    const executablePath = `${candidatePath}/Contents/MacOS/Race`;
-    let processCycle = 0;
-    const executor: ArgvExecutor = async (executable) => {
-      if (executable === "/usr/bin/plutil") {
-        return {
-          stdout: JSON.stringify({
-            CFBundleIdentifier: "org.private.race",
-            CFBundleExecutable: "Race",
-          }),
-          stderr: "",
-          exitCode: 0,
-        };
-      }
-      if (executable === "/usr/bin/codesign") {
-        return {
-          stdout: "",
-          stderr: "designated => requirement-race\nTeamIdentifier=TEAMRACE\n",
-          exitCode: 0,
-        };
-      }
-      if (executable === "/bin/ps") {
-        processCycle += 1;
-        return {
-          stdout: processCycle === 1
-            ? `101 Mon Jul 18 12:00:00 2026 ${executablePath}\n`
-            : "",
-          stderr: "",
-          exitCode: 0,
-        };
-      }
-      return { stdout: "", stderr: "", exitCode: 0 };
-    };
+  it("Snapshot A/B race фиксируется в raw production snapshots", async () => {
+    let candidateReads = 0;
+    const executor: ArgvExecutor = async () => ({ stdout: "", stderr: "", exitCode: 0 });
     const filesystem: MacOSCorrelationReadOnlyFileSystem = {
       canonicalize: async (path) => path,
       stat: async (path) => ({
         device: "device-race",
-        inode: `inode-${path.length}`,
-        fileType: path.endsWith(".app") ? "bundle" : path === executablePath ? "file" : "directory",
+        inode: path === candidatePath ? `candidate-${candidateReads++}` : id(path),
+        fileType: "directory",
         uid: 501,
         gid: 20,
         size: 1,
@@ -312,177 +253,24 @@ describe("concrete macOS production correlation collector", () => {
     };
     const adapter = createMacOSProductionCorrelationAdapter({
       commands: createCommandRunner(executor),
-      candidates: createMacOSCandidateRegistry({
-        candidates: new Map([["candidate-ref-race", candidatePath]]),
-        userHome: `/private/${rawCanary}/synthetic-user-root`,
-      }),
+      candidates: createMacOSCandidateRegistry({ candidates: new Map([["candidate-ref-library", candidatePath]]), userHome: home }),
       filesystem,
-      now: () => now,
+      now: () => fixedNow,
     });
-    const input = await adapter.buildInput({
-      candidateRef: "candidate-ref-race",
-      snapshotId: "snapshot-race",
-      signal: new AbortController().signal,
-    });
-
-    consumeEphemeralCorrelationInput(input, (payload) => {
-      expect(payload.queries.find(({ queryScope }) => queryScope === "processes")?.subjects)
-        .toHaveLength(1);
-      expect(payload.snapshotA.processFingerprint).not.toBe(
-        payload.snapshotB.processFingerprint,
-      );
-    });
+    const payload = await payloadFrom(adapter, "snapshot-race");
+    expect(payload.snapshotA.candidateFingerprint).not.toBe(payload.snapshotB.candidateFingerprint);
   });
 
-  it("permission/capability/timeout/cancellation/partial дают fail-closed states", async () => {
-    const candidatePath = `/private/${rawCanary}/Failures.app`;
-    const executablePath = `${candidatePath}/Contents/MacOS/Failures`;
-    const executor: ArgvExecutor = async (executable) => {
-      if (executable === "/usr/bin/plutil") {
-        return {
-          stdout: JSON.stringify({
-            CFBundleIdentifier: "org.private.failures",
-            CFBundleExecutable: "Failures",
-          }),
-          stderr: "",
-          exitCode: 0,
-        };
-      }
-      if (executable === "/usr/bin/codesign") {
-        return {
-          stdout: "",
-          stderr: "designated => requirement-failures\nTeamIdentifier=TEAMFAIL\n",
-          exitCode: 0,
-        };
-      }
-      if (executable === "/usr/bin/mdfind") {
-        throw Object.assign(new Error("private capability detail"), { code: "ENOENT" });
-      }
-      if (executable === "/bin/ps") {
-        throw Object.assign(new Error("private permission detail"), { code: "EACCES" });
-      }
-      if (executable === "/usr/sbin/lsof") {
-        throw new DOMException("private cancellation detail", "AbortError");
-      }
-      if (executable === "/usr/sbin/pkgutil") {
-        throw Object.assign(new Error("private timeout detail"), { code: "ETIMEDOUT" });
-      }
-      return { stdout: "", stderr: "", exitCode: 0 };
-    };
-    const filesystem: MacOSCorrelationReadOnlyFileSystem = {
-      canonicalize: async (path) => path,
-      stat: async (path) => ({
-        device: "device-failures",
-        inode: `inode-${path.length}`,
-        fileType: path.endsWith(".app") ? "bundle" : path === executablePath ? "file" : "directory",
-        uid: 501,
-        gid: 20,
-        size: 1,
-        modifiedAtMs: 1,
-      }),
-      readDirectory: async (path) => {
-        if (path === "/Library/LaunchAgents") {
-          throw Object.assign(new Error("private startup permission"), { code: "EPERM" });
-        }
-        return [];
-      },
-    };
-    const adapter = createMacOSProductionCorrelationAdapter({
-      commands: createCommandRunner(executor),
-      candidates: createMacOSCandidateRegistry({
-        candidates: new Map([["candidate-ref-failures", candidatePath]]),
-        userHome: `/private/${rawCanary}/synthetic-user-root`,
-      }),
-      filesystem,
-      now: () => now,
-    });
-    const input = await adapter.buildInput({
-      candidateRef: "candidate-ref-failures",
-      snapshotId: "snapshot-failures",
+  it("ephemeral payload остаётся non-serializable", async () => {
+    const test = harness();
+    const input = await test.adapter.buildInput({
+      candidateRef: "candidate-ref-library",
+      snapshotId: "snapshot-private",
       signal: new AbortController().signal,
     });
-
-    consumeEphemeralCorrelationInput(input, (payload) => {
-      const states = Object.fromEntries(
-        payload.queries.map(({ queryScope, state }) => [queryScope, state]),
-      );
-      expect(states).toEqual({
-        installed_apps: "capability_missing",
-        processes: "permission_denied",
-        open_files: "cancelled",
-        startup_targets: "permission_denied",
-        target_executables: "complete",
-        receipts: "timeout",
-        official_uninstallers: "partial_inventory",
-        dependencies: "capability_missing",
-      });
-      expect(payload.queries
-        .filter(({ state }) => state === "timeout" || state === "cancelled")
-        .every(({ completedAt }) => completedAt === null)).toBe(true);
-      expect(JSON.stringify({
-        descriptor: { queryCount: payload.queries.length },
-        states,
-      })).not.toMatch(/private (?:capability|permission|timeout|cancellation|startup)/u);
-    });
-  });
-
-  it("malformed native output становится parse_loss, а не complete", async () => {
-    const candidatePath = `/private/${rawCanary}/Parse.app`;
-    const executablePath = `${candidatePath}/Contents/MacOS/Parse`;
-    const executor: ArgvExecutor = async (executable) => {
-      if (executable === "/usr/bin/plutil") {
-        return {
-          stdout: JSON.stringify({
-            CFBundleIdentifier: "org.private.parse",
-            CFBundleExecutable: "Parse",
-          }),
-          stderr: "",
-          exitCode: 0,
-        };
-      }
-      if (executable === "/usr/bin/codesign") {
-        return {
-          stdout: "",
-          stderr: "designated => requirement-parse\nTeamIdentifier=TEAMPARSE\n",
-          exitCode: 0,
-        };
-      }
-      if (executable === "/bin/ps") {
-        return { stdout: "malformed-private-process-output\n", stderr: "", exitCode: 0 };
-      }
-      return { stdout: "", stderr: "", exitCode: 0 };
-    };
-    const filesystem: MacOSCorrelationReadOnlyFileSystem = {
-      canonicalize: async (path) => path,
-      stat: async (path) => ({
-        device: "device-parse",
-        inode: `inode-${path.length}`,
-        fileType: path.endsWith(".app") ? "bundle" : path === executablePath ? "file" : "directory",
-        uid: 501,
-        gid: 20,
-        size: 1,
-        modifiedAtMs: 1,
-      }),
-      readDirectory: async () => [],
-    };
-    const adapter = createMacOSProductionCorrelationAdapter({
-      commands: createCommandRunner(executor),
-      candidates: createMacOSCandidateRegistry({
-        candidates: new Map([["candidate-ref-parse", candidatePath]]),
-        userHome: `/private/${rawCanary}/synthetic-user-root`,
-      }),
-      filesystem,
-      now: () => now,
-    });
-    const input = await adapter.buildInput({
-      candidateRef: "candidate-ref-parse",
-      snapshotId: "snapshot-parse",
-      signal: new AbortController().signal,
-    });
-
-    consumeEphemeralCorrelationInput(input, (payload) => {
-      expect(payload.queries.find(({ queryScope }) => queryScope === "processes"))
-        .toMatchObject({ state: "parse_loss", subjects: [] });
-    });
+    expect(input.describe()).toEqual({ schemaVersion: 2, snapshotId: "snapshot-private", queryCount: 9 });
+    expect(() => JSON.stringify(input)).toThrowError("Raw correlation input нельзя сериализовать");
   });
 });
+
+void ({} satisfies Partial<RawCorrelationPayload>);

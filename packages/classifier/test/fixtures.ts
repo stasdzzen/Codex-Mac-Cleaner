@@ -7,6 +7,10 @@ import type {
 const observedAt = "2026-07-18T00:00:00.000Z";
 
 const outcomes: Readonly<Record<RuleInputType, EvidenceItem["outcome"]>> = {
+  owner_binding: "confirmed",
+  artifact_existence: "confirmed",
+  owner_application: "contradicted",
+  owner_executable: "contradicted",
   owner_identity: "confirmed",
   installed_state: "contradicted",
   activity: "contradicted",
@@ -19,6 +23,8 @@ const outcomes: Readonly<Record<RuleInputType, EvidenceItem["outcome"]>> = {
   temporal: "confirmed",
   data_kind: "confirmed",
   capability: "confirmed",
+  requirement_profile: "confirmed",
+  receipt_lifecycle: "contradicted",
   removal_method: "contradicted",
   duplicate_identity: "contradicted",
   name_match: "confirmed",

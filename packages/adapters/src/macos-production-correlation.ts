@@ -1,11 +1,20 @@
 import { createHash } from "node:crypto";
 import { lstat, readdir, realpath } from "node:fs/promises";
-import { dirname, extname, join } from "node:path";
+import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
+
+import {
+  InstallationKey,
+  InstallationKeyStore,
+  KeyedOwnerBindingHistoryStore,
+  type KeyedOwnerBindingHistoryRecord,
+} from "@codex-mac-cleaner/storage";
 
 import type { CommandRunner } from "./command-runner.js";
 import {
   CorrelationInputError,
+  type CorrelationArtifactCategory,
   type EphemeralCorrelationInput,
+  type RawIdentityClaim,
   type RawQueryState,
 } from "./correlation-claims.js";
 import {
@@ -17,21 +26,22 @@ import {
   type ProductionCorrelationFilesystemBoundary,
   type ProductionCorrelationSnapshotRecord,
   type ProductionDependencyRecord,
-  type ProductionFilesystemIdentityRecord,
+  type ProductionHistoricalBindingRecord,
   type ProductionInstalledAppRecord,
   type ProductionOfficialUninstallerRecord,
   type ProductionOpenFileRecord,
+  type ProductionOwnerBindingRecord,
+  type ProductionOwnerExecutableRecord,
   type ProductionProcessRecord,
   type ProductionReceiptRecord,
   type ProductionSourceCapture,
   type ProductionStartupTargetRecord,
-  type ProductionTargetExecutableRecord,
 } from "./production-correlation.js";
 import { isAbortError } from "./types.js";
 
-const INSTALLED_APPS_QUERY =
-  "kMDItemContentType == 'com.apple.application-bundle'";
 const MAX_SOURCE_RECORDS = 4_096;
+const APP_ROOTS = ["/Applications", "/System/Applications"] as const;
+const PRIVATE_ACTIONABLE_CATEGORIES = new Set<CorrelationArtifactCategory>(["cache", "log"]);
 
 export interface MacOSCorrelationFileStat {
   readonly device: string;
@@ -48,14 +58,11 @@ export interface MacOSCorrelationDirectoryEntry {
   readonly fileType: "file" | "directory" | "bundle";
 }
 
-/** Низкоуровневый read-only порт: identity и correlation records здесь отсутствуют. */
+/** Низкоуровневый read-only порт. Он не возвращает identity/correlation records. */
 export interface MacOSCorrelationReadOnlyFileSystem {
   canonicalize(path: string, signal: AbortSignal): Promise<string>;
   stat(path: string, signal: AbortSignal): Promise<MacOSCorrelationFileStat>;
-  readDirectory(
-    path: string,
-    signal: AbortSignal,
-  ): Promise<readonly MacOSCorrelationDirectoryEntry[]>;
+  readDirectory(path: string, signal: AbortSignal): Promise<readonly MacOSCorrelationDirectoryEntry[]>;
 }
 
 export interface MacOSCandidateLocation {
@@ -63,12 +70,9 @@ export interface MacOSCandidateLocation {
   readonly userHome: string;
 }
 
-/** Registry связывает opaque server ref только с локальным path; claims он не строит. */
+/** Registry связывает opaque ref с local path; parsing и claim mapping принадлежат adapters. */
 export interface MacOSCandidateRegistry {
-  resolve(
-    candidateRef: string,
-    signal: AbortSignal,
-  ): Promise<MacOSCandidateLocation | null>;
+  resolve(candidateRef: string, signal: AbortSignal): Promise<MacOSCandidateLocation | null>;
 }
 
 export function createMacOSCandidateRegistry(input: Readonly<{
@@ -80,15 +84,12 @@ export function createMacOSCandidateRegistry(input: Readonly<{
     async resolve(candidateRef: string, signal: AbortSignal) {
       signal.throwIfAborted();
       const candidatePath = candidates.get(candidateRef);
-      return candidatePath === undefined
-        ? null
-        : { candidatePath, userHome: input.userHome };
+      return candidatePath === undefined ? null : { candidatePath, userHome: input.userHome };
     },
   });
 }
 
-export function createNodeMacOSCorrelationReadOnlyFileSystem():
-MacOSCorrelationReadOnlyFileSystem {
+export function createNodeMacOSCorrelationReadOnlyFileSystem(): MacOSCorrelationReadOnlyFileSystem {
   const filesystem: MacOSCorrelationReadOnlyFileSystem = {
     async canonicalize(path, signal) {
       signal.throwIfAborted();
@@ -100,9 +101,7 @@ MacOSCorrelationReadOnlyFileSystem {
       return {
         device: String(value.dev),
         inode: String(value.ino),
-        fileType: value.isDirectory()
-          ? path.endsWith(".app") ? "bundle" : "directory"
-          : "file",
+        fileType: value.isDirectory() ? path.endsWith(".app") ? "bundle" : "directory" : "file",
         uid: value.uid,
         gid: value.gid,
         size: value.size,
@@ -111,19 +110,18 @@ MacOSCorrelationReadOnlyFileSystem {
     },
     async readDirectory(path, signal) {
       signal.throwIfAborted();
-      const entries = await readdir(path, { withFileTypes: true });
-      return entries.map((entry) => {
-        const entryPath = join(path, entry.name);
-        return {
-          path: entryPath,
-          fileType: entry.isDirectory()
-            ? entry.name.endsWith(".app") ? "bundle" : "directory"
-            : "file",
-        };
-      });
+      return (await readdir(path, { withFileTypes: true })).map((entry) => ({
+        path: join(path, entry.name),
+        fileType: entry.isDirectory() ? entry.name.endsWith(".app") ? "bundle" : "directory" : "file",
+      }));
     },
   };
   return Object.freeze(filesystem);
+}
+
+export interface MacOSOwnerBindingHistory {
+  list(): Promise<readonly KeyedOwnerBindingHistoryRecord[]>;
+  replace(records: readonly KeyedOwnerBindingHistoryRecord[]): Promise<void>;
 }
 
 export interface CreateMacOSProductionCorrelationAdapterInput {
@@ -132,6 +130,11 @@ export interface CreateMacOSProductionCorrelationAdapterInput {
   readonly filesystem?: MacOSCorrelationReadOnlyFileSystem;
   readonly now?: () => string;
   readonly commandTimeoutMs?: number;
+  /** Package-owned concrete persistence; app передаёт только private state root. */
+  readonly stateRoot?: string;
+  /** Injectable key/history предназначены для deterministic package tests. */
+  readonly installationKey?: InstallationKey;
+  readonly ownerBindingHistory?: MacOSOwnerBindingHistory;
 }
 
 interface CommandCapture {
@@ -141,20 +144,41 @@ interface CommandCapture {
 }
 
 interface FileIdentity {
-  readonly filesystem: ProductionFilesystemIdentityRecord;
+  readonly filesystem: NonNullable<ProductionCandidateIdentityRecord["filesystem"]>;
   readonly executableFingerprint: string;
 }
 
 interface CollectedApp {
   readonly record: ProductionInstalledAppRecord;
   readonly state: RawQueryState;
-  readonly metadata: Readonly<Record<string, unknown>> | null;
   readonly executablePath: string | null;
+  readonly metadata: Readonly<Record<string, unknown>> | null;
+  readonly packageRegisteredUninstaller: boolean;
+}
+
+interface ProcessInternal {
+  readonly pid: string;
+  readonly record: ProductionProcessRecord;
+}
+
+interface OpenInternal {
+  readonly pid: string;
+  readonly record: ProductionOpenFileRecord;
 }
 
 interface InstalledCapture {
   readonly capture: ProductionSourceCapture<ProductionInstalledAppRecord>;
   readonly apps: readonly CollectedApp[];
+}
+
+interface ProcessCapture {
+  readonly capture: ProductionSourceCapture<ProductionProcessRecord>;
+  readonly records: readonly ProcessInternal[];
+}
+
+interface OpenCapture {
+  readonly capture: ProductionSourceCapture<ProductionOpenFileRecord>;
+  readonly records: readonly OpenInternal[];
 }
 
 interface ReceiptCapture {
@@ -164,14 +188,16 @@ interface ReceiptCapture {
 
 interface CollectionCycle {
   readonly candidate: ProductionCandidateIdentityRecord;
+  readonly ownerBindings: ProductionSourceCapture<ProductionOwnerBindingRecord>;
   readonly installed: ProductionSourceCapture<ProductionInstalledAppRecord>;
+  readonly ownerExecutables: ProductionSourceCapture<ProductionOwnerExecutableRecord>;
   readonly processes: ProductionSourceCapture<ProductionProcessRecord>;
   readonly openFiles: ProductionSourceCapture<ProductionOpenFileRecord>;
   readonly startupTargets: ProductionSourceCapture<ProductionStartupTargetRecord>;
-  readonly targetExecutables: ProductionSourceCapture<ProductionTargetExecutableRecord>;
   readonly receipts: ProductionSourceCapture<ProductionReceiptRecord>;
   readonly officialUninstallers: ProductionSourceCapture<ProductionOfficialUninstallerRecord>;
   readonly dependencies: ProductionSourceCapture<ProductionDependencyRecord>;
+  readonly discoveredHistory: readonly KeyedOwnerBindingHistoryRecord[];
   readonly snapshot: ProductionCorrelationSnapshotRecord;
 }
 
@@ -187,24 +213,30 @@ const STATE_PRIORITY: Readonly<Record<RawQueryState, number>> = {
 };
 
 function mergeState(...states: readonly RawQueryState[]): RawQueryState {
-  return states.reduce((current, state) =>
-    STATE_PRIORITY[state] > STATE_PRIORITY[current] ? state : current
-  , "complete");
+  return states.reduce(
+    (current, state) => STATE_PRIORITY[state] > STATE_PRIORITY[current] ? state : current,
+    "complete",
+  );
+}
+
+function stable(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stable).join(",")}]`;
+  if (typeof value === "object" && value !== null) {
+    return `{${Object.entries(value)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, entry]) => `${JSON.stringify(key)}:${stable(entry)}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
 }
 
 function digest(domain: string, value: unknown): string {
-  return createHash("sha256")
-    .update(domain)
-    .update("\0")
-    .update(JSON.stringify(value))
-    .digest("hex");
+  return createHash("sha256").update(domain).update("\0").update(stable(value)).digest("hex");
 }
 
 function errorCode(error: unknown): string | undefined {
-  if (typeof error !== "object" || error === null || !("code" in error)) {
-    return undefined;
-  }
-  return typeof error.code === "string" ? error.code : undefined;
+  return typeof error === "object" && error !== null && "code" in error && typeof error.code === "string"
+    ? error.code : undefined;
 }
 
 function failureState(error: unknown): RawQueryState {
@@ -223,38 +255,29 @@ function exitState(exitCode: number): RawQueryState {
   return "parse_loss";
 }
 
-function withCommandTimeout(
-  commands: CommandRunner,
-  timeoutMs: number,
-): CommandRunner {
+function withCommandTimeout(commands: CommandRunner, timeoutMs: number): CommandRunner {
   if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1) {
     throw new CorrelationInputError("CORRELATION_SCHEMA_UNSUPPORTED");
   }
-  const runner: CommandRunner = {
-    async run(executable, argv, { signal }) {
+  return Object.freeze({
+    async run(executable: string, argv: readonly string[], { signal }: { signal: AbortSignal }) {
       const controller = new AbortController();
       let timedOut = false;
-      const abortFromCaller = (): void => controller.abort();
-      if (signal.aborted) abortFromCaller();
-      else signal.addEventListener("abort", abortFromCaller, { once: true });
-      const timer = setTimeout(() => {
-        timedOut = true;
-        controller.abort();
-      }, timeoutMs);
+      const abort = (): void => controller.abort();
+      if (signal.aborted) abort();
+      else signal.addEventListener("abort", abort, { once: true });
+      const timer = setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
       try {
         return await commands.run(executable, argv, { signal: controller.signal });
       } catch (error) {
-        if (timedOut) {
-          throw Object.assign(new Error("COMMAND_TIMEOUT"), { code: "ETIMEDOUT" });
-        }
+        if (timedOut) throw Object.assign(new Error("COMMAND_TIMEOUT"), { code: "ETIMEDOUT" });
         throw error;
       } finally {
         clearTimeout(timer);
-        signal.removeEventListener("abort", abortFromCaller);
+        signal.removeEventListener("abort", abort);
       }
     },
-  };
-  return Object.freeze(runner);
+  });
 }
 
 async function runCommand(
@@ -265,39 +288,30 @@ async function runCommand(
 ): Promise<CommandCapture> {
   try {
     const output = await commands.run(executable, argv, { signal });
-    return {
-      state: exitState(output.exitCode),
-      stdout: output.stdout,
-      stderr: output.stderr,
-    };
+    return { state: exitState(output.exitCode), stdout: output.stdout, stderr: output.stderr };
   } catch (error) {
     return { state: failureState(error), stdout: "", stderr: "" };
   }
 }
 
-function completeAt(state: RawQueryState, now: () => string): string | null {
-  return state === "timeout" || state === "cancelled" ? null : now();
-}
-
 function sourceCapture<T>(
   records: readonly T[],
   state: RawQueryState,
+  coverageKind: ProductionSourceCapture<T>["coverageKind"],
   startedAt: string,
   now: () => string,
 ): ProductionSourceCapture<T> {
   return {
     state,
+    coverageKind,
     startedAt,
-    completedAt: completeAt(state, now),
+    completedAt: state === "timeout" || state === "cancelled" ? null : now(),
     records,
   };
 }
 
-function snapshotMaterial<T>(capture: ProductionSourceCapture<T>): Readonly<{
-  state: RawQueryState;
-  records: readonly T[];
-}> {
-  return { state: capture.state, records: capture.records };
+function snapshotMaterial<T>(capture: ProductionSourceCapture<T>) {
+  return { state: capture.state, coverageKind: capture.coverageKind, records: capture.records };
 }
 
 async function fileIdentity(
@@ -308,7 +322,7 @@ async function fileIdentity(
   try {
     const canonicalPath = await filesystem.canonicalize(path, signal);
     const metadata = await filesystem.stat(canonicalPath, signal);
-    const fingerprint = digest("cmc:macos:filesystem:v1", {
+    const fingerprint = digest("cmc:macos:filesystem:v2", {
       device: metadata.device,
       inode: metadata.inode,
       fileType: metadata.fileType,
@@ -320,19 +334,8 @@ async function fileIdentity(
     return {
       state: "complete",
       identity: {
-        filesystem: {
-          canonicalPath,
-          device: metadata.device,
-          inode: metadata.inode,
-          fileType: metadata.fileType,
-          uid: metadata.uid,
-          gid: metadata.gid,
-          fingerprint,
-        },
-        executableFingerprint: digest("cmc:macos:executable:v1", {
-          canonicalPath,
-          fingerprint,
-        }),
+        filesystem: { canonicalPath, ...metadata, fingerprint },
+        executableFingerprint: digest("cmc:macos:executable:v2", { canonicalPath, fingerprint }),
       },
     };
   } catch (error) {
@@ -344,17 +347,13 @@ function parseJsonObject(value: string): Readonly<Record<string, unknown>> | nul
   try {
     const parsed: unknown = JSON.parse(value);
     return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
-      ? parsed as Readonly<Record<string, unknown>>
-      : null;
+      ? parsed as Readonly<Record<string, unknown>> : null;
   } catch {
     return null;
   }
 }
 
-function metadataString(
-  metadata: Readonly<Record<string, unknown>> | null,
-  key: string,
-): string | null {
+function metadataString(metadata: Readonly<Record<string, unknown>> | null, key: string): string | null {
   const value = metadata?.[key];
   return typeof value === "string" && value.length > 0 ? value : null;
 }
@@ -365,47 +364,30 @@ function signingFields(value: string): Readonly<{
 }> | null {
   const requirement = value.match(/^designated =>\s*(.+)$/mu)?.[1]?.trim();
   const team = value.match(/^TeamIdentifier=(\S+)$/mu)?.[1]?.trim();
-  return requirement && team
-    ? { designatedRequirement: requirement, teamIdentifier: team }
-    : null;
+  return requirement && team ? { designatedRequirement: requirement, teamIdentifier: team } : null;
 }
 
 async function collectApp(
   commands: CommandRunner,
   filesystem: MacOSCorrelationReadOnlyFileSystem,
   path: string,
+  packageIdentifier: string | undefined,
+  packageRegisteredUninstaller: boolean,
   signal: AbortSignal,
 ): Promise<CollectedApp> {
   const bundleFile = await fileIdentity(filesystem, path, signal);
   if (bundleFile.identity === null) {
-    return {
-      record: { localId: digest("cmc:macos:app-local:v1", path) },
-      state: bundleFile.state,
-      metadata: null,
-      executablePath: null,
-    };
+    return { record: { localId: digest("cmc:app-local:v2", path) }, state: bundleFile.state, executablePath: null, metadata: null, packageRegisteredUninstaller };
   }
-  const plistPath = join(
-    bundleFile.identity.filesystem.canonicalPath,
-    "Contents",
-    "Info.plist",
-  );
-  const plist = await runCommand(
-    commands,
-    "/usr/bin/plutil",
-    ["-convert", "json", "-o", "-", plistPath],
-    signal,
-  );
+  const plistPath = join(bundleFile.identity.filesystem.canonicalPath, "Contents", "Info.plist");
+  const plist = await runCommand(commands, "/usr/bin/plutil", ["-convert", "json", "-o", "-", plistPath], signal);
   const metadata = plist.state === "complete" ? parseJsonObject(plist.stdout) : null;
-  const metadataState = plist.state === "complete" && metadata === null
-    ? "parse_loss"
-    : plist.state;
+  const metadataState = plist.state === "complete" && metadata === null ? "parse_loss" : plist.state;
   const bundleIdentifier = metadataString(metadata, "CFBundleIdentifier");
   const executableName = metadataString(metadata, "CFBundleExecutable");
-  const executablePath = executableName === null
-    ? null
+  const executablePath = executableName === null ? null
     : join(bundleFile.identity.filesystem.canonicalPath, "Contents", "MacOS", executableName);
-  const executableFile = executablePath === null
+  const executable = executablePath === null
     ? { state: "parse_loss" as const, identity: null }
     : await fileIdentity(filesystem, executablePath, signal);
   const codesign = await runCommand(
@@ -414,94 +396,120 @@ async function collectApp(
     ["-d", "-r-", "--verbose=4", bundleFile.identity.filesystem.canonicalPath],
     signal,
   );
-  const signing = codesign.state === "complete"
-    ? signingFields(`${codesign.stdout}\n${codesign.stderr}`)
-    : null;
-  const signingState = codesign.state === "complete" && signing === null
-    ? "parse_loss"
-    : codesign.state;
+  const signing = codesign.state === "complete" ? signingFields(`${codesign.stdout}\n${codesign.stderr}`) : null;
+  const signingState = codesign.state === "complete" && signing === null ? "parse_loss" : codesign.state;
   const record: ProductionInstalledAppRecord = {
-    localId: digest("cmc:macos:app-local:v1", {
-      filesystem: bundleFile.identity.filesystem.fingerprint,
-      bundleIdentifier,
-    }),
+    localId: digest("cmc:app-local:v2", bundleFile.identity.filesystem.fingerprint),
     filesystem: bundleFile.identity.filesystem,
-    owner: {
-      uid: bundleFile.identity.filesystem.uid,
-      gid: bundleFile.identity.filesystem.gid,
-    },
-    ...(bundleIdentifier === null
-      ? {}
-      : {
-          bundle: {
-            bundleIdentifier,
-            metadataFingerprint: digest("cmc:macos:bundle-metadata:v1", plist.stdout),
-          },
-        }),
-    ...(executableFile.identity === null
-      ? {}
-      : { executableFingerprint: executableFile.identity.executableFingerprint }),
-    ...(signing === null || executableFile.identity === null
-      ? {}
-      : {
-          signing: {
-            ...signing,
-            executableFingerprint: executableFile.identity.executableFingerprint,
-          },
-        }),
+    owner: { uid: bundleFile.identity.filesystem.uid, gid: bundleFile.identity.filesystem.gid },
+    ...(packageIdentifier === undefined ? {} : { packageIdentifier }),
+    ...(bundleIdentifier === null ? {} : {
+      bundle: { bundleIdentifier, metadataFingerprint: digest("cmc:bundle-metadata:v2", plist.stdout) },
+    }),
+    ...(executable.identity === null ? {} : { executableFingerprint: executable.identity.executableFingerprint }),
+    ...(signing === null || executable.identity === null ? {} : {
+      signing: { ...signing, executableFingerprint: executable.identity.executableFingerprint },
+    }),
   };
   return {
     record,
-    state: mergeState(
-      bundleFile.state,
-      metadataState,
-      executableFile.state,
-      signingState,
-    ),
+    state: mergeState(bundleFile.state, metadataState, executable.state, signingState),
+    executablePath: executable.identity?.filesystem.canonicalPath ?? null,
     metadata,
-    executablePath: executableFile.identity?.filesystem.canonicalPath ?? null,
+    packageRegisteredUninstaller,
   };
+}
+
+async function listRootApps(
+  filesystem: MacOSCorrelationReadOnlyFileSystem,
+  root: string,
+  optional: boolean,
+  signal: AbortSignal,
+): Promise<Readonly<{ state: RawQueryState; paths: readonly string[] }>> {
+  const queue = [root];
+  const paths: string[] = [];
+  let state: RawQueryState = "complete";
+  while (queue.length > 0 && paths.length < MAX_SOURCE_RECORDS) {
+    const current = queue.shift()!;
+    try {
+      const entries = await filesystem.readDirectory(current, signal);
+      for (const entry of entries) {
+        if (entry.fileType === "bundle" && entry.path.endsWith(".app")) paths.push(entry.path);
+        else if (entry.fileType === "directory") queue.push(entry.path);
+      }
+    } catch (error) {
+      if (errorCode(error) !== "ENOENT") state = mergeState(state, failureState(error));
+      else if (!optional) state = mergeState(state, "capability_missing");
+    }
+    if (queue.length + paths.length > MAX_SOURCE_RECORDS) state = mergeState(state, "truncated");
+  }
+  return { state, paths: [...new Set(paths)].sort() };
+}
+
+function packageAppPaths(stdout: string): readonly string[] | null {
+  const lines = stdout.split(/\r?\n/u).map((line) => line.trim()).filter(Boolean);
+  if (lines.some((line) => isAbsolute(line) || line.includes("\0"))) return null;
+  const paths = lines
+    .map((line) => line.match(/^(.+?\.app)(?:\/|$)/u)?.[1])
+    .filter((value): value is string => value !== undefined);
+  return [...new Set(paths)].sort();
 }
 
 async function collectInstalledApps(
   commands: CommandRunner,
   filesystem: MacOSCorrelationReadOnlyFileSystem,
+  userHome: string,
   signal: AbortSignal,
   now: () => string,
 ): Promise<InstalledCapture> {
   const startedAt = now();
-  const inventory = await runCommand(
-    commands,
-    "/usr/bin/mdfind",
-    [INSTALLED_APPS_QUERY],
-    signal,
-  );
-  if (inventory.state !== "complete") {
-    return {
-      capture: sourceCapture([], inventory.state, startedAt, now),
-      apps: [],
-    };
+  const roots = [...APP_ROOTS, join(userHome, "Applications")];
+  const rootInventories = await Promise.all(roots.map((root, index) =>
+    listRootApps(filesystem, root, index === roots.length - 1, signal)
+  ));
+  let state = mergeState(...rootInventories.map((inventory) => inventory.state));
+  const discovered = new Map<string, { packageIdentifier?: string; uninstaller: boolean }>();
+  for (const path of rootInventories.flatMap(({ paths }) => paths)) discovered.set(path, { uninstaller: false });
+
+  const packages = await runCommand(commands, "/usr/sbin/pkgutil", ["--pkgs"], signal);
+  state = mergeState(state, packages.state);
+  if (packages.state === "complete") {
+    const identifiers = [...new Set(packages.stdout.split(/\r?\n/u).map((line) => line.trim()).filter(Boolean))].sort();
+    if (identifiers.length > MAX_SOURCE_RECORDS) state = mergeState(state, "truncated");
+    for (const packageIdentifier of identifiers.slice(0, MAX_SOURCE_RECORDS)) {
+      const files = await runCommand(commands, "/usr/sbin/pkgutil", ["--files", packageIdentifier], signal);
+      state = mergeState(state, files.state);
+      if (files.state !== "complete") continue;
+      const relativeApps = packageAppPaths(files.stdout);
+      if (relativeApps === null) {
+        state = mergeState(state, "parse_loss");
+        continue;
+      }
+      for (const relativeApp of relativeApps) {
+        const candidates = roots.map((root) => join(root, relativeApp.replace(/^Applications\//u, "")));
+        for (const path of candidates) {
+          try {
+            const canonical = await filesystem.canonicalize(path, signal);
+            discovered.set(canonical, {
+              packageIdentifier,
+              uninstaller: /(?:uninstall|remove)/iu.test(basename(relativeApp)),
+            });
+            break;
+          } catch (error) {
+            if (errorCode(error) !== "ENOENT") state = mergeState(state, failureState(error));
+          }
+        }
+      }
+    }
   }
-  const paths = [...new Set(inventory.stdout
-    .split(/\r?\n/u)
-    .map((line) => line.trim())
-    .filter(Boolean))].sort();
-  const truncated = paths.length > MAX_SOURCE_RECORDS;
+  if (discovered.size > MAX_SOURCE_RECORDS) state = mergeState(state, "truncated");
   const apps: CollectedApp[] = [];
-  for (const path of paths.slice(0, MAX_SOURCE_RECORDS)) {
-    apps.push(await collectApp(commands, filesystem, path, signal));
+  for (const [path, metadata] of [...discovered.entries()].sort(([left], [right]) => left.localeCompare(right)).slice(0, MAX_SOURCE_RECORDS)) {
+    apps.push(await collectApp(commands, filesystem, path, metadata.packageIdentifier, metadata.uninstaller, signal));
   }
-  const state = mergeState(
-    truncated ? "truncated" : "complete",
-    ...apps.map(({ state: appState }) => appState),
-  );
+  state = mergeState(state, ...apps.map((app) => app.state));
   return {
-    capture: sourceCapture(
-      apps.map(({ record }) => record),
-      state,
-      startedAt,
-      now,
-    ),
+    capture: sourceCapture(apps.map(({ record }) => record), state, "canonical", startedAt, now),
     apps,
   };
 }
@@ -511,44 +519,32 @@ async function collectProcesses(
   filesystem: MacOSCorrelationReadOnlyFileSystem,
   signal: AbortSignal,
   now: () => string,
-): Promise<ProductionSourceCapture<ProductionProcessRecord>> {
+): Promise<ProcessCapture> {
   const startedAt = now();
-  const command = await runCommand(
-    commands,
-    "/bin/ps",
-    ["-axo", "pid=,lstart=,comm="],
-    signal,
-  );
+  const command = await runCommand(commands, "/bin/ps", ["-axo", "pid=,lstart=,comm="], signal);
   if (command.state !== "complete") {
-    return sourceCapture([], command.state, startedAt, now);
+    return { capture: sourceCapture([], command.state, "canonical", startedAt, now), records: [] };
   }
-  const records: ProductionProcessRecord[] = [];
+  const records: ProcessInternal[] = [];
   let state: RawQueryState = "complete";
   const lines = command.stdout.split(/\r?\n/u).map((line) => line.trim()).filter(Boolean);
   for (const line of lines.slice(0, MAX_SOURCE_RECORDS)) {
-    const match = line.match(
-      /^(\d+)\s+([A-Za-z]{3}\s+[A-Za-z]{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}\s+\d{4})\s+(.+)$/u,
-    );
-    if (!match) {
-      state = mergeState(state, "parse_loss");
-      continue;
-    }
+    const match = line.match(/^(\d+)\s+([A-Za-z]{3}\s+[A-Za-z]{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}\s+\d{4})\s+(.+)$/u);
+    if (!match) { state = mergeState(state, "parse_loss"); continue; }
     const executable = await fileIdentity(filesystem, match[3]!, signal);
-    if (executable.identity === null) {
-      state = mergeState(state, executable.state);
-      continue;
-    }
+    state = mergeState(state, executable.state);
+    if (executable.identity === null) continue;
     records.push({
-      localId: digest("cmc:macos:process-local:v1", line),
-      executableFingerprint: executable.identity.executableFingerprint,
-      pidGeneration: digest("cmc:macos:pid-generation:v1", {
-        pid: match[1],
-        startedAt: match[2],
-      }),
+      pid: match[1]!,
+      record: {
+        localId: digest("cmc:process-local:v2", line),
+        executableFingerprint: executable.identity.executableFingerprint,
+        pidGeneration: digest("cmc:pid-generation:v2", { pid: match[1], startedAt: match[2] }),
+      },
     });
   }
   if (lines.length > MAX_SOURCE_RECORDS) state = mergeState(state, "truncated");
-  return sourceCapture(records, state, startedAt, now);
+  return { capture: sourceCapture(records.map(({ record }) => record), state, "canonical", startedAt, now), records };
 }
 
 async function collectOpenFiles(
@@ -556,80 +552,35 @@ async function collectOpenFiles(
   filesystem: MacOSCorrelationReadOnlyFileSystem,
   signal: AbortSignal,
   now: () => string,
-): Promise<ProductionSourceCapture<ProductionOpenFileRecord>> {
+): Promise<OpenCapture> {
   const startedAt = now();
-  const command = await runCommand(
-    commands,
-    "/usr/sbin/lsof",
-    ["-nP", "-Fpcn", "-d", "cwd,txt"],
-    signal,
-  );
+  const command = await runCommand(commands, "/usr/sbin/lsof", ["-nP", "-Fpcn", "-d", "cwd,txt"], signal);
   if (command.state !== "complete") {
-    return sourceCapture([], command.state, startedAt, now);
+    return { capture: sourceCapture([], command.state, "canonical", startedAt, now), records: [] };
   }
-  const records: ProductionOpenFileRecord[] = [];
+  const records: OpenInternal[] = [];
   let state: RawQueryState = "complete";
   let pid = "";
   let commandName = "";
   for (const line of command.stdout.split(/\r?\n/u)) {
-    if (line.startsWith("p")) {
-      pid = line.slice(1);
-      continue;
-    }
-    if (line.startsWith("c")) {
-      commandName = line.slice(1);
-      continue;
-    }
+    if (line.startsWith("p")) { pid = line.slice(1); continue; }
+    if (line.startsWith("c")) { commandName = line.slice(1); continue; }
     if (!line.startsWith("n") || line.length === 1) continue;
-    if (!/^\d+$/u.test(pid)) {
-      state = mergeState(state, "parse_loss");
-      continue;
-    }
+    if (!/^\d+$/u.test(pid)) { state = mergeState(state, "parse_loss"); continue; }
     const target = await fileIdentity(filesystem, line.slice(1), signal);
-    if (target.identity === null) {
-      state = mergeState(state, target.state);
-      continue;
-    }
+    state = mergeState(state, target.state);
+    if (target.identity === null) continue;
     records.push({
-      localId: digest("cmc:macos:open-file-local:v1", {
-        pid,
-        target: target.identity.filesystem.fingerprint,
-      }),
-      targetFilesystemFingerprint: target.identity.filesystem.fingerprint,
-      processGeneration: digest("cmc:macos:open-process:v1", { pid, commandName }),
+      pid,
+      record: {
+        localId: digest("cmc:open-local:v2", { pid, target: target.identity.filesystem.fingerprint }),
+        targetFilesystemFingerprint: target.identity.filesystem.fingerprint,
+        processGeneration: digest("cmc:open-process:v2", { pid, commandName }),
+      },
     });
-    if (records.length === MAX_SOURCE_RECORDS) {
-      state = mergeState(state, "truncated");
-      break;
-    }
+    if (records.length === MAX_SOURCE_RECORDS) { state = mergeState(state, "truncated"); break; }
   }
-  return sourceCapture(records, state, startedAt, now);
-}
-
-async function listStartupPlists(
-  filesystem: MacOSCorrelationReadOnlyFileSystem,
-  userHome: string,
-  signal: AbortSignal,
-): Promise<Readonly<{ state: RawQueryState; paths: readonly string[] }>> {
-  const roots = [
-    "/Library/LaunchAgents",
-    "/Library/LaunchDaemons",
-    join(userHome, "Library", "LaunchAgents"),
-  ];
-  const paths: string[] = [];
-  let state: RawQueryState = "complete";
-  for (const root of roots) {
-    try {
-      const entries = await filesystem.readDirectory(root, signal);
-      paths.push(...entries
-        .filter((entry) => entry.fileType === "file" && extname(entry.path) === ".plist")
-        .map(({ path }) => path));
-    } catch (error) {
-      if (errorCode(error) === "ENOENT") continue;
-      state = mergeState(state, failureState(error));
-    }
-  }
-  return { state, paths: [...new Set(paths)].sort() };
+  return { capture: sourceCapture(records.map(({ record }) => record), state, "canonical", startedAt, now), records };
 }
 
 async function collectStartupTargets(
@@ -640,38 +591,37 @@ async function collectStartupTargets(
   now: () => string,
 ): Promise<ProductionSourceCapture<ProductionStartupTargetRecord>> {
   const startedAt = now();
-  const inventory = await listStartupPlists(filesystem, userHome, signal);
+  const roots = ["/Library/LaunchAgents", "/Library/LaunchDaemons", join(userHome, "Library", "LaunchAgents")];
+  const paths: string[] = [];
+  let state: RawQueryState = "complete";
+  for (const root of roots) {
+    try {
+      paths.push(...(await filesystem.readDirectory(root, signal))
+        .filter((entry) => entry.fileType === "file" && extname(entry.path) === ".plist")
+        .map(({ path }) => path));
+    } catch (error) {
+      if (errorCode(error) !== "ENOENT") state = mergeState(state, failureState(error));
+    }
+  }
   const records: ProductionStartupTargetRecord[] = [];
-  let state = inventory.state;
-  for (const path of inventory.paths.slice(0, MAX_SOURCE_RECORDS)) {
-    const plist = await runCommand(
-      commands,
-      "/usr/bin/plutil",
-      ["-convert", "json", "-o", "-", path],
-      signal,
-    );
+  for (const path of [...new Set(paths)].sort().slice(0, MAX_SOURCE_RECORDS)) {
+    const plist = await runCommand(commands, "/usr/bin/plutil", ["-convert", "json", "-o", "-", path], signal);
     state = mergeState(state, plist.state);
     if (plist.state !== "complete") continue;
     const metadata = parseJsonObject(plist.stdout);
     const args = metadata?.ProgramArguments;
     const targetPath = metadataString(metadata, "Program") ??
       (Array.isArray(args) && typeof args[0] === "string" ? args[0] : null);
-    if (targetPath === null) {
-      state = mergeState(state, "parse_loss");
-      continue;
-    }
+    if (targetPath === null) { state = mergeState(state, "parse_loss"); continue; }
     const executable = await fileIdentity(filesystem, targetPath, signal);
     state = mergeState(state, executable.state);
-    if (executable.identity === null) continue;
-    records.push({
-      localId: digest("cmc:macos:startup-local:v1", path),
+    if (executable.identity !== null) records.push({
+      localId: digest("cmc:startup-local:v2", path),
       executableFingerprint: executable.identity.executableFingerprint,
     });
   }
-  if (inventory.paths.length > MAX_SOURCE_RECORDS) {
-    state = mergeState(state, "truncated");
-  }
-  return sourceCapture(records, state, startedAt, now);
+  if (paths.length > MAX_SOURCE_RECORDS) state = mergeState(state, "truncated");
+  return sourceCapture(records, state, "canonical", startedAt, now);
 }
 
 async function collectReceipts(
@@ -681,31 +631,29 @@ async function collectReceipts(
   now: () => string,
 ): Promise<ReceiptCapture> {
   const startedAt = now();
-  const command = await runCommand(
-    commands,
-    "/usr/sbin/pkgutil",
-    ["--file-info", candidate.filesystem.canonicalPath],
-    signal,
-  );
-  if (command.state !== "complete") {
-    return {
-      capture: sourceCapture([], command.state, startedAt, now),
-      packageIdentifiers: [],
-    };
+  const inventory = await runCommand(commands, "/usr/sbin/pkgutil", ["--pkgs"], signal);
+  if (inventory.state !== "complete") {
+    return { capture: sourceCapture([], inventory.state, "candidate_specific", startedAt, now), packageIdentifiers: [] };
   }
-  const packageIdentifiers = [...new Set(command.stdout
-    .split(/\r?\n/u)
+  const fileInfo = await runCommand(commands, "/usr/sbin/pkgutil", ["--file-info", candidate.filesystem.canonicalPath], signal);
+  if (fileInfo.state !== "complete") {
+    return { capture: sourceCapture([], fileInfo.state, "candidate_specific", startedAt, now), packageIdentifiers: [] };
+  }
+  const canonicalPackages = new Set(inventory.stdout.split(/\r?\n/u).map((line) => line.trim()).filter(Boolean));
+  const parsed = fileInfo.stdout.split(/\r?\n/u)
     .map((line) => line.match(/^(?:package-id|pkgid):\s*(\S+)$/u)?.[1])
-    .filter((value): value is string => value !== undefined))].sort();
-  const records = packageIdentifiers.map((packageIdentifier) => ({
-    localId: digest("cmc:macos:receipt-local:v1", packageIdentifier),
-    packageIdentifier,
-    targetFilesystemFingerprint: candidate.filesystem.fingerprint,
-  }));
+    .filter((value): value is string => value !== undefined);
+  const packageIdentifiers = [...new Set(parsed)].filter((identifier) => canonicalPackages.has(identifier)).sort();
+  const unrecognized = parsed.some((identifier) => !canonicalPackages.has(identifier));
   return {
     capture: sourceCapture(
-      records,
-      packageIdentifiers.length === 0 ? "partial_inventory" : "complete",
+      packageIdentifiers.map((packageIdentifier) => ({
+        localId: digest("cmc:receipt-local:v2", packageIdentifier),
+        packageIdentifier,
+        targetFilesystemFingerprint: candidate.filesystem.fingerprint,
+      })),
+      unrecognized ? "parse_loss" : "complete",
+      "candidate_specific",
       startedAt,
       now,
     ),
@@ -713,288 +661,338 @@ async function collectReceipts(
   };
 }
 
-async function collectOfficialUninstallers(
-  filesystem: MacOSCorrelationReadOnlyFileSystem,
-  candidateApp: CollectedApp,
+function queryClaim(key: InstallationKey, claim: RawIdentityClaim): `hmac-sha256:v1:${string}` {
+  return key.derive("cmc:correlation:query-claim:v2", claim.kind, stable(claim));
+}
+
+function appClaims(app: CollectedApp): readonly [RawIdentityClaim, RawIdentityClaim, RawIdentityClaim] | null {
+  const bundle = app.record.bundle;
+  const signing = app.record.signing;
+  const executable = app.record.executableFingerprint;
+  return bundle && signing && executable ? [
+    { kind: "bundle", ...bundle },
+    { kind: "signing", ...signing },
+    { kind: "executable", executableFingerprint: executable },
+  ] : null;
+}
+
+function historyMatchesApp(record: KeyedOwnerBindingHistoryRecord, app: CollectedApp, key: InstallationKey): boolean {
+  const claims = appClaims(app);
+  return claims !== null && record.keyId === key.keyId && record.derivationVersion === key.derivationVersion &&
+    queryClaim(key, claims[0]) === record.ownerBundleDigest &&
+    queryClaim(key, claims[1]) === record.ownerSigningDigest &&
+    queryClaim(key, claims[2]) === record.ownerExecutableDigest;
+}
+
+function historyRecord(
+  key: InstallationKey,
   candidate: ProductionCandidateIdentityRecord,
-  signal: AbortSignal,
-  now: () => string,
-): Promise<ProductionSourceCapture<ProductionOfficialUninstallerRecord>> {
-  const startedAt = now();
-  const declared = metadataString(
-    candidateApp.metadata,
-    "CodexMacCleanerOfficialUninstallerExecutable",
-  );
-  if (declared === null) {
-    return sourceCapture([], "partial_inventory", startedAt, now);
-  }
-  const bundle = candidate.bundle;
-  const signing = candidate.signing;
-  const executablePath = declared.startsWith("/")
-    ? declared
-    : join(candidate.filesystem.canonicalPath, "Contents", "MacOS", declared);
-  const executable = await fileIdentity(filesystem, executablePath, signal);
-  if (bundle === undefined || signing === undefined || executable.identity === null) {
-    return sourceCapture(
-      [],
-      mergeState("parse_loss", executable.state),
-      startedAt,
-      now,
-    );
-  }
-  return sourceCapture([{
-    localId: digest("cmc:macos:uninstaller-local:v1", executablePath),
-    bundleIdentifier: bundle.bundleIdentifier,
-    designatedRequirement: signing.designatedRequirement,
-    executableFingerprint: executable.identity.executableFingerprint,
-  }], "complete", startedAt, now);
+  parentFingerprint: string,
+  ownerTypeFingerprint: string,
+  app: CollectedApp,
+  now: string,
+): KeyedOwnerBindingHistoryRecord | null {
+  const claims = appClaims(app);
+  if (claims === null) return null;
+  const material = {
+    artifactDigest: key.derive("cmc:owner-history:v1", "artifact", candidate.filesystem.fingerprint),
+    ownerTypeDigest: key.derive("cmc:owner-history:v1", "owner-type", ownerTypeFingerprint),
+    rootDigest: key.derive("cmc:owner-history:v1", "root", parentFingerprint),
+    ownerBundleDigest: queryClaim(key, claims[0]),
+    ownerSigningDigest: queryClaim(key, claims[1]),
+    ownerExecutableDigest: queryClaim(key, claims[2]),
+  };
+  return {
+    keyId: key.keyId,
+    derivationVersion: key.derivationVersion,
+    ...material,
+    bindingFingerprint: digest("cmc:owner-history-binding:v1", material),
+    provenanceClass: "signed_process_open_file_history",
+    lastValidatedAt: now,
+  };
 }
 
-function otoolDependencies(stdout: string): readonly string[] | null {
-  const lines = stdout.split(/\r?\n/u).slice(1).map((line) => line.trim()).filter(Boolean);
-  const values: string[] = [];
-  for (const line of lines) {
-    const match = line.match(/^(.+?)\s+\(compatibility version /u);
-    if (!match) return null;
-    values.push(match[1]!);
+function bindingRecords(
+  baselineHistory: readonly KeyedOwnerBindingHistoryRecord[],
+  key: InstallationKey | undefined,
+  candidate: ProductionCandidateIdentityRecord,
+  receipt: ReceiptCapture,
+  container: ProductionOwnerBindingRecord | null,
+  parentFingerprint: string,
+  ownerTypeFingerprint: string,
+): readonly ProductionOwnerBindingRecord[] {
+  const records: ProductionOwnerBindingRecord[] = [];
+  for (const packageIdentifier of receipt.packageIdentifiers) records.push({
+    localId: digest("cmc:receipt-binding:v2", packageIdentifier),
+    sourceKind: "exact_receipt_payload",
+    ownerKind: "package",
+    packageIdentifier,
+    receiptPayload: { packageIdentifier, targetFilesystemFingerprint: candidate.filesystem.fingerprint },
+  });
+  if (container !== null) records.push(container);
+  if (key !== undefined) {
+    const artifactDigest = key.derive("cmc:owner-history:v1", "artifact", candidate.filesystem.fingerprint);
+    const ownerTypeDigest = key.derive("cmc:owner-history:v1", "owner-type", ownerTypeFingerprint);
+    const rootDigest = key.derive("cmc:owner-history:v1", "root", parentFingerprint);
+    for (const history of baselineHistory.filter((entry) =>
+      entry.keyId === key.keyId && entry.derivationVersion === key.derivationVersion &&
+      entry.artifactDigest === artifactDigest && entry.ownerTypeDigest === ownerTypeDigest && entry.rootDigest === rootDigest
+    )) records.push({
+      localId: digest("cmc:history-binding-local:v2", history.bindingFingerprint),
+      sourceKind: "signed_process_open_file_history",
+      ownerKind: "app_bundle",
+      historicalBinding: {
+        keyId: history.keyId,
+        derivationVersion: history.derivationVersion,
+        artifactDigest: history.artifactDigest,
+        ownerTypeDigest: history.ownerTypeDigest,
+        rootDigest: history.rootDigest,
+        ownerBundleDigest: history.ownerBundleDigest,
+        ownerSigningDigest: history.ownerSigningDigest,
+        ownerExecutableDigest: history.ownerExecutableDigest,
+        bindingFingerprint: history.bindingFingerprint,
+      } satisfies ProductionHistoricalBindingRecord,
+    });
   }
-  return values;
+  return records;
 }
 
-async function collectDependencies(
+async function containerBinding(
   commands: CommandRunner,
-  installed: InstalledCapture,
-  candidateExecutablePath: string | null,
-  candidateExecutableFingerprint: string | undefined,
+  candidate: ProductionCandidateIdentityRecord,
+  category: CorrelationArtifactCategory,
   signal: AbortSignal,
-  now: () => string,
-): Promise<ProductionSourceCapture<ProductionDependencyRecord>> {
-  const startedAt = now();
-  if (installed.capture.state !== "complete") {
-    return sourceCapture([], installed.capture.state, startedAt, now);
-  }
-  if (
-    candidateExecutablePath === null ||
-    candidateExecutableFingerprint === undefined
-  ) {
-    return sourceCapture([], "parse_loss", startedAt, now);
-  }
-  const records: ProductionDependencyRecord[] = [];
-  let state: RawQueryState = "complete";
-  for (const app of installed.apps) {
-    if (app.executablePath === null || app.executablePath === candidateExecutablePath) {
-      continue;
+): Promise<Readonly<{ state: RawQueryState; record: ProductionOwnerBindingRecord | null }>> {
+  if (category !== "container") return { state: "complete", record: null };
+  const metadataPath = join(candidate.filesystem.canonicalPath, ".com.apple.containermanagerd.metadata.plist");
+  const command = await runCommand(commands, "/usr/bin/plutil", ["-convert", "json", "-o", "-", metadataPath], signal);
+  if (command.state !== "complete") return { state: command.state, record: null };
+  const metadata = parseJsonObject(command.stdout);
+  const bundleIdentifier = metadataString(metadata, "MCMMetadataIdentifier");
+  if (bundleIdentifier === null) return { state: "parse_loss", record: null };
+  return {
+    state: "complete",
+    record: {
+      localId: digest("cmc:container-binding:v2", bundleIdentifier),
+      sourceKind: "os_container_metadata",
+      ownerKind: "app_bundle",
+      bundle: { bundleIdentifier, metadataFingerprint: digest("cmc:container-metadata:v2", command.stdout) },
+      containerMetadata: {
+        bundleIdentifier,
+        targetFilesystemFingerprint: candidate.filesystem.fingerprint,
+        individualContainer: true,
+      },
+    },
+  };
+}
+
+function categoryFor(candidatePath: string, userHome: string): CorrelationArtifactCategory {
+  const library = resolve(userHome, "Library");
+  const candidate = resolve(candidatePath);
+  const fromLibrary = relative(library, candidate);
+  if (!fromLibrary || fromLibrary === ".." || fromLibrary.startsWith(`..${sep}`) || isAbsolute(fromLibrary)) return "unknown";
+  const first = fromLibrary.split(sep)[0] ?? "";
+  return first === "Caches" ? "cache"
+    : first === "Logs" ? "log"
+      : first === "Application Support" ? "application_support"
+        : first === "Containers" ? "container"
+          : first === "Group Containers" ? "group_container"
+            : first === "Preferences" ? "preference"
+              : first === "WebKit" ? "webkit"
+                : first === "HTTPStorages" ? "http_storage"
+                  : first === "Saved Application State" ? "saved_state" : "unknown";
+}
+
+function ownerAppsForBinding(
+  bindings: readonly ProductionOwnerBindingRecord[],
+  installed: InstalledCapture,
+  key: InstallationKey | undefined,
+): readonly CollectedApp[] {
+  return installed.apps.filter((app) => bindings.some((binding) => {
+    if (binding.sourceKind === "exact_receipt_payload") {
+      return binding.packageIdentifier !== undefined && binding.packageIdentifier === app.record.packageIdentifier;
     }
-    const command = await runCommand(
-      commands,
-      "/usr/bin/otool",
-      ["-L", app.executablePath],
-      signal,
-    );
-    state = mergeState(state, command.state);
-    if (command.state !== "complete") continue;
-    const dependencies = otoolDependencies(command.stdout);
-    if (dependencies === null) {
-      state = mergeState(state, "parse_loss");
-      continue;
+    if (binding.sourceKind === "os_container_metadata") {
+      return binding.bundle?.bundleIdentifier !== undefined &&
+        binding.bundle.bundleIdentifier === app.record.bundle?.bundleIdentifier &&
+        app.record.signing !== undefined && app.record.executableFingerprint !== undefined;
     }
-    if (dependencies.includes(candidateExecutablePath)) {
-      records.push({
-        localId: digest("cmc:macos:dependency-local:v1", app.executablePath),
-        dependeeExecutableFingerprint: candidateExecutableFingerprint,
-        relationFingerprint: digest("cmc:macos:dependency-relation:v1", {
-          dependent: app.executablePath,
-          dependee: candidateExecutablePath,
-        }),
-      });
-    }
-  }
-  return sourceCapture(
-    records,
-    records.length === 0 && state === "complete" ? "partial_inventory" : state,
-    startedAt,
-    now,
-  );
+    return key !== undefined && binding.historicalBinding !== undefined &&
+      historyMatchesApp(binding.historicalBinding as KeyedOwnerBindingHistoryRecord, app, key);
+  }));
 }
 
 async function collectCycle(
-  dependencies: Required<Pick<
-    CreateMacOSProductionCorrelationAdapterInput,
-    "commands" | "candidates" | "filesystem" | "now"
-  >>,
+  dependencies: Readonly<{
+    commands: CommandRunner;
+    candidates: MacOSCandidateRegistry;
+    filesystem: MacOSCorrelationReadOnlyFileSystem;
+    now: () => string;
+    key?: InstallationKey;
+  }>,
+  baselineHistory: readonly KeyedOwnerBindingHistoryRecord[],
   candidateRef: string,
   signal: AbortSignal,
 ): Promise<CollectionCycle> {
   const location = await dependencies.candidates.resolve(candidateRef, signal);
-  if (location === null) {
-    throw new CorrelationInputError("CORRELATION_MISSING");
+  if (location === null) throw new CorrelationInputError("CORRELATION_MISSING");
+  const candidateFile = await fileIdentity(dependencies.filesystem, location.candidatePath, signal);
+  if (candidateFile.identity === null) {
+    throw new CorrelationInputError(candidateFile.state === "permission_denied" ? "PERMISSION_DENIED" : "CORRELATION_MISSING");
   }
-  const candidateApp = await collectApp(
-    dependencies.commands,
-    dependencies.filesystem,
-    location.candidatePath,
-    signal,
-  );
-  const candidateFilesystem = candidateApp.record.filesystem;
-  if (candidateFilesystem === undefined) {
-    const error = candidateApp.state === "permission_denied"
-      ? "PERMISSION_DENIED"
-      : candidateApp.state === "capability_missing"
-        ? "CORRELATION_MISSING"
-        : "CORRELATION_SCHEMA_UNSUPPORTED";
-    throw new CorrelationInputError(error);
-  }
-  const baseCandidate: ProductionCandidateIdentityRecord = {
-    ...candidateApp.record,
-    filesystem: candidateFilesystem,
+  const category = categoryFor(candidateFile.identity.filesystem.canonicalPath, location.userHome);
+  const candidate: ProductionCandidateIdentityRecord = {
+    localId: digest("cmc:library-artifact-local:v2", candidateRef),
+    filesystem: candidateFile.identity.filesystem,
+    owner: { uid: candidateFile.identity.filesystem.uid, gid: candidateFile.identity.filesystem.gid },
+    category,
+    privateNonExecutable: PRIVATE_ACTIONABLE_CATEGORIES.has(category) && candidateFile.identity.filesystem.fileType !== "bundle",
   };
-  const [installed, processes, openFiles, startupTargets, receiptResult] =
-    await Promise.all([
-      collectInstalledApps(
-        dependencies.commands,
-        dependencies.filesystem,
-        signal,
-        dependencies.now,
-      ),
-      collectProcesses(
-        dependencies.commands,
-        dependencies.filesystem,
-        signal,
-        dependencies.now,
-      ),
-      collectOpenFiles(
-        dependencies.commands,
-        dependencies.filesystem,
-        signal,
-        dependencies.now,
-      ),
-      collectStartupTargets(
-        dependencies.commands,
-        dependencies.filesystem,
-        location.userHome,
-        signal,
-        dependencies.now,
-      ),
-      collectReceipts(
-        dependencies.commands,
-        baseCandidate,
-        signal,
-        dependencies.now,
-      ),
-    ] as const);
-  const candidate: ProductionCandidateIdentityRecord =
-    receiptResult.packageIdentifiers.length === 1
-      ? {
-          ...baseCandidate,
-          packageIdentifier: receiptResult.packageIdentifiers[0]!,
-        }
-      : baseCandidate;
-  const targetExecutables = sourceCapture<ProductionTargetExecutableRecord>(
-    candidate.executableFingerprint === undefined
-      ? []
-      : [{
-          localId: digest("cmc:macos:target-executable-local:v1", candidateRef),
-          executableFingerprint: candidate.executableFingerprint,
-        }],
-    candidate.executableFingerprint === undefined ? "parse_loss" : "complete",
+  const parent = await fileIdentity(dependencies.filesystem, dirname(candidate.filesystem.canonicalPath), signal);
+  if (parent.identity === null) throw new CorrelationInputError("CORRELATION_SNAPSHOT_STALE");
+  const ownerTypeFingerprint = digest("cmc:owner-type:v2", {
+    uid: candidate.filesystem.uid,
+    gid: candidate.filesystem.gid,
+    fileType: candidate.filesystem.fileType,
+  });
+  const [installed, processes, openFiles, startupTargets, receipts, container] = await Promise.all([
+    collectInstalledApps(dependencies.commands, dependencies.filesystem, location.userHome, signal, dependencies.now),
+    collectProcesses(dependencies.commands, dependencies.filesystem, signal, dependencies.now),
+    collectOpenFiles(dependencies.commands, dependencies.filesystem, signal, dependencies.now),
+    collectStartupTargets(dependencies.commands, dependencies.filesystem, location.userHome, signal, dependencies.now),
+    collectReceipts(dependencies.commands, candidate, signal, dependencies.now),
+    containerBinding(dependencies.commands, candidate, category, signal),
+  ] as const);
+  const bindings = bindingRecords(
+    baselineHistory,
+    dependencies.key,
+    candidate,
+    receipts,
+    container.record,
+    parent.identity.filesystem.fingerprint,
+    ownerTypeFingerprint,
+  );
+  const bindingState = mergeState(receipts.capture.state, container.state);
+  const ownerApps = ownerAppsForBinding(bindings, installed, dependencies.key);
+  const ownerExecutables = sourceCapture<ProductionOwnerExecutableRecord>(
+    ownerApps.flatMap((app) => app.record.executableFingerprint === undefined ? [] : [{
+      localId: digest("cmc:owner-executable-local:v2", app.record.executableFingerprint),
+      executableFingerprint: app.record.executableFingerprint,
+    }]),
+    installed.capture.state,
+    "candidate_specific",
     dependencies.now(),
     dependencies.now,
   );
-  const [officialUninstallers, dependenciesCapture] = await Promise.all([
-    collectOfficialUninstallers(
-      dependencies.filesystem,
-      candidateApp,
-      candidate,
-      signal,
-      dependencies.now,
-    ),
-    collectDependencies(
-      dependencies.commands,
-      installed,
-      candidateApp.executablePath,
-      candidate.executableFingerprint,
-      signal,
-      dependencies.now,
-    ),
-  ] as const);
-  const parent = await fileIdentity(
-    dependencies.filesystem,
-    dirname(candidate.filesystem.canonicalPath),
-    signal,
+  const officialUninstallers = sourceCapture<ProductionOfficialUninstallerRecord>(
+    ownerApps.flatMap((app) => {
+      const claims = appClaims(app);
+      if (!app.packageRegisteredUninstaller || claims === null) return [];
+      const bundle = claims[0] as Extract<RawIdentityClaim, { kind: "bundle" }>;
+      const signing = claims[1] as Extract<RawIdentityClaim, { kind: "signing" }>;
+      const executable = claims[2] as Extract<RawIdentityClaim, { kind: "executable" }>;
+      return [{
+        localId: digest("cmc:uninstaller-local:v2", app.record.localId),
+        bundleIdentifier: bundle.bundleIdentifier,
+        designatedRequirement: signing.designatedRequirement,
+        executableFingerprint: executable.executableFingerprint,
+      }];
+    }),
+    installed.capture.state,
+    "canonical",
+    dependencies.now(),
+    dependencies.now,
   );
-  if (parent.identity === null) {
-    const error = parent.state === "permission_denied"
-      ? "PERMISSION_DENIED"
-      : "CORRELATION_SNAPSHOT_STALE";
-    throw new CorrelationInputError(error);
+  const dependency = sourceCapture<ProductionDependencyRecord>([], "complete", "candidate_specific", dependencies.now(), dependencies.now);
+
+  const discoveredHistory: KeyedOwnerBindingHistoryRecord[] = [];
+  if (dependencies.key !== undefined && processes.capture.state === "complete" && openFiles.capture.state === "complete" && installed.capture.state === "complete") {
+    const openPids = new Set(openFiles.records
+      .filter(({ record }) => record.targetFilesystemFingerprint === candidate.filesystem.fingerprint)
+      .map(({ pid }) => pid));
+    const executableFingerprints = new Set(processes.records
+      .filter(({ pid }) => openPids.has(pid))
+      .map(({ record }) => record.executableFingerprint));
+    const owners = installed.apps.filter((app) =>
+      app.record.executableFingerprint !== undefined && executableFingerprints.has(app.record.executableFingerprint) && appClaims(app) !== null
+    );
+    if (owners.length === 1) {
+      const record = historyRecord(
+        dependencies.key,
+        candidate,
+        parent.identity.filesystem.fingerprint,
+        ownerTypeFingerprint,
+        owners[0]!,
+        dependencies.now(),
+      );
+      if (record !== null) discoveredHistory.push(record);
+    }
   }
+  const profileFingerprint = digest("cmc:requirement-profile:v2", {
+    category,
+    privateNonExecutable: candidate.privateNonExecutable,
+    bindingCount: bindings.length,
+  });
   const snapshot: ProductionCorrelationSnapshotRecord = {
     candidateFingerprint: candidate.filesystem.fingerprint,
     parentFingerprint: parent.identity.filesystem.fingerprint,
-    ownerTypeFingerprint: digest("cmc:macos:owner-type:v1", {
-      uid: candidate.filesystem.uid,
-      gid: candidate.filesystem.gid,
-      fileType: candidate.filesystem.fileType,
-    }),
-    executableFingerprint: candidate.executableFingerprint ??
-      digest("cmc:macos:missing-executable:v1", candidate.filesystem.fingerprint),
-    processFingerprint: digest(
-      "cmc:macos:process-snapshot:v1",
-      snapshotMaterial(processes),
-    ),
-    openFileFingerprint: digest(
-      "cmc:macos:open-file-snapshot:v1",
-      snapshotMaterial(openFiles),
-    ),
-    receiptFingerprint: digest(
-      "cmc:macos:receipt-snapshot:v1",
-      snapshotMaterial(receiptResult.capture),
-    ),
-    dependencyFingerprint: digest(
-      "cmc:macos:dependency-snapshot:v1",
-      snapshotMaterial(dependenciesCapture),
-    ),
+    ownerTypeFingerprint,
+    ownerExecutableFingerprint: digest("cmc:owner-executable-snapshot:v2", snapshotMaterial(ownerExecutables)),
+    processFingerprint: digest("cmc:process-snapshot:v2", snapshotMaterial(processes.capture)),
+    openFileFingerprint: digest("cmc:open-snapshot:v2", snapshotMaterial(openFiles.capture)),
+    receiptFingerprint: digest("cmc:receipt-snapshot:v2", snapshotMaterial(receipts.capture)),
+    dependencyFingerprint: digest("cmc:dependency-snapshot:v2", snapshotMaterial(dependency)),
+    ownerBindingFingerprint: digest("cmc:owner-binding-snapshot:v2", bindings),
+    requirementProfileFingerprint: profileFingerprint,
   };
   return {
     candidate,
+    ownerBindings: sourceCapture(bindings, bindingState, "candidate_specific", dependencies.now(), dependencies.now),
     installed: installed.capture,
-    processes,
-    openFiles,
+    ownerExecutables,
+    processes: processes.capture,
+    openFiles: openFiles.capture,
     startupTargets,
-    targetExecutables,
-    receipts: receiptResult.capture,
+    receipts: receipts.capture,
     officialUninstallers,
-    dependencies: dependenciesCapture,
+    dependencies: dependency,
+    discoveredHistory,
     snapshot,
   };
 }
 
-function requireCycle(value: CollectionCycle | undefined): CollectionCycle {
-  if (value === undefined) {
-    throw new CorrelationInputError("CORRELATION_SCHEMA_UNSUPPORTED");
-  }
-  return value;
+function requireCycle(cycle: CollectionCycle | undefined): CollectionCycle {
+  if (cycle === undefined) throw new CorrelationInputError("CORRELATION_SCHEMA_UNSUPPORTED");
+  return cycle;
 }
 
 /**
- * Concrete package-owned macOS collector. Caller передаёт только CommandRunner,
- * opaque candidate registry и, при необходимости, low-level read-only filesystem.
+ * Concrete package-owned macOS composition seam. Caller передаёт fixed low-level
+ * CommandRunner, opaque candidate registry и optional private state root.
  */
 export function createMacOSProductionCorrelationAdapter(
   input: CreateMacOSProductionCorrelationAdapterInput,
 ): ProductionCorrelationAdapter {
   const commandTimeoutMs = input.commandTimeoutMs ?? 30_000;
+  const history = input.ownerBindingHistory ??
+    (input.stateRoot === undefined ? undefined : new KeyedOwnerBindingHistoryStore(input.stateRoot));
+  const keyStore = input.stateRoot === undefined ? undefined : new InstallationKeyStore({ stateRoot: input.stateRoot });
   const dependencies = {
     commands: withCommandTimeout(input.commands, commandTimeoutMs),
     candidates: input.candidates,
     filesystem: input.filesystem ?? createNodeMacOSCorrelationReadOnlyFileSystem(),
     now: input.now ?? (() => new Date().toISOString()),
+    ...(input.installationKey === undefined ? {} : { key: input.installationKey }),
   } as const;
   return Object.freeze({
     async buildInput(
       buildInput: Parameters<ProductionCorrelationAdapter["buildInput"]>[0],
     ): Promise<EphemeralCorrelationInput> {
+      const key = input.installationKey ?? (keyStore === undefined ? undefined : await keyStore.loadOrCreate());
+      const buildDependencies = key === undefined ? dependencies : { ...dependencies, key };
+      const baselineHistory = history === undefined ? [] : await history.list();
       let phaseA: CollectionCycle | undefined;
+      let phaseB: CollectionCycle | undefined;
       const commandBoundary: ProductionCorrelationCommandBoundary = {
         installedApps: async () => requireCycle(phaseA).installed,
         processes: async () => requireCycle(phaseA).processes,
@@ -1002,25 +1000,36 @@ export function createMacOSProductionCorrelationAdapter(
       };
       const filesystemBoundary: ProductionCorrelationFilesystemBoundary = {
         async captureCandidate(candidateRef, phase, signal): Promise<ProductionCandidateCapture> {
-          const cycle = await collectCycle(
-            dependencies,
-            candidateRef,
-            signal,
-          );
+          const cycle = await collectCycle(buildDependencies, baselineHistory, candidateRef, signal);
           if (phase === "A") phaseA = cycle;
+          else phaseB = cycle;
           return { candidate: cycle.candidate, snapshot: cycle.snapshot };
         },
+        ownerBindings: async () => requireCycle(phaseA).ownerBindings,
+        ownerExecutables: async () => requireCycle(phaseA).ownerExecutables,
         startupTargets: async () => requireCycle(phaseA).startupTargets,
-        targetExecutables: async () => requireCycle(phaseA).targetExecutables,
         receipts: async () => requireCycle(phaseA).receipts,
         officialUninstallers: async () => requireCycle(phaseA).officialUninstallers,
         dependencies: async () => requireCycle(phaseA).dependencies,
       };
-      return buildProductionCorrelationInput({
-        ...buildInput,
-        commandBoundary,
-        filesystemBoundary,
-      });
+      const result = await buildProductionCorrelationInput({ ...buildInput, commandBoundary, filesystemBoundary });
+      if (history !== undefined && phaseA !== undefined && phaseB !== undefined && stable(phaseA.snapshot) === stable(phaseB.snapshot)) {
+        const discovered = [...phaseA.discoveredHistory, ...phaseB.discoveredHistory];
+        if (discovered.length > 0) {
+          const unique = [...new Map([...baselineHistory, ...discovered].map((record) => [stable({
+            keyId: record.keyId,
+            derivationVersion: record.derivationVersion,
+            artifactDigest: record.artifactDigest,
+            ownerTypeDigest: record.ownerTypeDigest,
+            rootDigest: record.rootDigest,
+            ownerBundleDigest: record.ownerBundleDigest,
+            ownerSigningDigest: record.ownerSigningDigest,
+            ownerExecutableDigest: record.ownerExecutableDigest,
+          }), record] as const)).values()];
+          await history.replace(unique);
+        }
+      }
+      return result;
     },
   });
 }

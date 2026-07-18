@@ -8,529 +8,211 @@ import {
   consumeEphemeralCorrelationInput,
   EphemeralCorrelationInput,
   type RawCorrelationPayload,
-  type RawIdentityClaim,
   type SyntheticCorrelationOptions,
 } from "@codex-mac-cleaner/adapters";
 import { describe, expect, it } from "vitest";
 
-import { resolveCorrelation } from "../src/index.js";
+import { buildCorrelationEvidenceSet, resolveCorrelation } from "../src/index.js";
 
-const fixedNow = "2026-07-18T00:00:00.000Z";
+const now = "2026-07-18T00:00:00.000Z";
 const deriver = {
-  keyId: "key-synthetic-a",
+  keyId: "installation-key-a",
   derivationVersion: 1,
   derive(domain: string, kind: string, value: string) {
-    const digest = createHash("sha256")
-      .update([domain, kind, value].join("\u0000"))
-      .digest("hex");
-    return `hmac-sha256:v1:${digest}` as const;
+    return `hmac-sha256:v1:${createHash("sha256")
+      .update(["installation-a", domain, kind, value].join("\u0000"))
+      .digest("hex")}` as const;
   },
 };
 
-async function run(
-  options: Partial<SyntheticCorrelationOptions> = {},
-  digestDeriver = deriver,
-) {
-  const tempRoot = await mkdtemp(join(tmpdir(), "cmc-correlation-resolver-"));
+async function run(options: Partial<SyntheticCorrelationOptions> = {}) {
+  const tempRoot = await mkdtemp(join(tmpdir(), "cmc-library-correlation-"));
   return resolveCorrelation({
-    auditId: "audit-synthetic-a",
-    auditRevision: 1,
-    findingId: "finding-synthetic-a",
+    auditId: "audit-library-a",
+    auditRevision: 2,
+    findingId: "finding-library-a",
     exclusionStateVersion: 1,
-    ruleSetVersion: 1,
-    policyVersion: 1,
-    now: fixedNow,
-    deriver: digestDeriver,
+    ruleSetVersion: 2,
+    policyVersion: 2,
+    now,
+    deriver,
     rawInput: buildSyntheticCorrelationInput({
-      seed: "resolver-seed",
+      seed: "library-resolver-seed",
       tempRoot,
+      deriver,
+      artifactCategory: "cache",
+      artifactPrivateNonExecutable: true,
       ...options,
     }),
   });
 }
 
-async function mutateRawInput(
-  mutate: (payload: RawCorrelationPayload) => RawCorrelationPayload,
+async function mutate(
+  change: (payload: RawCorrelationPayload) => RawCorrelationPayload,
 ): Promise<EphemeralCorrelationInput> {
-  const tempRoot = await mkdtemp(join(tmpdir(), "cmc-correlation-invalid-"));
-  const raw = consumeEphemeralCorrelationInput(
+  const tempRoot = await mkdtemp(join(tmpdir(), "cmc-library-invalid-"));
+  return consumeEphemeralCorrelationInput(
     buildSyntheticCorrelationInput({
-      seed: "invalid-input-seed",
+      seed: "invalid-library-seed",
       tempRoot,
-      installedVariant: "resolved",
+      deriver,
     }),
-    (payload) => payload,
+    (payload) => new EphemeralCorrelationInput(change(payload)),
   );
-  return new EphemeralCorrelationInput(mutate(raw));
 }
 
-function resolveRawInput(rawInput: EphemeralCorrelationInput) {
+function resolveRaw(rawInput: EphemeralCorrelationInput) {
   return resolveCorrelation({
-    auditId: "audit-invalid-input",
-    auditRevision: 1,
-    findingId: "finding-invalid-input",
+    auditId: "audit-invalid-a",
+    auditRevision: 2,
+    findingId: "finding-invalid-a",
     exclusionStateVersion: 1,
-    ruleSetVersion: 1,
-    policyVersion: 1,
-    now: fixedNow,
+    ruleSetVersion: 2,
+    policyVersion: 2,
+    now,
     deriver,
     rawInput,
   });
 }
 
-function conflictFor(kind: RawIdentityClaim["kind"]): RawIdentityClaim {
-  switch (kind) {
-    case "filesystem":
-      return {
-        kind,
-        canonicalPath: ["", "temporary", "conflict"].join("/"),
-        device: "device-conflict",
-        inode: "inode-conflict",
-        fileType: "directory",
-        uid: 502,
-        gid: 21,
-        fingerprint: "filesystem-conflict",
-      };
-    case "bundle":
-      return {
-        kind,
-        bundleIdentifier: "org.invalid.conflict",
-        metadataFingerprint: "bundle-conflict",
-      };
-    case "package":
-      return { kind, packageIdentifier: "package.invalid.conflict" };
-    case "signing":
-      return {
-        kind,
-        designatedRequirement: "requirement-conflict",
-        teamIdentifier: "team-conflict",
-        executableFingerprint: "executable-conflict",
-      };
-    case "owner":
-      return { kind, uid: 502, gid: 21 };
-    case "executable":
-      return { kind, executableFingerprint: "executable-conflict" };
-    default:
-      throw new TypeError("Тест ожидает candidate strong claim");
-  }
-}
-
-describe("deterministic correlation resolver", () => {
-  it("duplicate mandatory query scope fail closed до построения Map", async () => {
-    const input = await mutateRawInput((payload) => ({
-      ...payload,
-      queries: [
-        ...payload.queries,
-        {
-          ...payload.queries[0]!,
-          queryId: "query-installed-apps-duplicate",
-          sourceAdapter: "installed-apps-duplicate",
-        },
-      ],
-    }));
-
-    expect(() => resolveRawInput(input)).toThrowError(
-      expect.objectContaining({ errorCode: "CORRELATION_AMBIGUOUS" }),
-    );
-  });
-
-  it("missing/unknown scope и duplicate queryId имеют стабильные safe errors", async () => {
-    const missing = await mutateRawInput((payload) => ({
-      ...payload,
-      queries: payload.queries.filter(
-        ({ queryScope }) => queryScope !== "dependencies",
-      ),
-    }));
-    const unknown = await mutateRawInput((payload) => ({
-      ...payload,
-      queries: [
-        ...payload.queries.slice(1),
-        { ...payload.queries[0]!, queryScope: "unknown_scope" as never },
-      ],
-    }));
-    const duplicateId = await mutateRawInput((payload) => ({
-      ...payload,
-      queries: payload.queries.map((query, index) =>
-        index === 1 ? { ...query, queryId: payload.queries[0]!.queryId } : query,
-      ),
-    }));
-
-    expect(() => resolveRawInput(missing)).toThrowError(
-      expect.objectContaining({ errorCode: "CORRELATION_COVERAGE_INCOMPLETE" }),
-    );
-    expect(() => resolveRawInput(unknown)).toThrowError(
-      expect.objectContaining({ errorCode: "CORRELATION_SCHEMA_UNSUPPORTED" }),
-    );
-    expect(() => resolveRawInput(duplicateId)).toThrowError(
-      expect.objectContaining({ errorCode: "CORRELATION_SCHEMA_UNSUPPORTED" }),
-    );
-  });
-
-  it.each([
-    "filesystem",
-    "bundle",
-    "package",
-    "signing",
-    "owner",
-    "executable",
-  ] as const)("conflicting duplicate candidate %s не зависит от порядка", async (kind) => {
-    const makeInput = (conflictFirst: boolean) => mutateRawInput((payload) => {
-      const original = payload.candidate.claims.find((claim) => claim.kind === kind)!;
-      const remaining = payload.candidate.claims.filter((claim) => claim.kind !== kind);
-      const pair = conflictFirst
-        ? [conflictFor(kind), original]
-        : [original, conflictFor(kind)];
-      return {
-        ...payload,
-        candidate: { ...payload.candidate, claims: [...remaining, ...pair] },
-      };
-    });
-    const first = await makeInput(false);
-    const second = await makeInput(true);
-
-    expect(() => resolveRawInput(first)).toThrowError(
-      expect.objectContaining({ errorCode: "CORRELATION_AMBIGUOUS" }),
-    );
-    expect(() => resolveRawInput(second)).toThrowError(
-      expect.objectContaining({ errorCode: "CORRELATION_AMBIGUOUS" }),
-    );
-  });
-
-  it.each([
-    "filesystem",
-    "bundle",
-    "package",
-    "signing",
-    "owner",
-    "executable",
-  ] as const)("conflicting duplicate target %s не зависит от порядка", async (kind) => {
-    const makeInput = (conflictFirst: boolean) => mutateRawInput((payload) => {
-      const original = payload.candidate.claims.find((claim) => claim.kind === kind)!;
-      const pair = conflictFirst
-        ? [conflictFor(kind), original]
-        : [original, conflictFor(kind)];
-      return {
-        ...payload,
-        queries: payload.queries.map((query) =>
-          query.queryScope === "installed_apps"
-            ? {
-                ...query,
-                subjects: query.subjects.map((target) => ({
-                  ...target,
-                  claims: [
-                    ...target.claims.filter((claim) => claim.kind !== kind),
-                    ...pair,
-                  ],
-                })),
-              }
-            : query,
-        ),
-      };
-    });
-
-    const originalFirst = await makeInput(false);
-    const conflictFirst = await makeInput(true);
-
-    expect(() => resolveRawInput(originalFirst)).toThrowError(
-      expect.objectContaining({ errorCode: "CORRELATION_AMBIGUOUS" }),
-    );
-    expect(() => resolveRawInput(conflictFirst)).toThrowError(
-      expect.objectContaining({ errorCode: "CORRELATION_AMBIGUOUS" }),
-    );
-  });
-
-  it.each([
-    "filesystem",
-    "bundle",
-    "package",
-    "signing",
-    "owner",
-    "executable",
-  ] as const)("identical duplicate strong claim %s также запрещён", async (kind) => {
-    const candidateInput = await mutateRawInput((payload) => {
-      const original = payload.candidate.claims.find((claim) => claim.kind === kind)!;
-      return {
-        ...payload,
-        candidate: {
-          ...payload.candidate,
-          claims: [...payload.candidate.claims, original],
-        },
-      };
-    });
-    const targetInput = await mutateRawInput((payload) => {
-      const original = payload.candidate.claims.find((claim) => claim.kind === kind)!;
-      return {
-        ...payload,
-        queries: payload.queries.map((query) =>
-          query.queryScope === "installed_apps"
-            ? {
-                ...query,
-                subjects: query.subjects.map((target) => ({
-                  ...target,
-                  claims: [
-                    ...target.claims.filter((claim) => claim.kind !== kind),
-                    original,
-                    original,
-                  ],
-                })),
-              }
-            : query,
-        ),
-      };
-    });
-
-    expect(() => resolveRawInput(candidateInput)).toThrowError(
-      expect.objectContaining({ errorCode: "CORRELATION_AMBIGUOUS" }),
-    );
-    expect(() => resolveRawInput(targetInput)).toThrowError(
-      expect.objectContaining({ errorCode: "CORRELATION_AMBIGUOUS" }),
-    );
-  });
-
-  it("выпускает absent только с complete same-snapshot certificates", async () => {
+describe("correlation resolver v2", () => {
+  it("выдаёт actionable cache только через authoritative binding и полный профиль", async () => {
     const result = await run();
 
+    expect(result.safeView).toMatchObject({
+      schemaVersion: 2,
+      ownerBindingState: "resolved",
+      ownerBindingSourceClass: "signed_history",
+      requirementProfileId: "private_regenerable_remnant_v1",
+      receiptLifecycle: { lifecycle: "absent" },
+      requirementApplicability: { dependency: "not_applicable" },
+      blockingReasonCodes: [],
+    });
+    expect(result.safeView.facts.artifactExistence.state).toBe("present");
     for (const fact of [
-      "installedApp",
+      "ownerApplication",
+      "ownerExecutable",
       "activity",
       "openFile",
       "startupTarget",
-      "receipt",
       "officialUninstaller",
-      "dependency",
     ] as const) {
-      expect(result.safeView.facts[fact]).toMatchObject({
-        state: "absent",
-        reasonCode: "complete_empty",
-      });
-      expect(result.safeView.facts[fact]).toHaveProperty("certificateId");
+      expect(result.safeView.facts[fact].state).toBe("absent");
     }
-    expect(result.safeView.facts.targetExecutable.state).toBe("present");
-    expect(result.certificates).toHaveLength(7);
-    expect(result.safeView.staleDuringAudit).toBe(false);
-  });
-
-  it.each([
-    ["capability_missing", "capability_missing"],
-    ["permission_denied", "permission_denied"],
-    ["partial_inventory", "partial_inventory"],
-    ["truncated", "truncated"],
-    ["parse_loss", "parse_loss"],
-    ["timeout", "timeout"],
-    ["cancelled", "cancelled"],
-  ] as const)("empty %s остаётся unknown", async (queryState, reasonCode) => {
-    const result = await run({
-      queryStates: { installed_apps: queryState },
-    });
-
-    expect(result.safeView.facts.installedApp).toEqual({
+    expect(result.safeView.facts.dependency).toEqual({
       state: "unknown",
-      reasonCode,
+      reasonCode: "not_applicable",
     });
-    expect(
-      result.certificates.some(({ queryScope }) => queryScope === "installed_apps"),
-    ).toBe(false);
+    expect(result.safeView.allowedActions).toContain("prepare_move");
+    expect(result.edges).toContainEqual(expect.objectContaining({
+      relation: "remnant_of",
+      strength: "authoritative",
+      resolutionState: "resolved",
+    }));
   });
 
-  it.each([
-    ["installed_apps", "installedApp"],
-    ["processes", "activity"],
-    ["open_files", "openFile"],
-    ["startup_targets", "startupTarget"],
-    ["target_executables", "targetExecutable"],
-    ["receipts", "receipt"],
-    ["official_uninstallers", "officialUninstaller"],
-    ["dependencies", "dependency"],
-  ] as const)("mandatory source %s fail closed при permission gap", async (scope, fact) => {
-    const result = await run({
-      queryStates: { [scope]: "permission_denied" },
-      targetExecutablePresent: false,
-    });
-
-    expect(result.safeView.facts[fact]).toEqual({
-      state: "unknown",
-      reasonCode: "permission_denied",
-    });
-  });
-
-  it.each([
-    ["path_only", "missing", "missing"],
-    ["basename_only", "missing", "missing"],
-    ["display_name_only", "missing", "missing"],
-    ["bundle_only", "missing", "missing"],
-    ["package_only", "missing", "missing"],
-    ["signer_only", "missing", "missing"],
-    ["owner_only", "missing", "missing"],
-    ["duplicate", "ambiguous", "ambiguous"],
-    ["shared_signer", "mismatch", "mismatch"],
-    ["mismatch", "mismatch", "mismatch"],
-    ["resolved", "resolved", "positive_relation"],
-  ] as const)(
-    "installed variant %s детерминированно даёт %s",
-    async (installedVariant, resolutionState, reasonCode) => {
-      const result = await run({ installedVariant });
-
-      expect(result.resolutionStates.installedApp).toBe(resolutionState);
-      expect(result.safeView.facts.installedApp.reasonCode).toBe(reasonCode);
-      expect(result.safeView.facts.installedApp.state).toBe(
-        installedVariant === "resolved" ? "present" : "unknown",
+  it.each(["application_support", "container", "webkit", "personal_file"] as const)(
+    "%s всегда остаётся inspection-only",
+    async (artifactCategory) => {
+      const result = await run({ artifactCategory });
+      expect(result.safeView.requirementProfileId).toBe("inspection_only_v1");
+      expect(new Set(Object.values(result.safeView.requirementApplicability))).toEqual(
+        new Set(["unsupported"]),
       );
+      expect(result.safeView.allowedActions).not.toContain("prepare_move");
+      expect(result.safeView.blockingReasonCodes).toContain("unsupported_profile");
     },
   );
 
-  it("positive relation остаётся blocking evidence при partial inventory", async () => {
-    const result = await run({
-      installedVariant: "resolved",
-      queryStates: { installed_apps: "partial_inventory" },
-    });
-
-    expect(result.safeView.facts.installedApp).toEqual({
-      state: "present",
-      reasonCode: "positive_relation",
-    });
-    expect(result.safeView.blockingReasonCodes).toContain(
-      "positive_counter_evidence",
-    );
-    expect(result.safeView.coverageSummary.gapCodes).toContain(
-      "partial_inventory",
-    );
-  });
-
-  it("owner mismatch остаётся отдельным blocking fact и не смешивается с installed state", async () => {
-    const result = await run({ ownerMismatch: true });
-
-    expect(result.ownerResolutionState).toBe("mismatch");
-    expect(result.safeView.facts.installedApp.state).toBe("absent");
-    expect(result.safeView.coverageSummary.gapCodes).toContain("mismatch");
-    expect(result.safeView.blockingReasonCodes).toContain("correlation_mismatch");
-  });
-
-  it("owner missing объясняется safe coverage и blocking reasons", async () => {
-    const input = await mutateRawInput((payload) => ({
-      ...payload,
-      candidate: {
-        ...payload.candidate,
-        claims: payload.candidate.claims.filter(({ kind }) => kind !== "owner"),
-      },
-    }));
-    const result = resolveRawInput(input);
-
-    expect(result.ownerResolutionState).toBe("missing");
-    expect(result.safeView.coverageSummary.gapCodes).toContain("missing");
-    expect(result.safeView.blockingReasonCodes).toEqual(
-      expect.arrayContaining(["coverage_incomplete", "correlation_missing"]),
-    );
-  });
-
-  it("строит все candidate-specific positive facts", async () => {
-    const result = await run({
-      installedVariant: "resolved",
-      positiveFacts: [
-        "activity",
-        "openFile",
-        "startupTarget",
-        "receipt",
-        "officialUninstaller",
-        "dependency",
-      ],
-    });
-
-    expect(
-      Object.values(result.safeView.facts).map(({ state }) => state),
-    ).toEqual(Array(8).fill("present"));
-    expect(result.safeView.blockingReasonCodes).toEqual(
-      expect.arrayContaining([
-        "positive_counter_evidence",
-        "official_uninstaller_required",
-      ]),
-    );
-  });
-
-  it("Snapshot A/B race меняет revision и инвалидирует negative evidence/actions", async () => {
-    const stable = await run();
-    const stale = await run({ mutateSnapshotB: true });
-
-    expect(stale.revision.staleDuringAudit).toBe(true);
-    expect(stale.safeView.staleDuringAudit).toBe(true);
-    expect(stale.revision.correlationRevisionId).not.toBe(
-      stable.revision.correlationRevisionId,
-    );
-    expect(stale.safeView.facts.installedApp).toEqual({
-      state: "unknown",
-      reasonCode: "snapshot_stale",
-    });
-    expect(stale.safeView.allowedActions).not.toContain("prepare_move");
-    expect(Object.isFrozen(stale.revision)).toBe(true);
-  });
-
-  it("query другого snapshot не может выпустить ни positive, ни negative fact", async () => {
-    const result = await run({
-      installedVariant: "resolved",
-      querySnapshotMismatch: "installed_apps",
-    });
-
-    expect(result.safeView.facts.installedApp).toEqual({
-      state: "unknown",
-      reasonCode: "snapshot_stale",
-    });
-    expect(result.certificates).not.toContainEqual(
-      expect.objectContaining({ queryScope: "installed_apps" }),
-    );
-    expect(result.safeView.allowedActions).toEqual(["inspect"]);
-  });
-
   it.each([
-    "candidate",
-    "parent",
-    "owner_type",
-    "executable",
-    "process",
-    "open_file",
-    "receipt",
-    "dependency",
-  ] as const)("Snapshot A/B %s race инвалидирует revision", async (snapshotMutation) => {
-    const result = await run({ snapshotMutation });
-
-    expect(result.revision.staleDuringAudit).toBe(true);
-    expect(result.certificates).toEqual([]);
-    expect(Object.values(result.safeView.facts)).not.toContainEqual(
-      expect.objectContaining({ state: "absent" }),
-    );
+    ["missing", "missing"],
+    ["mismatch", "mismatch"],
+  ] as const)("owner binding %s блокирует mutation", async (bindingSource, state) => {
+    const result = await run({ bindingSource });
+    expect(result.safeView.ownerBindingState).toBe(state);
+    expect(result.safeView.allowedActions).not.toContain("prepare_move");
   });
 
-  it("детерминирован и не раскрывает raw canaries", async () => {
-    const first = await run();
-    const second = await run();
-    const serialized = JSON.stringify(first);
-
-    expect(first).toEqual(second);
-    for (const forbidden of [
-      "resolver-seed",
-      "org.synthetic",
-      "package.synthetic",
-      "designated",
-      "cmc-correlation-resolver-",
-    ]) {
-      expect(serialized).not.toContain(forbidden);
+  it("positive receipt/dependency/uninstaller не подавляются not_applicable", async () => {
+    for (const positiveFact of ["receipt", "dependency", "officialUninstaller"] as const) {
+      const result = await run({ positiveFacts: [positiveFact] });
+      expect(result.safeView.allowedActions).not.toContain("prepare_move");
+      expect(result.safeView.blockingReasonCodes).toContain("positive_counter_evidence");
     }
   });
 
-  it("provenance fingerprints зависят от installation key, а не от public raw hash", async () => {
-    const otherDeriver = {
-      keyId: "key-synthetic-b",
-      derivationVersion: 1,
-      derive(domain: string, kind: string, value: string) {
-        const digest = createHash("sha256")
-          .update(["installation-b", domain, kind, value].join("\u0000"))
-          .digest("hex");
-        return `hmac-sha256:v1:${digest}` as const;
-      },
-    };
-    const first = await run();
-    const second = await run({}, otherDeriver);
+  it.each([
+    "capability_missing",
+    "permission_denied",
+    "partial_inventory",
+    "truncated",
+    "parse_loss",
+    "timeout",
+    "cancelled",
+  ] as const)("incomplete canonical inventory %s остаётся unknown", async (state) => {
+    const result = await run({ queryStates: { installed_apps: state } });
+    expect(result.safeView.facts.ownerApplication).toEqual({ state: "unknown", reasonCode: state });
+    expect(result.safeView.allowedActions).not.toContain("prepare_move");
+  });
 
-    expect(first.provenance.map(({ queryFingerprint }) => queryFingerprint)).not.toEqual(
-      second.provenance.map(({ queryFingerprint }) => queryFingerprint),
+  it("exact receipt binding разделяет stale и live lifecycle", async () => {
+    const stale = await run({ bindingSource: "exact_receipt_payload" });
+    const live = await run({
+      bindingSource: "exact_receipt_payload",
+      installedVariant: "resolved",
+      ownerExecutablePresent: true,
+    });
+    expect(stale.safeView.receiptLifecycle.lifecycle).toBe("stale");
+    expect(live.safeView.receiptLifecycle.lifecycle).toBe("live");
+    expect(live.safeView.allowedActions).not.toContain("prepare_move");
+  });
+
+  it("Snapshot A/B race инвалидирует certificates и actions", async () => {
+    const result = await run({ snapshotMutation: "parent" });
+    expect(result.revision.staleDuringAudit).toBe(true);
+    expect(result.certificates).toEqual([]);
+    expect(result.safeView.facts.artifactExistence).toEqual({
+      state: "unknown",
+      reasonCode: "snapshot_stale",
+    });
+    expect(result.safeView.allowedActions).not.toContain("prepare_move");
+  });
+
+  it("duplicate scope и duplicate strong claim fail closed до resolution", async () => {
+    const duplicateScope = await mutate((payload) => ({
+      ...payload,
+      queries: [...payload.queries, { ...payload.queries[0]!, queryId: "duplicate-query" }],
+    }));
+    const duplicateClaim = await mutate((payload) => ({
+      ...payload,
+      candidate: { ...payload.candidate, claims: [...payload.candidate.claims, payload.candidate.claims[0]!] },
+    }));
+    expect(() => resolveRaw(duplicateScope)).toThrowError(
+      expect.objectContaining({ errorCode: "CORRELATION_AMBIGUOUS" }),
     );
+    expect(() => resolveRaw(duplicateClaim)).toThrowError(
+      expect.objectContaining({ errorCode: "CORRELATION_AMBIGUOUS" }),
+    );
+  });
+
+  it("safe view/evidence не раскрывают raw identities и разделяют artifact/owner", async () => {
+    const result = await run();
+    const evidence = buildCorrelationEvidenceSet(result, {
+      supportLevel: "candidate",
+      sensitivityFlags: [],
+      dataKind: "known",
+    });
+    const serialized = JSON.stringify({ safeView: result.safeView, evidence });
+    expect(evidence.items).toContainEqual(expect.objectContaining({
+      ruleInputType: "artifact_existence",
+      outcome: "confirmed",
+    }));
+    expect(evidence.items).toContainEqual(expect.objectContaining({
+      ruleInputType: "owner_executable",
+      outcome: "contradicted",
+    }));
+    for (const canary of ["library-resolver-seed", "org.synthetic", "package.synthetic", "cmc-library-correlation-"]) {
+      expect(serialized).not.toContain(canary);
+    }
   });
 });

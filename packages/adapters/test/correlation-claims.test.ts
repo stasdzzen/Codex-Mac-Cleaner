@@ -23,8 +23,8 @@ describe("ephemeral raw correlation boundary", () => {
     );
     expect(String(boundary)).toBe("[EphemeralCorrelationInput redacted]");
     expect(descriptor).toMatchObject({
-      schemaVersion: 1,
-      queryCount: 8,
+      schemaVersion: 2,
+      queryCount: 9,
       snapshotId: "snapshot-synthetic",
     });
     expect(JSON.stringify(descriptor)).not.toMatch(

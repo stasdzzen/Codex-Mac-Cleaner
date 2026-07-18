@@ -20,10 +20,14 @@ export interface SafeCoreIntegrationHarnessInput {
 
 export interface SafeCoreIntegrationHarnessResult {
   readonly safeInput: Readonly<{
-    schemaVersion: 1;
+    schemaVersion: 2;
     findingId: string;
     auditRevision: number;
     correlationRevisionId: string;
+    ownerBindingState: CorrelationResolverResult["safeView"]["ownerBindingState"];
+    requirementProfileId: CorrelationResolverResult["safeView"]["requirementProfileId"];
+    requirementApplicability: CorrelationResolverResult["safeView"]["requirementApplicability"];
+    receiptLifecycle: CorrelationResolverResult["safeView"]["receiptLifecycle"];
     facts: CorrelationResolverResult["safeView"]["facts"];
     coverageSummary: CorrelationResolverResult["safeView"]["coverageSummary"];
     blockingReasonCodes: CorrelationResolverResult["safeView"]["blockingReasonCodes"];
@@ -50,11 +54,15 @@ export function runSafeCoreIntegrationHarness(
   });
   return Object.freeze({
     safeInput: Object.freeze({
-      schemaVersion: 1 as const,
+      schemaVersion: 2 as const,
       findingId: input.resolverResult.safeView.findingId,
       auditRevision: input.resolverResult.safeView.auditRevision,
       correlationRevisionId:
         input.resolverResult.safeView.correlationRevisionId,
+      ownerBindingState: input.resolverResult.safeView.ownerBindingState,
+      requirementProfileId: input.resolverResult.safeView.requirementProfileId,
+      requirementApplicability: input.resolverResult.safeView.requirementApplicability,
+      receiptLifecycle: input.resolverResult.safeView.receiptLifecycle,
       facts: input.resolverResult.safeView.facts,
       coverageSummary: input.resolverResult.safeView.coverageSummary,
       blockingReasonCodes: input.resolverResult.safeView.blockingReasonCodes,

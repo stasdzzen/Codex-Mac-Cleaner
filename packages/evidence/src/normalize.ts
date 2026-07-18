@@ -15,6 +15,10 @@ import type {
 const EPOCH = "1970-01-01T00:00:00.000Z";
 
 const summaries: Readonly<Record<RuleInputType, string>> = {
+  owner_binding: "Authoritative связь артефакта с владельцем проверена",
+  artifact_existence: "Существование Library-артефакта проверено по Snapshot B",
+  owner_application: "Состояние приложения-владельца проверено canonical inventory",
+  owner_executable: "Состояние executable владельца проверено отдельно",
   owner_identity: "Идентичность владельца проверена структурированным источником",
   installed_state: "Состояние установки проверено структурированным источником",
   activity: "Состояние процесса проверено структурированным источником",
@@ -22,11 +26,13 @@ const summaries: Readonly<Record<RuleInputType, string>> = {
   startup_target: "Состояние startup target проверено структурированным источником",
   target_existence: "Существование цели проверено структурированным источником",
   receipt: "Состояние receipt проверено структурированным источником",
+  receipt_lifecycle: "Жизненный цикл receipt проверен по canonical package database",
   official_uninstaller: "Наличие официального uninstaller проверено структурированным источником",
   dependency: "Зависимости проверены структурированным источником",
   temporal: "Актуальность наблюдения проверена структурированным источником",
   data_kind: "Тип данных проверен структурированным источником",
   capability: "Доступность источника проверена структурированным источником",
+  requirement_profile: "Server-owned профиль требований проверен",
   removal_method: "Способ удаления подтверждён структурированным источником",
   duplicate_identity: "Дубликат проверен по устойчивой идентичности",
   name_match: "Совпадение имени учтено только как слабое доказательство",

@@ -3,9 +3,12 @@ import { describe, expect, it } from "vitest";
 import {
   CorrelationEdgeSchema,
   CorrelationFactSchema,
+  CorrelationRequirementProfileSchema,
   CorrelationRevisionSchema,
   CorrelationSubjectSchema,
   CoverageCertificateSchema,
+  OwnerBindingSchema,
+  ReceiptLifecycleFactSchema,
   SafeCorrelationViewSchema,
   SourceProvenanceSchema,
 } from "../src/index.js";
@@ -15,10 +18,10 @@ const fingerprint = (value: string) => `sha256:v1:${value.repeat(64)}`;
 const observedAt = "2026-07-18T00:00:00.000Z";
 
 const provenance = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   provenanceId: "provenance-synthetic-a",
-  sourceAdapter: "application_inventory",
-  sourceSchemaVersion: 1,
+  sourceAdapter: "canonical-application-inventory",
+  sourceSchemaVersion: 2,
   queryId: "query-synthetic-a",
   queryScope: "installed_apps",
   snapshotId: "snapshot-synthetic-a",
@@ -35,11 +38,11 @@ const provenance = {
 } as const;
 
 const certificate = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   certificateId: "certificate-synthetic-a",
-  sourceAdapter: "application_inventory",
+  sourceAdapter: "canonical-application-inventory",
   queryScope: "installed_apps",
-  subjectId: digest("a"),
+  subjectId: digest("b"),
   snapshotId: "snapshot-synthetic-a",
   queryFingerprint: fingerprint("a"),
   coverageFingerprint: fingerprint("b"),
@@ -52,8 +55,73 @@ const certificate = {
   issuedAt: observedAt,
 } as const;
 
+const artifactSubject = {
+  schemaVersion: 2,
+  subjectId: digest("a"),
+  subjectRole: "library_artifact",
+  subjectKind: "filesystem_object",
+  claimDigests: [
+    { kind: "filesystem", digest: digest("b") },
+    { kind: "owner", digest: digest("c") },
+  ],
+  provenanceIds: [provenance.provenanceId],
+  snapshotId: provenance.snapshotId,
+  identityFingerprint: fingerprint("d"),
+  resolutionState: "resolved",
+} as const;
+
+const ownerSubject = {
+  schemaVersion: 2,
+  subjectId: digest("d"),
+  subjectRole: "owner_application",
+  subjectKind: "app_bundle",
+  claimDigests: [
+    { kind: "bundle", digest: digest("e") },
+    { kind: "signing", digest: digest("f") },
+    { kind: "executable", digest: digest("1") },
+  ],
+  provenanceIds: [provenance.provenanceId],
+  snapshotId: provenance.snapshotId,
+  identityFingerprint: fingerprint("e"),
+  resolutionState: "resolved",
+} as const;
+
+const binding = {
+  schemaVersion: 2,
+  bindingId: "owner-binding-synthetic-a",
+  artifactSubjectId: artifactSubject.subjectId,
+  ownerSubjectId: ownerSubject.subjectId,
+  ruleId: "OWNER_BINDING_SIGNED_HISTORY_V1",
+  ruleVersion: 1,
+  sourceKind: "signed_process_open_file_history",
+  claimDigests: [digest("6"), digest("7")],
+  provenanceIds: [provenance.provenanceId],
+  createdAt: observedAt,
+  lastValidatedAt: observedAt,
+  bindingFingerprint: fingerprint("8"),
+  resolutionState: "resolved",
+} as const;
+
+const profile = {
+  schemaVersion: 2,
+  profileId: "private_regenerable_remnant_v1",
+  profileVersion: 1,
+  requirements: [
+    { requirementId: "artifact_existence", applicability: "required", reasonCode: "profile_required" },
+    { requirementId: "owner_application", applicability: "required", reasonCode: "profile_required" },
+    { requirementId: "owner_executable", applicability: "required", reasonCode: "profile_required" },
+    { requirementId: "activity", applicability: "required", reasonCode: "profile_required" },
+    { requirementId: "open_file", applicability: "required", reasonCode: "profile_required" },
+    { requirementId: "startup_target", applicability: "required", reasonCode: "profile_required" },
+    { requirementId: "receipt", applicability: "required", reasonCode: "profile_required" },
+    { requirementId: "official_uninstaller", applicability: "required", reasonCode: "profile_required" },
+    { requirementId: "dependency", applicability: "not_applicable", reasonCode: "private_non_executable_artifact" },
+  ],
+  profileFingerprint: fingerprint("9"),
+} as const;
+
 const revision = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   derivationVersion: 1,
   correlationRevisionId: "correlation-revision-synthetic-a",
   auditId: "audit-synthetic-a",
@@ -64,109 +132,123 @@ const revision = {
   subjectSetDigest: fingerprint("d"),
   edgeSetDigest: fingerprint("e"),
   coverageReportDigest: fingerprint("f"),
-  ruleSetVersion: 1,
-  policyVersion: 1,
+  ownerBindingFingerprint: binding.bindingFingerprint,
+  requirementProfileId: profile.profileId,
+  requirementProfileVersion: profile.profileVersion,
+  requirementProfileFingerprint: profile.profileFingerprint,
+  ruleSetVersion: 2,
+  policyVersion: 2,
   exclusionStateVersion: 1,
   staleDuringAudit: false,
   createdAt: observedAt,
 } as const;
 
-describe("exact correlation schemas", () => {
-  it("принимает server-only subject/edge и отклоняет transport/raw поля", () => {
-    const subject = {
-      schemaVersion: 1,
-      subjectId: digest("a"),
-      subjectKind: "filesystem_object",
-      claimDigests: [
-        { kind: "filesystem", digest: digest("b") },
-        { kind: "owner", digest: digest("c") },
-      ],
-      provenanceIds: [provenance.provenanceId],
-      snapshotId: provenance.snapshotId,
-      identityFingerprint: fingerprint("d"),
-      resolutionState: "resolved",
-    } as const;
+describe("exact correlation schemas v2", () => {
+  it("разделяет cleanup artifact и owner application", () => {
+    expect(CorrelationSubjectSchema.parse(artifactSubject)).toEqual(artifactSubject);
+    expect(CorrelationSubjectSchema.parse(ownerSubject)).toEqual(ownerSubject);
+    expect(() => CorrelationSubjectSchema.parse({ ...artifactSubject, schemaVersion: 1 })).toThrow();
+    expect(() => CorrelationSubjectSchema.parse({ ...artifactSubject, subjectRole: undefined })).toThrow();
+    expect(() =>
+      CorrelationSubjectSchema.parse({
+        ...artifactSubject,
+        subjectRole: "library_artifact",
+        subjectKind: "app_bundle",
+      }),
+    ).toThrow();
+  });
+
+  it("разрешает owner authority только authoritative remnant_of", () => {
     const edge = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       edgeId: "edge-synthetic-a",
-      fromSubjectId: digest("a"),
-      toSubjectId: digest("e"),
-      relation: "installed_as",
-      ruleId: "CORRELATION_INSTALLED_APP_V1",
+      fromSubjectId: artifactSubject.subjectId,
+      toSubjectId: ownerSubject.subjectId,
+      relation: "remnant_of",
+      ruleId: binding.ruleId,
       ruleVersion: 1,
-      claimKinds: ["bundle", "signing", "executable"],
-      strength: "corroborated",
+      claimKinds: ["historical_binding"],
+      strength: "authoritative",
       resolutionState: "resolved",
       provenanceIds: [provenance.provenanceId],
       snapshotId: provenance.snapshotId,
       edgeFingerprint: fingerprint("e"),
     } as const;
 
-    expect(CorrelationSubjectSchema.parse(subject)).toEqual(subject);
     expect(CorrelationEdgeSchema.parse(edge)).toEqual(edge);
-    expect(() => CorrelationSubjectSchema.parse({ ...subject, targetRef: "legacy" })).toThrow();
-    expect(() =>
-      CorrelationSubjectSchema.parse({
-        ...subject,
-        path: ["", "synthetic", "private"].join("/"),
-      }),
-    ).toThrow();
-    expect(() => CorrelationEdgeSchema.parse({ ...edge, score: 0.99 })).toThrow();
-    expect(() => CorrelationEdgeSchema.parse({ ...edge, resolutionState: "best_match" })).toThrow();
+    expect(OwnerBindingSchema.parse(binding)).toEqual(binding);
+    expect(() => CorrelationEdgeSchema.parse({ ...edge, strength: "corroborated" })).toThrow();
+    expect(() => CorrelationEdgeSchema.parse({ ...edge, relation: "installed_as" })).not.toThrow();
+    expect(() => OwnerBindingSchema.parse({ ...binding, sourceKind: "user_attestation" })).toThrow();
+    expect(() => OwnerBindingSchema.parse({ ...binding, rawPath: "/private/canary" })).toThrow();
   });
 
-  it("валидирует provenance, certificate и same-snapshot completeness", () => {
+  it("фиксирует server-owned profile и typed applicability", () => {
+    expect(CorrelationRequirementProfileSchema.parse(profile)).toEqual(profile);
+    expect(() =>
+      CorrelationRequirementProfileSchema.parse({
+        ...profile,
+        requirements: profile.requirements.filter(({ requirementId }) => requirementId !== "dependency"),
+      }),
+    ).toThrow();
+    expect(() =>
+      CorrelationRequirementProfileSchema.parse({
+        ...profile,
+        requirements: profile.requirements.map((requirement) =>
+          requirement.requirementId === "artifact_existence"
+            ? { ...requirement, applicability: "not_applicable" }
+            : requirement
+        ),
+      }),
+    ).toThrow();
+  });
+
+  it("валидирует v2 provenance/certificate и раздельные lifecycle facts", () => {
     expect(SourceProvenanceSchema.parse(provenance)).toEqual(provenance);
     expect(CoverageCertificateSchema.parse(certificate)).toEqual(certificate);
-    expect(() => CoverageCertificateSchema.parse({ ...certificate, partial: true })).toThrow();
-    expect(() => CoverageCertificateSchema.parse({ ...certificate, completionState: "partial" })).toThrow();
-    expect(() => SourceProvenanceSchema.parse({ ...provenance, stderr: "synthetic" })).toThrow();
+    expect(CorrelationFactSchema.parse({ state: "present", reasonCode: "snapshot_stable" })).toEqual({
+      state: "present",
+      reasonCode: "snapshot_stable",
+    });
+    expect(ReceiptLifecycleFactSchema.parse({
+      lifecycle: "stale",
+      reasonCode: "exact_payload_owner_absent",
+      certificateId: "certificate-receipt",
+    }).lifecycle).toBe("stale");
+    expect(() => ReceiptLifecycleFactSchema.parse({ lifecycle: "absent" })).toThrow();
   });
 
-  it("разрешает absent только со ссылкой на certificate", () => {
-    expect(
-      CorrelationFactSchema.parse({
-        state: "absent",
-        reasonCode: "complete_empty",
-        certificateId: certificate.certificateId,
-      }).state,
-    ).toBe("absent");
-    expect(() =>
-      CorrelationFactSchema.parse({ state: "absent", reasonCode: "complete_empty" }),
-    ).toThrow();
-    expect(() =>
-      CorrelationFactSchema.parse({
-        state: "unknown",
-        reasonCode: "permission_denied",
-        certificateId: certificate.certificateId,
-      }),
-    ).toThrow();
-  });
-
-  it("фиксирует immutable revision shape и privacy-safe external view", () => {
+  it("legacy target executable не проходит как actionable safe view", () => {
     const safeView = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       findingId: "finding-synthetic-a",
       auditRevision: 1,
       correlationRevisionId: revision.correlationRevisionId,
+      ownerBindingState: "resolved",
+      ownerBindingSourceClass: "signed_history",
+      requirementProfileId: profile.profileId,
       facts: {
-        installedApp: { state: "absent", reasonCode: "complete_empty", certificateId: "certificate-installed" },
+        artifactExistence: { state: "present", reasonCode: "snapshot_stable" },
+        ownerApplication: { state: "absent", reasonCode: "complete_empty", certificateId: "certificate-owner-app" },
+        ownerExecutable: { state: "absent", reasonCode: "complete_empty", certificateId: "certificate-owner-executable" },
         activity: { state: "absent", reasonCode: "complete_empty", certificateId: "certificate-activity" },
-        openFile: { state: "unknown", reasonCode: "permission_denied" },
+        openFile: { state: "absent", reasonCode: "complete_empty", certificateId: "certificate-open" },
         startupTarget: { state: "absent", reasonCode: "complete_empty", certificateId: "certificate-startup" },
-        targetExecutable: { state: "present", reasonCode: "positive_relation" },
-        receipt: { state: "absent", reasonCode: "complete_empty", certificateId: "certificate-receipt" },
         officialUninstaller: { state: "absent", reasonCode: "complete_empty", certificateId: "certificate-uninstaller" },
-        dependency: { state: "absent", reasonCode: "complete_empty", certificateId: "certificate-dependency" },
+        dependency: { state: "unknown", reasonCode: "not_applicable" },
       },
-      coverageSummary: {
-        completeSourceCount: 6,
-        gapCount: 1,
-        gapCodes: ["permission_denied"],
+      receiptLifecycle: {
+        lifecycle: "stale",
+        reasonCode: "exact_payload_owner_absent",
+        certificateId: "certificate-receipt",
       },
+      requirementApplicability: Object.fromEntries(
+        profile.requirements.map(({ requirementId, applicability }) => [requirementId, applicability]),
+      ),
+      coverageSummary: { completeSourceCount: 7, gapCount: 0, gapCodes: [] },
       staleDuringAudit: false,
-      blockingReasonCodes: ["coverage_incomplete"],
-      allowedActions: ["inspect"],
+      blockingReasonCodes: [],
+      allowedActions: ["inspect", "reveal", "exclude", "prepare_move"],
     } as const;
 
     expect(CorrelationRevisionSchema.parse(revision)).toEqual(revision);
@@ -174,16 +256,10 @@ describe("exact correlation schemas", () => {
     expect(() =>
       SafeCorrelationViewSchema.parse({
         ...safeView,
-        path: ["", "synthetic", "private"].join("/"),
+        facts: { ...safeView.facts, targetExecutable: { state: "present", reasonCode: "positive_relation" } },
       }),
     ).toThrow();
-    expect(() => SafeCorrelationViewSchema.parse({ ...safeView, token: "synthetic-token" })).toThrow();
-    expect(() =>
-      SafeCorrelationViewSchema.parse({
-        ...safeView,
-        allowedActions: ["inspect", "prepare_move"],
-      }),
-    ).toThrow();
+    expect(() => SafeCorrelationViewSchema.parse({ ...safeView, profileId: "client-selected" })).toThrow();
     expect(JSON.stringify(SafeCorrelationViewSchema.parse(safeView))).not.toMatch(
       /path|bundle|package|signing|inventory|token|secret|personal/i,
     );

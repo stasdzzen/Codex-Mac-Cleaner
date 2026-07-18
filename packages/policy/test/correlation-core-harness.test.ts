@@ -38,13 +38,14 @@ async function resolverResult(
     auditRevision: 1,
     findingId: "finding-synthetic-a",
     exclusionStateVersion: 1,
-    ruleSetVersion: 1,
-    policyVersion: 1,
+    ruleSetVersion: 2,
+    policyVersion: 2,
     now,
     deriver,
     rawInput: buildSyntheticCorrelationInput({
       seed: "core-harness-seed",
       tempRoot,
+      deriver,
       ...options,
     }),
   });

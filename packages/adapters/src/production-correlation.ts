@@ -1,10 +1,14 @@
-import type { QueryScope } from "@codex-mac-cleaner/contracts";
+import type {
+  OwnerBindingSourceKind,
+  QueryScope,
+} from "@codex-mac-cleaner/contracts";
 
 import {
   CorrelationInputError,
   EphemeralCorrelationInput,
   MANDATORY_QUERY_SCOPES,
   validateRawCorrelationPayload,
+  type CorrelationArtifactCategory,
   type RawCorrelationPayload,
   type RawCorrelationSnapshot,
   type RawIdentityClaim,
@@ -15,6 +19,7 @@ import {
 
 export interface ProductionSourceCapture<TRecord> {
   readonly state: RawQueryState;
+  readonly coverageKind: "canonical" | "candidate_specific" | "supplemental";
   readonly startedAt: string;
   readonly completedAt: string | null;
   readonly records: readonly TRecord[];
@@ -58,12 +63,40 @@ interface ProductionCommonIdentityRecord {
   readonly hints?: ProductionIdentityHints;
 }
 
-export interface ProductionCandidateIdentityRecord
-  extends ProductionCommonIdentityRecord {
+export interface ProductionCandidateIdentityRecord extends ProductionCommonIdentityRecord {
   readonly filesystem: ProductionFilesystemIdentityRecord;
+  readonly category: CorrelationArtifactCategory;
+  readonly privateNonExecutable: boolean;
 }
 
 export type ProductionInstalledAppRecord = ProductionCommonIdentityRecord;
+
+export interface ProductionHistoricalBindingRecord {
+  readonly keyId: string;
+  readonly derivationVersion: number;
+  readonly artifactDigest: `hmac-sha256:v1:${string}`;
+  readonly ownerTypeDigest: `hmac-sha256:v1:${string}`;
+  readonly rootDigest: `hmac-sha256:v1:${string}`;
+  readonly ownerBundleDigest: `hmac-sha256:v1:${string}`;
+  readonly ownerSigningDigest: `hmac-sha256:v1:${string}`;
+  readonly ownerExecutableDigest: `hmac-sha256:v1:${string}`;
+  readonly bindingFingerprint: string;
+}
+
+export interface ProductionOwnerBindingRecord extends ProductionCommonIdentityRecord {
+  readonly sourceKind: OwnerBindingSourceKind;
+  readonly ownerKind: "app_bundle" | "package";
+  readonly receiptPayload?: Readonly<{
+    packageIdentifier: string;
+    targetFilesystemFingerprint: string;
+  }>;
+  readonly containerMetadata?: Readonly<{
+    bundleIdentifier: string;
+    targetFilesystemFingerprint: string;
+    individualContainer: boolean;
+  }>;
+  readonly historicalBinding?: ProductionHistoricalBindingRecord;
+}
 
 export interface ProductionProcessRecord {
   readonly localId: string;
@@ -82,7 +115,7 @@ export interface ProductionStartupTargetRecord {
   readonly executableFingerprint: string;
 }
 
-export interface ProductionTargetExecutableRecord {
+export interface ProductionOwnerExecutableRecord {
   readonly localId: string;
   readonly executableFingerprint: string;
 }
@@ -110,11 +143,13 @@ export interface ProductionCorrelationSnapshotRecord {
   readonly candidateFingerprint: string;
   readonly parentFingerprint: string;
   readonly ownerTypeFingerprint: string;
-  readonly executableFingerprint: string;
+  readonly ownerExecutableFingerprint: string;
   readonly processFingerprint: string;
   readonly openFileFingerprint: string;
   readonly receiptFingerprint: string;
   readonly dependencyFingerprint: string;
+  readonly ownerBindingFingerprint: string;
+  readonly requirementProfileFingerprint: string;
 }
 
 export interface ProductionCandidateCapture {
@@ -122,49 +157,20 @@ export interface ProductionCandidateCapture {
   readonly snapshot: ProductionCorrelationSnapshotRecord;
 }
 
-/** Command-only read boundary. Реализация не получает shell или mutation API. */
 export interface ProductionCorrelationCommandBoundary {
-  installedApps(
-    candidateRef: string,
-    signal: AbortSignal,
-  ): Promise<ProductionSourceCapture<ProductionInstalledAppRecord>>;
-  processes(
-    candidateRef: string,
-    signal: AbortSignal,
-  ): Promise<ProductionSourceCapture<ProductionProcessRecord>>;
-  openFiles(
-    candidateRef: string,
-    signal: AbortSignal,
-  ): Promise<ProductionSourceCapture<ProductionOpenFileRecord>>;
+  installedApps(candidateRef: string, signal: AbortSignal): Promise<ProductionSourceCapture<ProductionInstalledAppRecord>>;
+  processes(candidateRef: string, signal: AbortSignal): Promise<ProductionSourceCapture<ProductionProcessRecord>>;
+  openFiles(candidateRef: string, signal: AbortSignal): Promise<ProductionSourceCapture<ProductionOpenFileRecord>>;
 }
 
-/** Read-only filesystem boundary: произвольные write/delete операции отсутствуют. */
 export interface ProductionCorrelationFilesystemBoundary {
-  captureCandidate(
-    candidateRef: string,
-    phase: "A" | "B",
-    signal: AbortSignal,
-  ): Promise<ProductionCandidateCapture>;
-  startupTargets(
-    candidateRef: string,
-    signal: AbortSignal,
-  ): Promise<ProductionSourceCapture<ProductionStartupTargetRecord>>;
-  targetExecutables(
-    candidateRef: string,
-    signal: AbortSignal,
-  ): Promise<ProductionSourceCapture<ProductionTargetExecutableRecord>>;
-  receipts(
-    candidateRef: string,
-    signal: AbortSignal,
-  ): Promise<ProductionSourceCapture<ProductionReceiptRecord>>;
-  officialUninstallers(
-    candidateRef: string,
-    signal: AbortSignal,
-  ): Promise<ProductionSourceCapture<ProductionOfficialUninstallerRecord>>;
-  dependencies(
-    candidateRef: string,
-    signal: AbortSignal,
-  ): Promise<ProductionSourceCapture<ProductionDependencyRecord>>;
+  captureCandidate(candidateRef: string, phase: "A" | "B", signal: AbortSignal): Promise<ProductionCandidateCapture>;
+  ownerBindings(candidateRef: string, signal: AbortSignal): Promise<ProductionSourceCapture<ProductionOwnerBindingRecord>>;
+  ownerExecutables(candidateRef: string, signal: AbortSignal): Promise<ProductionSourceCapture<ProductionOwnerExecutableRecord>>;
+  startupTargets(candidateRef: string, signal: AbortSignal): Promise<ProductionSourceCapture<ProductionStartupTargetRecord>>;
+  receipts(candidateRef: string, signal: AbortSignal): Promise<ProductionSourceCapture<ProductionReceiptRecord>>;
+  officialUninstallers(candidateRef: string, signal: AbortSignal): Promise<ProductionSourceCapture<ProductionOfficialUninstallerRecord>>;
+  dependencies(candidateRef: string, signal: AbortSignal): Promise<ProductionSourceCapture<ProductionDependencyRecord>>;
 }
 
 export interface BuildProductionCorrelationInput {
@@ -193,47 +199,34 @@ function assertOpaque(value: string): void {
 
 function commonClaims(record: ProductionCommonIdentityRecord): RawIdentityClaim[] {
   const claims: RawIdentityClaim[] = [];
-  if (record.filesystem !== undefined) {
-    claims.push({ kind: "filesystem", ...record.filesystem });
-  }
+  if (record.filesystem !== undefined) claims.push({ kind: "filesystem", ...record.filesystem });
   if (record.bundle !== undefined) claims.push({ kind: "bundle", ...record.bundle });
-  if (record.packageIdentifier !== undefined) {
-    claims.push({ kind: "package", packageIdentifier: record.packageIdentifier });
-  }
+  if (record.packageIdentifier !== undefined) claims.push({ kind: "package", packageIdentifier: record.packageIdentifier });
   if (record.signing !== undefined) claims.push({ kind: "signing", ...record.signing });
   if (record.owner !== undefined) claims.push({ kind: "owner", ...record.owner });
   if (record.executableFingerprint !== undefined) {
-    claims.push({
-      kind: "executable",
-      executableFingerprint: record.executableFingerprint,
-    });
+    claims.push({ kind: "executable", executableFingerprint: record.executableFingerprint });
   }
-  if (record.hints?.path !== undefined) {
-    claims.push({ kind: "hint", hintKind: "path", value: record.hints.path });
-  }
-  if (record.hints?.basename !== undefined) {
-    claims.push({ kind: "hint", hintKind: "basename", value: record.hints.basename });
-  }
-  if (record.hints?.displayName !== undefined) {
-    claims.push({
-      kind: "hint",
-      hintKind: "display_name",
-      value: record.hints.displayName,
-    });
-  }
+  if (record.hints?.path !== undefined) claims.push({ kind: "hint", hintKind: "path", value: record.hints.path });
+  if (record.hints?.basename !== undefined) claims.push({ kind: "hint", hintKind: "basename", value: record.hints.basename });
+  if (record.hints?.displayName !== undefined) claims.push({ kind: "hint", hintKind: "display_name", value: record.hints.displayName });
   return claims;
 }
 
 function subject(
   localId: string,
+  subjectRole: RawIdentitySubject["subjectRole"],
   subjectKind: RawIdentitySubject["subjectKind"],
   claims: readonly RawIdentityClaim[],
+  bindingSourceKind?: OwnerBindingSourceKind,
 ): RawIdentitySubject {
-  return { localId, subjectKind, claims };
-}
-
-function snapshot(record: ProductionCorrelationSnapshotRecord): RawCorrelationSnapshot {
-  return { ...record };
+  return {
+    localId,
+    subjectRole,
+    subjectKind,
+    claims,
+    ...(bindingSourceKind === undefined ? {} : { bindingSourceKind }),
+  };
 }
 
 function query<TRecord>(
@@ -246,8 +239,9 @@ function query<TRecord>(
   return {
     queryId: `production-query-${scope.replaceAll("_", "-")}`,
     sourceAdapter,
-    sourceSchemaVersion: 1,
+    sourceSchemaVersion: 2,
     queryScope: scope,
+    coverageKind: capture.coverageKind,
     snapshotId,
     startedAt: capture.startedAt,
     completedAt: capture.completedAt,
@@ -256,10 +250,20 @@ function query<TRecord>(
   };
 }
 
-/**
- * Server-only bridge для production probes. Apps/MCP передают только opaque ref,
- * snapshot ID и read-only boundaries; raw identity остаётся внутри ephemeral input.
- */
+function bindingClaims(record: ProductionOwnerBindingRecord): RawIdentityClaim[] {
+  const claims = commonClaims(record);
+  if (record.receiptPayload !== undefined) {
+    claims.push({ kind: "receipt_payload", ...record.receiptPayload });
+  }
+  if (record.containerMetadata !== undefined) {
+    claims.push({ kind: "container_metadata", ...record.containerMetadata });
+  }
+  if (record.historicalBinding !== undefined) {
+    claims.push({ kind: "historical_binding", ...record.historicalBinding });
+  }
+  return claims;
+}
+
 export async function buildProductionCorrelationInput(
   input: BuildProductionCorrelationInput,
 ): Promise<EphemeralCorrelationInput> {
@@ -267,114 +271,41 @@ export async function buildProductionCorrelationInput(
   assertOpaque(input.snapshotId);
   input.signal.throwIfAborted();
 
-  const phaseA = await input.filesystemBoundary.captureCandidate(
-    input.candidateRef,
-    "A",
-    input.signal,
-  );
-  input.signal.throwIfAborted();
+  const phaseA = await input.filesystemBoundary.captureCandidate(input.candidateRef, "A", input.signal);
   const captures = await Promise.all([
+    input.filesystemBoundary.ownerBindings(input.candidateRef, input.signal),
     input.commandBoundary.installedApps(input.candidateRef, input.signal),
+    input.filesystemBoundary.ownerExecutables(input.candidateRef, input.signal),
     input.commandBoundary.processes(input.candidateRef, input.signal),
     input.commandBoundary.openFiles(input.candidateRef, input.signal),
     input.filesystemBoundary.startupTargets(input.candidateRef, input.signal),
-    input.filesystemBoundary.targetExecutables(input.candidateRef, input.signal),
     input.filesystemBoundary.receipts(input.candidateRef, input.signal),
     input.filesystemBoundary.officialUninstallers(input.candidateRef, input.signal),
     input.filesystemBoundary.dependencies(input.candidateRef, input.signal),
   ] as const);
   input.signal.throwIfAborted();
-  const phaseB = await input.filesystemBoundary.captureCandidate(
-    input.candidateRef,
-    "B",
-    input.signal,
-  );
+  const phaseB = await input.filesystemBoundary.captureCandidate(input.candidateRef, "B", input.signal);
   input.signal.throwIfAborted();
 
   const queries: readonly RawSourceQuery[] = [
-    query(
-      "installed_apps",
-      "production-installed-apps",
-      input.snapshotId,
-      captures[0],
-      (record) => subject(record.localId, "app_bundle", commonClaims(record)),
-    ),
-    query(
-      "processes",
-      "production-processes",
-      input.snapshotId,
-      captures[1],
-      (record) => subject(record.localId, "process", [{
-        kind: "process",
-        executableFingerprint: record.executableFingerprint,
-        pidGeneration: record.pidGeneration,
-      }]),
-    ),
-    query(
-      "open_files",
-      "production-open-files",
-      input.snapshotId,
-      captures[2],
-      (record) => subject(record.localId, "open_file", [{
-        kind: "open_file",
-        targetFilesystemFingerprint: record.targetFilesystemFingerprint,
-        processGeneration: record.processGeneration,
-      }]),
-    ),
-    query(
-      "startup_targets",
-      "production-startup-targets",
-      input.snapshotId,
-      captures[3],
-      (record) => subject(record.localId, "startup_item", [{
-        kind: "startup_target",
-        executableFingerprint: record.executableFingerprint,
-      }]),
-    ),
-    query(
-      "target_executables",
-      "production-target-executables",
-      input.snapshotId,
-      captures[4],
-      (record) => subject(record.localId, "executable", [{
-        kind: "executable",
-        executableFingerprint: record.executableFingerprint,
-      }]),
-    ),
-    query(
-      "receipts",
-      "production-receipts",
-      input.snapshotId,
-      captures[5],
-      (record) => subject(record.localId, "receipt", [{
-        kind: "receipt_payload",
-        packageIdentifier: record.packageIdentifier,
-        targetFilesystemFingerprint: record.targetFilesystemFingerprint,
-      }]),
-    ),
-    query(
-      "official_uninstallers",
-      "production-official-uninstallers",
-      input.snapshotId,
-      captures[6],
-      (record) => subject(record.localId, "executable", [{
-        kind: "official_uninstaller",
-        bundleIdentifier: record.bundleIdentifier,
-        designatedRequirement: record.designatedRequirement,
-        executableFingerprint: record.executableFingerprint,
-      }]),
-    ),
-    query(
-      "dependencies",
-      "production-dependencies",
-      input.snapshotId,
-      captures[7],
-      (record) => subject(record.localId, "dependency", [{
-        kind: "dependency",
-        dependeeExecutableFingerprint: record.dependeeExecutableFingerprint,
-        relationFingerprint: record.relationFingerprint,
-      }]),
-    ),
+    query("owner_bindings", "production-owner-bindings", input.snapshotId, captures[0], (record) =>
+      subject(record.localId, "owner_application", record.ownerKind, bindingClaims(record), record.sourceKind)),
+    query("installed_apps", "production-installed-apps", input.snapshotId, captures[1], (record) =>
+      subject(record.localId, "evidence_subject", "app_bundle", commonClaims(record))),
+    query("owner_executables", "production-owner-executables", input.snapshotId, captures[2], (record) =>
+      subject(record.localId, "evidence_subject", "executable", [{ kind: "executable", executableFingerprint: record.executableFingerprint }])),
+    query("processes", "production-processes", input.snapshotId, captures[3], (record) =>
+      subject(record.localId, "evidence_subject", "process", [{ kind: "process", executableFingerprint: record.executableFingerprint, pidGeneration: record.pidGeneration }])),
+    query("open_files", "production-open-files", input.snapshotId, captures[4], (record) =>
+      subject(record.localId, "evidence_subject", "open_file", [{ kind: "open_file", targetFilesystemFingerprint: record.targetFilesystemFingerprint, processGeneration: record.processGeneration }])),
+    query("startup_targets", "production-startup-targets", input.snapshotId, captures[5], (record) =>
+      subject(record.localId, "evidence_subject", "startup_item", [{ kind: "startup_target", executableFingerprint: record.executableFingerprint }])),
+    query("receipts", "production-receipts", input.snapshotId, captures[6], (record) =>
+      subject(record.localId, "evidence_subject", "receipt", [{ kind: "receipt_payload", packageIdentifier: record.packageIdentifier, targetFilesystemFingerprint: record.targetFilesystemFingerprint }])),
+    query("official_uninstallers", "production-official-uninstallers", input.snapshotId, captures[7], (record) =>
+      subject(record.localId, "evidence_subject", "executable", [{ kind: "official_uninstaller", bundleIdentifier: record.bundleIdentifier, designatedRequirement: record.designatedRequirement, executableFingerprint: record.executableFingerprint }])),
+    query("dependencies", "production-dependencies", input.snapshotId, captures[8], (record) =>
+      subject(record.localId, "evidence_subject", "dependency", [{ kind: "dependency", dependeeExecutableFingerprint: record.dependeeExecutableFingerprint, relationFingerprint: record.relationFingerprint }])),
   ];
   if (
     queries.length !== MANDATORY_QUERY_SCOPES.length ||
@@ -384,25 +315,24 @@ export async function buildProductionCorrelationInput(
   }
 
   const payload: RawCorrelationPayload = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     snapshotId: input.snapshotId,
+    artifactCategory: phaseA.candidate.category,
+    artifactPrivateNonExecutable: phaseA.candidate.privateNonExecutable,
     candidate: subject(
       phaseA.candidate.localId,
+      "library_artifact",
       "filesystem_object",
       commonClaims(phaseA.candidate),
     ),
     queries,
-    snapshotA: snapshot(phaseA.snapshot),
-    snapshotB: snapshot(phaseB.snapshot),
+    snapshotA: { ...phaseA.snapshot } satisfies RawCorrelationSnapshot,
+    snapshotB: { ...phaseB.snapshot } satisfies RawCorrelationSnapshot,
   };
   validateRawCorrelationPayload(payload);
   return new EphemeralCorrelationInput(payload);
 }
 
-/**
- * Composition seam для будущего CMC-09: app вызывает только buildInput и не
- * реализует raw identity mapping или resolver rules.
- */
 export function createProductionCorrelationAdapter(
   boundaries: Readonly<{
     commandBoundary: ProductionCorrelationCommandBoundary;
@@ -410,9 +340,7 @@ export function createProductionCorrelationAdapter(
   }>,
 ): ProductionCorrelationAdapter {
   return Object.freeze({
-    buildInput: (
-      input: Parameters<ProductionCorrelationAdapter["buildInput"]>[0],
-    ) => buildProductionCorrelationInput({
+    buildInput: (input: Parameters<ProductionCorrelationAdapter["buildInput"]>[0]) => buildProductionCorrelationInput({
       ...input,
       commandBoundary: boundaries.commandBoundary,
       filesystemBoundary: boundaries.filesystemBoundary,

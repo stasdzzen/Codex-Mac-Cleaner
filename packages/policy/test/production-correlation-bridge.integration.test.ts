@@ -6,39 +6,52 @@ import {
   createMacOSProductionCorrelationAdapter,
   type ArgvExecutor,
   type MacOSCorrelationReadOnlyFileSystem,
+  type MacOSOwnerBindingHistory,
 } from "@codex-mac-cleaner/adapters";
 import { resolveCorrelation } from "@codex-mac-cleaner/evidence";
+import {
+  InstallationKey,
+  type KeyedOwnerBindingHistoryRecord,
+} from "../../storage/src/index.js";
 import { describe, expect, it } from "vitest";
 
 import { runSafeCoreIntegrationHarness } from "../src/index.js";
 import { safeFinding } from "./fixtures.js";
 
 const now = "2026-07-18T00:00:00.000Z";
-const rawCanary = "PRIVATE-BRIDGE-INTEGRATION-CANARY";
+const canary = "PRIVATE-PRODUCTION-CORE-CANARY";
+const home = `/private/${canary}/home`;
+const candidate = `${home}/Library/Logs/Owner/private.log`;
+const ownerApp = "/Applications/Owner.app";
+const ownerExecutable = `${ownerApp}/Contents/MacOS/Owner`;
 
-const deriver = {
-  keyId: "production-bridge-test-key",
-  derivationVersion: 1,
-  derive(domain: string, kind: string, value: string) {
-    return `hmac-sha256:v1:${createHash("sha256")
-      .update(`${domain}\u0000${kind}\u0000${value}`)
-      .digest("hex")}` as const;
-  },
-};
+class History implements MacOSOwnerBindingHistory {
+  records: readonly KeyedOwnerBindingHistoryRecord[] = [];
+  async list() { return this.records; }
+  async replace(records: readonly KeyedOwnerBindingHistoryRecord[]) { this.records = records; }
+}
 
-describe("concrete macOS correlation collector → safe core", () => {
-  it("CMC-09 передаёт low-level dependencies без per-source identity mapping", async () => {
-    const candidatePath = `/private/${rawCanary}/Candidate.app`;
-    const executablePath = `${candidatePath}/Contents/MacOS/Candidate`;
+function inode(path: string): string {
+  return createHash("sha256").update(path).digest("hex").slice(0, 16);
+}
+
+describe("production Library adapter → resolver → classifier → policy", () => {
+  it("revision N→N+1 выдаёт orphaned и prepare_move без identity discovery в app", async () => {
+    let installed = true;
+    let active = true;
+    let open = true;
     const calls: Array<{ executable: string; argv: readonly string[]; shell: boolean }> = [];
     const executor: ArgvExecutor = async (executable, argv, options) => {
       calls.push({ executable, argv, shell: options.shell });
+      if (executable === "/usr/sbin/pkgutil" && argv[0] === "--pkgs") {
+        return { stdout: "", stderr: "", exitCode: 0 };
+      }
+      if (executable === "/usr/sbin/pkgutil" && argv[0] === "--file-info") {
+        return { stdout: "", stderr: "", exitCode: 0 };
+      }
       if (executable === "/usr/bin/plutil") {
         return {
-          stdout: JSON.stringify({
-            CFBundleIdentifier: `org.private.${rawCanary}`,
-            CFBundleExecutable: "Candidate",
-          }),
+          stdout: JSON.stringify({ CFBundleIdentifier: "org.private.owner", CFBundleExecutable: "Owner" }),
           stderr: "",
           exitCode: 0,
         };
@@ -46,51 +59,87 @@ describe("concrete macOS correlation collector → safe core", () => {
       if (executable === "/usr/bin/codesign") {
         return {
           stdout: "",
-          stderr: `designated => requirement-${rawCanary}\nTeamIdentifier=TEAMPRIVATE\n`,
+          stderr: "designated => identifier org.private.owner and anchor apple generic\nTeamIdentifier=TEAMPRIVATE\n",
           exitCode: 0,
         };
       }
+      if (executable === "/bin/ps") return {
+        stdout: active ? `42 Sat Jul 18 00:00:00 2026 ${ownerExecutable}\n` : "",
+        stderr: "",
+        exitCode: 0,
+      };
+      if (executable === "/usr/sbin/lsof") return {
+        stdout: open ? `p42\ncOwner\nn${candidate}\n` : "",
+        stderr: "",
+        exitCode: 0,
+      };
       return { stdout: "", stderr: "", exitCode: 0 };
     };
     const filesystem: MacOSCorrelationReadOnlyFileSystem = {
       canonicalize: async (path) => path,
       stat: async (path) => ({
-        device: "device-integration",
-        inode: path === executablePath ? "inode-executable" : `inode-${path.length}`,
-        fileType: path.endsWith(".app")
-          ? "bundle"
-          : path === executablePath ? "file" : "directory",
+        device: "device-production",
+        inode: inode(path),
+        fileType: path.endsWith(".app") ? "bundle" : path === ownerExecutable || path === candidate ? "file" : "directory",
         uid: 501,
         gid: 20,
         size: 1,
         modifiedAtMs: 1,
       }),
-      readDirectory: async () => [],
+      readDirectory: async (path) => path === "/Applications" && installed
+        ? [{ path: ownerApp, fileType: "bundle" }]
+        : [],
     };
-    const correlationAdapter = createMacOSProductionCorrelationAdapter({
+    const key = new InstallationKey(new Uint8Array(32).fill(11));
+    const history = new History();
+    const adapter = createMacOSProductionCorrelationAdapter({
       commands: createCommandRunner(executor),
       candidates: createMacOSCandidateRegistry({
-        candidates: new Map([["candidate-production-ref-a", candidatePath]]),
-        userHome: `/private/${rawCanary}/synthetic-user-root`,
+        candidates: new Map([["candidate-production-log", candidate]]),
+        userHome: home,
       }),
       filesystem,
+      installationKey: key,
+      ownerBindingHistory: history,
       now: () => now,
     });
-    const rawInput = await correlationAdapter.buildInput({
-      candidateRef: "candidate-production-ref-a",
-      snapshotId: "snapshot-production-integration-a",
+
+    const first = await adapter.buildInput({
+      candidateRef: "candidate-production-log",
+      snapshotId: "snapshot-production-n",
+      signal: new AbortController().signal,
+    });
+    resolveCorrelation({
+      auditId: "audit-production-n",
+      auditRevision: 1,
+      findingId: "finding-production-log",
+      exclusionStateVersion: 1,
+      ruleSetVersion: 2,
+      policyVersion: 2,
+      now,
+      deriver: key,
+      rawInput: first,
+    });
+    expect(history.records).toHaveLength(1);
+
+    installed = false;
+    active = false;
+    open = false;
+    const second = await adapter.buildInput({
+      candidateRef: "candidate-production-log",
+      snapshotId: "snapshot-production-n1",
       signal: new AbortController().signal,
     });
     const resolverResult = resolveCorrelation({
-      auditId: "audit-production-integration-a",
-      auditRevision: 1,
-      findingId: "finding-production-integration-a",
+      auditId: "audit-production-n1",
+      auditRevision: 2,
+      findingId: "finding-production-log",
       exclusionStateVersion: 1,
-      ruleSetVersion: 1,
-      policyVersion: 1,
+      ruleSetVersion: 2,
+      policyVersion: 2,
       now,
-      deriver,
-      rawInput,
+      deriver: key,
+      rawInput: second,
     });
     const {
       classification: _classification,
@@ -100,36 +149,30 @@ describe("concrete macOS correlation collector → safe core", () => {
     } = safeFinding;
     const harness = runSafeCoreIntegrationHarness({
       resolverResult,
-      evidenceOptions: {
-        supportLevel: "candidate",
-        sensitivityFlags: [],
-        dataKind: "known",
-      },
-      policyContext,
+      evidenceOptions: { supportLevel: "candidate", sensitivityFlags: [], dataKind: "known" },
+      policyContext: { ...policyContext, category: "log" },
     });
 
-    expect(resolverResult.provenance).toHaveLength(8);
-    expect(resolverResult.safeView.facts.targetExecutable.state).toBe("present");
-    expect(resolverResult.safeView.facts.officialUninstaller).toMatchObject({
-      state: "unknown",
-      reasonCode: "partial_inventory",
+    expect(resolverResult.safeView).toMatchObject({
+      ownerBindingState: "resolved",
+      ownerBindingSourceClass: "signed_history",
+      requirementProfileId: "private_regenerable_remnant_v1",
+      receiptLifecycle: { lifecycle: "absent" },
     });
-    expect(harness.classification.label).toBe("unknown");
-    expect(harness.decision.allowedActions).not.toContain("prepare_move");
-    expect(calls.some(({ executable }) => executable === "/usr/bin/mdfind")).toBe(true);
-    expect(calls.some(({ executable }) => executable === "/bin/ps")).toBe(true);
-    expect(calls.some(({ executable }) => executable === "/usr/sbin/lsof")).toBe(true);
-    expect(calls.some(({ executable }) => executable === "/usr/sbin/pkgutil")).toBe(true);
+    expect(harness.classification).toMatchObject({
+      label: "orphaned",
+      ruleIds: ["CLASSIFIER_V2_ORPHANED_LIBRARY_REMNANT"],
+    });
+    expect(harness.decision.blockingRuleIds).toEqual([]);
+    expect(harness.decision.allowedActions).toContain("prepare_move");
     expect(calls.every(({ shell }) => shell === false)).toBe(true);
-    const serializedSafeCore = JSON.stringify({
+    const safe = JSON.stringify({
       safeInput: harness.safeInput,
       evidenceSet: harness.evidenceSet,
       classification: harness.classification,
       decision: harness.decision,
     });
-    expect(serializedSafeCore).not.toContain(rawCanary);
-    expect(serializedSafeCore).not.toMatch(
-      /canonicalPath|bundleIdentifier|packageIdentifier|designatedRequirement/u,
-    );
+    expect(safe).not.toContain(canary);
+    expect(safe).not.toMatch(/canonicalPath|bundleIdentifier|packageIdentifier|designatedRequirement/u);
   });
 });

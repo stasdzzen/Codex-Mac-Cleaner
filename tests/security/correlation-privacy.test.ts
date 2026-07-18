@@ -46,6 +46,7 @@ describe("security: correlation privacy и fail-closed evidence", () => {
         "officialUninstaller",
         "dependency",
       ],
+      deriver: key,
     });
 
     expect(() => JSON.stringify(rawInput)).toThrowError(
@@ -58,8 +59,8 @@ describe("security: correlation privacy и fail-closed evidence", () => {
       auditRevision: 1,
       findingId: "finding-security-synthetic",
       exclusionStateVersion: 1,
-      ruleSetVersion: 1,
-      policyVersion: 1,
+      ruleSetVersion: 2,
+      policyVersion: 2,
       now: fixedNow,
       deriver: key,
       rawInput,
@@ -89,8 +90,8 @@ describe("security: correlation privacy и fail-closed evidence", () => {
         auditRevision: 1,
         findingId: `finding-${suffix}`,
         exclusionStateVersion: 1,
-        ruleSetVersion: 1,
-        policyVersion: 1,
+        ruleSetVersion: 2,
+        policyVersion: 2,
         now: fixedNow,
         deriver: key,
         rawInput: buildSyntheticCorrelationInput(options),
@@ -106,7 +107,7 @@ describe("security: correlation privacy и fail-closed evidence", () => {
       mutateSnapshotB: true,
     });
 
-    expect(incomplete.safeView.facts.installedApp.state).toBe("unknown");
+    expect(incomplete.safeView.facts.ownerApplication.state).toBe("unknown");
     expect(incomplete.certificates).not.toContainEqual(
       expect.objectContaining({ queryScope: "installed_apps" }),
     );

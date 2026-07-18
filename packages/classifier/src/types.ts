@@ -18,6 +18,6 @@ export interface Classification {
 
 export interface ClassifierRule {
   readonly ruleId: string;
-  readonly version: 1;
+  readonly version: 1 | 2;
   readonly label: ClassificationLabel;
 }
