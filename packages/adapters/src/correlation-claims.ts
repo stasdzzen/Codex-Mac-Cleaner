@@ -180,8 +180,12 @@ export const MANDATORY_QUERY_SCOPES = [
 ] as const satisfies readonly QueryScope[];
 
 export type CorrelationInputErrorCode =
+  | "CAPABILITY_UNAVAILABLE"
+  | "PERMISSION_DENIED"
   | "CORRELATION_AMBIGUOUS"
   | "CORRELATION_COVERAGE_INCOMPLETE"
+  | "CORRELATION_MISSING"
+  | "CORRELATION_SNAPSHOT_STALE"
   | "CORRELATION_SCHEMA_UNSUPPORTED";
 
 /** Safe typed failure: сообщение и поля никогда не содержат raw identity. */

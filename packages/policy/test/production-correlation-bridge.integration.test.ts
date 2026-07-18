@@ -1,11 +1,11 @@
 import { createHash } from "node:crypto";
 
 import {
-  createProductionCorrelationAdapter,
-  type ProductionCorrelationCommandBoundary,
-  type ProductionCorrelationFilesystemBoundary,
-  type ProductionCorrelationSnapshotRecord,
-  type ProductionSourceCapture,
+  createCommandRunner,
+  createMacOSCandidateRegistry,
+  createMacOSProductionCorrelationAdapter,
+  type ArgvExecutor,
+  type MacOSCorrelationReadOnlyFileSystem,
 } from "@codex-mac-cleaner/adapters";
 import { resolveCorrelation } from "@codex-mac-cleaner/evidence";
 import { describe, expect, it } from "vitest";
@@ -15,21 +15,6 @@ import { safeFinding } from "./fixtures.js";
 
 const now = "2026-07-18T00:00:00.000Z";
 const rawCanary = "PRIVATE-BRIDGE-INTEGRATION-CANARY";
-
-function complete<T>(records: readonly T[]): ProductionSourceCapture<T> {
-  return { state: "complete", startedAt: now, completedAt: now, records };
-}
-
-const snapshot: ProductionCorrelationSnapshotRecord = {
-  candidateFingerprint: "candidate-production-fingerprint",
-  parentFingerprint: "parent-production-fingerprint",
-  ownerTypeFingerprint: "owner-production-fingerprint",
-  executableFingerprint: "executable-production-fingerprint",
-  processFingerprint: "process-production-fingerprint",
-  openFileFingerprint: "open-production-fingerprint",
-  receiptFingerprint: "receipt-production-fingerprint",
-  dependencyFingerprint: "dependency-production-fingerprint",
-};
 
 const deriver = {
   keyId: "production-bridge-test-key",
@@ -41,53 +26,55 @@ const deriver = {
   },
 };
 
-describe("production correlation bridge safe core integration", () => {
-  it("будущий CMC-09 собирает ephemeral input без identity discovery в app/core", async () => {
-    const commands: ProductionCorrelationCommandBoundary = {
-      installedApps: async () => complete([]),
-      processes: async () => complete([]),
-      openFiles: async () => complete([]),
+describe("concrete macOS correlation collector → safe core", () => {
+  it("CMC-09 передаёт low-level dependencies без per-source identity mapping", async () => {
+    const candidatePath = `/private/${rawCanary}/Candidate.app`;
+    const executablePath = `${candidatePath}/Contents/MacOS/Candidate`;
+    const calls: Array<{ executable: string; argv: readonly string[]; shell: boolean }> = [];
+    const executor: ArgvExecutor = async (executable, argv, options) => {
+      calls.push({ executable, argv, shell: options.shell });
+      if (executable === "/usr/bin/plutil") {
+        return {
+          stdout: JSON.stringify({
+            CFBundleIdentifier: `org.private.${rawCanary}`,
+            CFBundleExecutable: "Candidate",
+          }),
+          stderr: "",
+          exitCode: 0,
+        };
+      }
+      if (executable === "/usr/bin/codesign") {
+        return {
+          stdout: "",
+          stderr: `designated => requirement-${rawCanary}\nTeamIdentifier=TEAMPRIVATE\n`,
+          exitCode: 0,
+        };
+      }
+      return { stdout: "", stderr: "", exitCode: 0 };
     };
-    const filesystem: ProductionCorrelationFilesystemBoundary = {
-      captureCandidate: async () => ({
-        candidate: {
-          localId: "candidate-production-a",
-          filesystem: {
-            canonicalPath: `/private/${rawCanary}`,
-            device: "device-production-a",
-            inode: "inode-production-a",
-            fileType: "directory",
-            uid: 501,
-            gid: 20,
-            fingerprint: snapshot.candidateFingerprint,
-          },
-          bundle: {
-            bundleIdentifier: `org.private.${rawCanary}`,
-            metadataFingerprint: "metadata-production-a",
-          },
-          packageIdentifier: `package.private.${rawCanary}`,
-          signing: {
-            designatedRequirement: `requirement-${rawCanary}`,
-            teamIdentifier: "team-production-a",
-            executableFingerprint: snapshot.executableFingerprint,
-          },
-          owner: { uid: 501, gid: 20 },
-          executableFingerprint: snapshot.executableFingerprint,
-        },
-        snapshot,
+    const filesystem: MacOSCorrelationReadOnlyFileSystem = {
+      canonicalize: async (path) => path,
+      stat: async (path) => ({
+        device: "device-integration",
+        inode: path === executablePath ? "inode-executable" : `inode-${path.length}`,
+        fileType: path.endsWith(".app")
+          ? "bundle"
+          : path === executablePath ? "file" : "directory",
+        uid: 501,
+        gid: 20,
+        size: 1,
+        modifiedAtMs: 1,
       }),
-      startupTargets: async () => complete([]),
-      targetExecutables: async () => complete([{
-        localId: "target-executable-production-a",
-        executableFingerprint: snapshot.executableFingerprint,
-      }]),
-      receipts: async () => complete([]),
-      officialUninstallers: async () => complete([]),
-      dependencies: async () => complete([]),
+      readDirectory: async () => [],
     };
-    const correlationAdapter = createProductionCorrelationAdapter({
-      commandBoundary: commands,
-      filesystemBoundary: filesystem,
+    const correlationAdapter = createMacOSProductionCorrelationAdapter({
+      commands: createCommandRunner(executor),
+      candidates: createMacOSCandidateRegistry({
+        candidates: new Map([["candidate-production-ref-a", candidatePath]]),
+        userHome: `/private/${rawCanary}/synthetic-user-root`,
+      }),
+      filesystem,
+      now: () => now,
     });
     const rawInput = await correlationAdapter.buildInput({
       candidateRef: "candidate-production-ref-a",
@@ -123,8 +110,17 @@ describe("production correlation bridge safe core integration", () => {
 
     expect(resolverResult.provenance).toHaveLength(8);
     expect(resolverResult.safeView.facts.targetExecutable.state).toBe("present");
-    expect(harness.classification.label).toBe("orphaned");
-    expect(harness.decision.allowedActions).toContain("prepare_move");
+    expect(resolverResult.safeView.facts.officialUninstaller).toMatchObject({
+      state: "unknown",
+      reasonCode: "partial_inventory",
+    });
+    expect(harness.classification.label).toBe("unknown");
+    expect(harness.decision.allowedActions).not.toContain("prepare_move");
+    expect(calls.some(({ executable }) => executable === "/usr/bin/mdfind")).toBe(true);
+    expect(calls.some(({ executable }) => executable === "/bin/ps")).toBe(true);
+    expect(calls.some(({ executable }) => executable === "/usr/sbin/lsof")).toBe(true);
+    expect(calls.some(({ executable }) => executable === "/usr/sbin/pkgutil")).toBe(true);
+    expect(calls.every(({ shell }) => shell === false)).toBe(true);
     const serializedSafeCore = JSON.stringify({
       safeInput: harness.safeInput,
       evidenceSet: harness.evidenceSet,
