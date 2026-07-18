@@ -1,7 +1,7 @@
 ---
 type: Implementation Plan
 title: План CMC-21 — core correlation/evidence resolver
-description: TDD-план отдельной implementation Issue после merge архитектуры CMC-20.
+description: Базовый TDD-план CMC-21, дополненный обязательным ADR-0013 delta-планом после merge CMC-22.
 tags: [plan, correlation, evidence, tdd, cmc-21]
 status: approved
 owner: Architect
@@ -10,7 +10,9 @@ date: 2026-07-18
 
 # Граница плана
 
-План выполняет будущий Worker CMC-21/#36 только после merge #35. Разрешённые paths: `packages/contracts/`, `packages/adapters/`, `packages/evidence/`, `packages/classifier/`, `packages/policy/`, `packages/storage/`, `tests/security/`, `pnpm-lock.yaml`.
+План продолжает существующий Worker CMC-21/#36 и PR #38 только после merge #35 и #39. Разрешённые paths: `packages/contracts/`, `packages/adapters/`, `packages/evidence/`, `packages/classifier/`, `packages/policy/`, `packages/storage/`, `tests/security/`, `pnpm-lock.yaml`.
+
+Этот документ остаётся базовым планом ADR-0012. Обязательные изменения ADR-0013 выполняются по [delta-плану actionable Library remnants](2026-07-18-actionable-library-remnant-correlation.md). При расхождении delta-план и ADR-0013 имеют приоритет; старый `.app`-candidate harness не является доказательством production actionability.
 
 `apps/mcp-server`, widget, `.codex-plugin`, `.mcp.json`, Skill и PR #34 не меняются. Packaged stdio wiring/E2E выполняются позже тем же CMC-09 Worker в существующем PR #34.
 
@@ -116,13 +118,26 @@ date: 2026-07-18
 **Tests first**
 
 * Canary scan `content`, `structuredContent`-equivalent safe objects, errors, logs, snapshots и persisted reports.
-* Core harness: candidate + complete absent facts становится policy-eligible; active/open/installed/receipt/dependency present или incomplete coverage блокирует.
+* Core harness: production `~/Library/Caches|Logs` artifact с authoritative owner binding, `private_regenerable_remnant_v1` и complete required facts становится policy-eligible; active/open/installed/live-receipt/dependency present, unsupported profile или incomplete coverage блокирует.
 * Harness экспортирует safe input для будущего packaged stdio E2E без raw identities.
 
 **Implementation**
 
 * Удалить утечки, закрепить deterministic serialization и safe errors.
 * Не добавлять app/server wiring в этой Issue.
+
+# Task 9 — обязательный ADR-0013 delta
+
+**Tests first**
+
+* Выполнить все RED cases из [delta-плана](2026-07-18-actionable-library-remnant-correlation.md): schema v2, authoritative binding, production inventory scopes, receipt lifecycle, requirement applicability и Library production integration.
+* RED: `.app` candidate остаётся недостаточным acceptance evidence; Application Support/Containers/Preferences/WebKit/HTTPStorages/Saved State/database/sync/VPN/personal/autostart не получают `prepare_move`.
+
+**Implementation**
+
+* Разделить cleanup-target и owner lifecycle, мигрировать legacy target-executable в analysis-only.
+* Добавить один actionable `private_regenerable_remnant_v1` и доказать audit → prepare → move → restore на generated user-Library cache/log через production adapters.
+* Сохранить ту же Issue/worktree/branch/PR #38 и все privacy/fail-closed инварианты.
 
 # Финальные проверки
 

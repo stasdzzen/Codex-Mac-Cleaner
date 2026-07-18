@@ -35,7 +35,7 @@ updated: 2026-07-17
 * Purge — только ручной и поэлементный; bulk selection, «Очистить всё» и автоматического срока нет.
 * Dashboard имеет пять вкладок: «Обзор», «Находки», «Карантин», «Исключения», «Расписание».
 * Сервер вычисляет `candidateLogicalBytes`, `candidatePhysicalBytes`, `quarantinePhysicalBytes`, `purgedPhysicalBytes` и `DiskObservation`; UI не пересчитывает их и не показывает причинный APFS delta.
-* «Пропустить сейчас» — session-local UI no-op; «Удалить» означает quarantine одного объекта; persistent «Исключить» реализуется в CMC-12.
+* «Пропустить сейчас» — session-local UI no-op; «Переместить в карантин» означает quarantine одного объекта; persistent «Исключить» реализуется в CMC-12.
 * Ежемесячный read-only audit реализуется в CMC-13 через capability-aware Codex automation bridge без cron или LaunchAgent.
 * Публичный bundle не содержит username, home paths, app inventory и персональные решения разработчика.
 * После установки аудит и все решения выполняются внутри Codex кнопками; продукт не требует копировать команды в терминал.
@@ -962,7 +962,7 @@ Widget state не содержит path, preview token или policy decision. `
 
 - [ ] **Шаг 4: собрать автономный bundle и проверить UX**
 
-Dashboard использует `Card`, `Progress`, `Table`, `Badge`, `Sheet`, `Alert`, `AlertDialog`, `Skeleton`, `Tabs`, `Button`, `Tooltip`, `sonner`; semantic tokens; тёмную тему. Вкладки имеют названия «Обзор», «Находки», «Карантин», «Исключения», «Расписание». До CMC-12/13 две последние имеют честные dependency states. Actionable finding показывает «Удалить», «Исключить» и «Пропустить сейчас»; skip — no-op, exclusion делегируется CMC-12, delete открывает quarantine preview одного объекта. `FindingFacts`, `ReclaimEstimate`, `supportLevel` и blocking reason показаны текстом. `unsupported_manual` не содержит mutation control, shell-команды или sudo advice.
+Dashboard использует `Card`, `Progress`, `Table`, `Badge`, `Sheet`, `Alert`, `AlertDialog`, `Skeleton`, `Tabs`, `Button`, `Tooltip`, `sonner`; semantic tokens; тёмную тему. Вкладки имеют названия «Обзор», «Находки», «Карантин», «Исключения», «Расписание». До CMC-12/13 две последние имеют честные dependency states. Actionable finding показывает «Переместить в карантин», «Исключить» и «Пропустить сейчас»; skip — no-op, exclusion делегируется CMC-12, quarantine открывает preview одного объекта. `FindingFacts`, `ReclaimEstimate`, `supportLevel` и blocking reason показаны текстом. `unsupported_manual` не содержит mutation control, shell-команды или sudo advice.
 
 Quarantine Center даёт отдельные «Восстановить» и «Удалить навсегда» для каждой записи; bulk controls и auto-purge отсутствуют. Summary показывает «Логический размер находок», «Физический размер находок», «В карантине», «Удалено навсегда» и «Свободно на диске» из server-owned `StorageSummary`/`DiskObservation`, включая `observedAt`; copy не вычисляет APFS free-space delta. Для `cancelled` точный `Alert`: «Аудит отменён. Результаты неполные, поэтому перемещение в карантин недоступно. Начните новый аудит». Coverage, risk и action state различимы текстом и icon, не только цветом. Keyboard navigation, focus return после dialog и disabled state проверяются tests. CSP не объявляет network domains.
 
@@ -1155,7 +1155,7 @@ node scripts/package-release.mjs --verify-only
 git diff --check
 ```
 
-Ожидаемый результат: все автоматические gates проходят. Clean-room harness устанавливает package в repository/personal marketplace, запускает новую задачу Codex, открывает Dashboard и выполняет button-only сценарий без shell copy. `docs/release/real-mac-smoke.md` содержит шаги проверки universal protected classes, secret-like fixture, отмены активного аудита, read-only partial report, logical/physical/disk metrics, «Удалить»/«Исключить»/«Пропустить сейчас», persistent exclusions, schedule capability/fallback, single-entry move/restore/purge и ошибки purge, а также поля `commit SHA`, `macOS`, `hardware`, `FDA mode`, `result`, `evidence`; ни одно поле результата не помечено выполненным заранее.
+Ожидаемый результат: все автоматические gates проходят. Clean-room harness устанавливает package в repository/personal marketplace, запускает новую задачу Codex, открывает Dashboard и выполняет button-only сценарий без shell copy. `docs/release/real-mac-smoke.md` содержит шаги проверки universal protected classes, secret-like fixture, отмены активного аудита, read-only partial report, logical/physical/disk metrics, «Переместить в карантин»/«Исключить»/«Пропустить сейчас», persistent exclusions, schedule capability/fallback, single-entry move/restore/purge и ошибки purge, а также поля `commit SHA`, `macOS`, `hardware`, `FDA mode`, `result`, `evidence`; ни одно поле результата не помечено выполненным заранее.
 
 - [ ] **Шаг 5: commit и передача Controller**
 

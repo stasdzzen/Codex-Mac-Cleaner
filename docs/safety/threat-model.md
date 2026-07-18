@@ -5,7 +5,7 @@ description: Активы, доверенные границы, основные
 tags: [safety, threat-model, privacy, supply-chain]
 status: approved
 owner: Architect
-date: 2026-07-15
+date: 2026-07-18
 ---
 
 # Контекст
@@ -23,6 +23,7 @@ date: 2026-07-15
 7. Отсутствие персональных данных разработчика в публичном bundle.
 8. Конфиденциальность local correlation graph, installation key, bundle/package/signing claims и destructive tokens.
 9. Целостность coverage certificates и immutable correlation revision.
+10. Целостность authoritative owner bindings и server-owned requirement profiles.
 
 # Не рассматриваемый основной противник
 
@@ -41,6 +42,12 @@ date: 2026-07-15
 | Prompt injection в имени или содержимом | Обход политики через модель | Содержимое не читается как инструкции; модель не получает mutation-tools и пути |
 | Widget подменяет safe facts или action handle | UI становится источником identity/policy | Widget получает только safe view; token/graph остаются server-side и revalidate по revision |
 | Совпадение имени с удалённым приложением | Личные или shared-данные приняты за остаток | Owner, installed state, process, receipt, dependency, temporal и data-kind evidence проверяются раздельно |
+| Library artifact принят за app bundle | Artifact existence ошибочно используется как owner executable/installed state | Разные `library_artifact`/`owner_application` subjects и отдельные fact states; legacy target-executable analysis-only |
+| Эвристика выдаёт owner binding | Чужой cache/log получает mutation authority | Только authoritative `remnant_of` из exact receipt payload, OS-owned metadata или validated signed process/open-file history |
+| Historical binding устарел или перенесён | Новый объект наследует authority старого владельца | Installation-keyed digests; invalidation при rekey, version/root/type/artifact/owner mismatch и strong counter-evidence |
+| Клиент выбирает удобный policy profile | UI/модель пропускает обязательную проверку | Profile и applicability только server-owned, versioned и привязаны к correlation revision/token |
+| `not_applicable` подменяет `absent`/`unknown` | Failed query или dependency исчезают из policy | Типизированная applicability не выпускает certificate, не заменяет query и не подавляет positive evidence |
+| Рискованная Library category получила карантин | Потеря настроек, sync state, saves или базы | v0.1 actionable только для private regenerable cache/log; остальные categories принудительно inspect-only |
 | Независимые opaque refs ошибочно объединены | Чужой installed/process/receipt evidence применён к candidate | Server-only subjects/edges, typed claims, versioned rules; `targetRef` не является identity |
 | Пустой или частичный source output принят за отсутствие | Candidate получает ложное negative evidence | `absent` только с completeness certificate полного same-snapshot query; иначе `unknown` |
 | Path/display name/bundle/package/signer field выбран как единственное совпадение | Name-only resolution разрешает mutation | Claims дают candidate sets; resolved edge требует authoritative или независимые corroborated claims |
@@ -89,6 +96,7 @@ date: 2026-07-15
 * macOS sources не дают общей транзакционной snapshot API; logical Snapshot A/B и fingerprints обнаруживают известные изменения, но неопределённость остаётся `unknown`.
 * Installation key в файле `0600` не защищает от уже скомпрометированного процесса того же UID; продукт ограничивает переносимость и dictionary attack, но не заявляет защиту от такого malware.
 * Rekey делает старые digests несопоставимыми; recovery требует поддержанной migration либо явного пересоздания exclusions и до этого блокирует token issuance.
+* На первом аудите authoritative owner binding может отсутствовать; продукт сознательно оставляет такой finding inspect-only и может накопить безопасную historical relation только из будущего наблюдения.
 
 # Проверка мер
 

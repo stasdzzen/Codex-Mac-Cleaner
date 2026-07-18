@@ -1,6 +1,6 @@
 ```cto-issue
 schema: 1
-dependencies: #35
+dependencies: #35, #39
 conflicts: none
 touched_paths: packages/contracts/; packages/adapters/; packages/evidence/; packages/classifier/; packages/policy/; packages/storage/; tests/security/; pnpm-lock.yaml
 risk: high
@@ -12,19 +12,19 @@ execution_profile: deep
 
 ### Goal
 
-Implement the core server-owned correlation/evidence resolver approved by ADR-0012 so candidate-specific counter-evidence and negative evidence are safe, deterministic and usable by the existing CMC-09 integration after this Issue merges.
+Continue the existing core server-owned correlation/evidence resolver under ADR-0012 and ADR-0013 so a real user-Library cache/log artifact can safely reach one-object quarantine, while the existing CMC-09 integration remains paused until this Issue merges.
 
 ### Scope
 
-Add versioned correlation subjects/edges, ephemeral raw-identity claims, source provenance, completeness certificates, Snapshot A/B correlation revisions and safe views across contracts, adapters and evidence. Integrate fail-closed correlation states into classifier/policy. Migrate UserExclusion persistence to installation-keyed domain-separated digests with recovery/versioning. Add deterministic synthetic builders, privacy canaries and core integration tests. Do not wire the MCP App or packaged plugin in this Issue.
+Preserve the existing Issue #36 task/worktree/branch/PR #38 and revise its implementation to separate `library_artifact` from `owner_application`. Add authoritative `remnant_of` bindings, receipt lifecycle, canonical owner/uninstaller inventories, installation-keyed historical binding, server-owned requirement profiles/applicability and production Library integration. Keep versioned correlation subjects/edges, provenance, completeness certificates, Snapshot A/B revisions, safe views and keyed UserExclusion recovery. Do not wire the MCP App or packaged plugin in this Issue.
 
 ### Acceptance criteria
 
-Path-only, basename, display-name and any single bundle/package/signing/owner claim cannot resolve ownership or enable mutation. Bundle/package/signing/owner/filesystem rules return `resolved`, `ambiguous`, `missing` or `mismatch` deterministically. `absent` is emitted only with full source coverage and a completed same-snapshot query; permission/capability gaps, partial inventory, parse loss, cancellation and ambiguous/missing/mismatch states return `unknown`. Positive installed-app, process, open-file, startup, receipt, uninstaller and dependency evidence remains blocking counter-evidence. Snapshot A/B changes set `staleDuringAudit`, change the immutable correlation revision and invalidate actions. UserExclusion uses an installation-local keyed digest rather than plaintext, plain hash or public salt; known migrations are atomic, while unknown schema, missing key and ambiguous migration keep findings visible and block token issuance. Safe views and test outputs contain no raw path, inventory, bundle/package/signing identity, token or personal data.
+Only exact receipt payload mapping, OS-owned individual-container metadata or validated installation-local signed process/open-file history can create an authoritative owner binding; path/name/bundle-only hints and user attestation cannot. Artifact existence and owner app/executable lifecycle are separate. Receipt lifecycle is `live | stale | absent | unknown`. Only server-owned `private_regenerable_remnant_v1` may make private regenerable `cache | log` actionable; all other v0.1 Library categories remain inspect-only. `not_applicable` is not `absent`, cannot replace a failed query and never suppresses positive evidence. A production-adapter synthetic `~/Library/Caches` or `~/Library/Logs` artifact reaches `prepare_move` only with authoritative binding, complete required evidence and stable A/B; incomplete/ambiguous/mismatch/stale and all counter-evidence fail closed. UserExclusion migration and all privacy invariants remain intact.
 
 ### Verification
 
-Run focused contracts/adapters/evidence/classifier/policy/storage tests, deterministic correlation and coverage matrices, migration/rekey/dictionary-attack/privacy tests, security tests, root `pnpm check`, repository validator, repository policy tests and `git diff --check` on one final head SHA. Prove the core integration harness can feed a future packaged stdio audit → prepare → move → restore E2E without exposing raw identities.
+Run focused contracts/adapters/evidence/classifier/policy/storage tests, owner-binding/receipt/profile/applicability/coverage matrices, migration/rekey/dictionary-attack/privacy tests, security tests, root `pnpm check`, repository validator, repository policy tests and `git diff --check` on one final head SHA. Prove through production adapters—not an `.app` candidate fixture—that a generated user-Library cache/log can feed audit → prepare → move → restore, while every non-actionable category and evidence gap remains inspect-only/fail-closed.
 
 ### Constraints
 
@@ -34,19 +34,19 @@ Do not modify apps/mcp-server, the widget, `.codex-plugin`, `.mcp.json`, Skill o
 
 ### Цель
 
-Реализовать утверждённый ADR-0012 core server-owned correlation/evidence resolver, чтобы candidate-specific counter-evidence и negative evidence стали безопасными, детерминированными и пригодными для существующей интеграции CMC-09 после merge этой Issue.
+Продолжить существующий core server-owned correlation/evidence resolver по ADR-0012 и ADR-0013, чтобы реальный user-Library cache/log artifact мог безопасно дойти до пообъектного карантина, а существующая интеграция CMC-09 оставалась приостановленной до merge этой Issue.
 
 ### Объём
 
-Добавить versioned correlation subjects/edges, ephemeral raw-identity claims, source provenance, completeness certificates, Snapshot A/B correlation revisions и safe views в contracts, adapters и evidence. Интегрировать fail-closed correlation states в classifier/policy. Перевести persistence UserExclusion на installation-keyed domain-separated digests с recovery/versioning. Добавить deterministic synthetic builders, privacy canaries и core integration tests. Не выполнять wiring MCP App или packaged plugin в этой Issue.
+Сохранить существующие задачу #36, worktree, ветку и PR #38 и исправить реализацию: разделить `library_artifact` и `owner_application`; добавить authoritative `remnant_of`, receipt lifecycle, канонические owner/uninstaller inventories, installation-keyed historical binding, server-owned requirement profiles/applicability и production Library integration. Сохранить versioned subjects/edges, provenance, completeness certificates, Snapshot A/B revisions, safe views и recovery keyed UserExclusion. Не выполнять wiring MCP App или packaged plugin.
 
 ### Критерии приёмки
 
-Path-only, basename, display-name и один bundle/package/signing/owner claim не могут разрешить ownership или mutation. Правила bundle/package/signing/owner/filesystem детерминированно возвращают `resolved`, `ambiguous`, `missing` или `mismatch`. `absent` выпускается только при полном source coverage и завершённом same-snapshot query; permission/capability gaps, partial inventory, parse loss, cancellation и ambiguous/missing/mismatch дают `unknown`. Positive installed-app, process, open-file, startup, receipt, uninstaller и dependency evidence остаются блокирующими counter-evidence. Изменение Snapshot A/B выставляет `staleDuringAudit`, меняет immutable correlation revision и инвалидирует actions. UserExclusion использует installation-local keyed digest вместо plaintext, plain hash или public salt; известные migrations атомарны, а unknown schema, missing key и ambiguous migration оставляют findings видимыми и блокируют token issuance. Safe views и test outputs не содержат raw path, inventory, bundle/package/signing identity, token или personal data.
+Только exact receipt payload mapping, OS-owned metadata отдельного container или валидная installation-local signed process/open-file history создают authoritative owner binding; path/name/bundle-only hints и user attestation не могут. Artifact existence и lifecycle owner app/executable раздельны. Receipt lifecycle: `live | stale | absent | unknown`. Только server-owned `private_regenerable_remnant_v1` может сделать приватный регенерируемый `cache | log` actionable; остальные Library categories v0.1 остаются inspect-only. `not_applicable` не является `absent`, не заменяет failed query и не подавляет positive evidence. Синтетический `~/Library/Caches` или `~/Library/Logs` artifact через production adapters достигает `prepare_move` только при authoritative binding, полном required evidence и стабильных A/B; incomplete/ambiguous/mismatch/stale и counter-evidence блокируют действие. Recovery UserExclusion и все privacy-инварианты сохраняются.
 
 ### Проверка
 
-Запустить focused tests contracts/adapters/evidence/classifier/policy/storage, deterministic correlation/coverage matrices, migration/rekey/dictionary-attack/privacy tests, security tests, корневой `pnpm check`, repository validator, repository policy tests и `git diff --check` на одном финальном head SHA. Доказать, что core integration harness может питать будущий packaged stdio E2E audit → prepare → move → restore без раскрытия raw identities.
+Запустить focused tests contracts/adapters/evidence/classifier/policy/storage, матрицы owner-binding/receipt/profile/applicability/coverage, migration/rekey/dictionary-attack/privacy tests, security tests, корневой `pnpm check`, repository validator, repository policy tests и `git diff --check` на одном финальном head SHA. Через production adapters, а не `.app` candidate fixture, доказать generated user-Library cache/log → audit → prepare → move → restore; все остальные categories и evidence gaps должны остаться inspect-only/fail-closed.
 
 ### Ограничения
 

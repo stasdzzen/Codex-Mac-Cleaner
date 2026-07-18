@@ -16,6 +16,7 @@
 * [ADR-0010: protected scopes, inspection-only sources и наблюдаемые метрики диска](ADR-0010-field-research-safety-contract.md)
 * [ADR-0011: публичный продукт, пользовательские исключения и Codex-расписание](ADR-0011-public-plugin-exclusions-scheduling.md)
 * [ADR-0012: server-owned correlation identity и доказуемое отсутствие](ADR-0012-server-owned-correlation-identity.md)
+* [ADR-0013: actionable correlation для остатков в user Library](ADR-0013-actionable-library-remnant-correlation.md)
 
 ## Правило изменения
 
