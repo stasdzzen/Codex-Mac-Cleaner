@@ -48,7 +48,7 @@ export function StorageSummary({
           </Card>
         ))}
       </div>
-      <div className="space-y-1 text-sm text-muted-foreground">
+      <div className="flex flex-col gap-1 text-sm text-muted-foreground">
         <p>Наблюдение диска: {diskObservation.observedAt}</p>
         <p>
           Источник: {diskObservation.source}. Значения показываются раздельно и не

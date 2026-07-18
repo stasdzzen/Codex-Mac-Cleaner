@@ -32,7 +32,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import type { WidgetBridge } from "@/lib/bridge";
-import { createRequestId } from "@/lib/bridge";
 import type { QuarantineEntry } from "@/lib/dashboard-types";
 import { formatBytes } from "@/lib/utils";
 
@@ -65,7 +64,7 @@ function EntryActionDialog({
     try {
       const preview = await bridge.callTool<PreviewResult>(
         `quarantine_prepare_${action}`,
-        { quarantineEntryId: entry.entryId },
+        { operationId: entry.entryId },
       );
       setPreviewToken(preview.previewToken);
     } catch {
@@ -83,7 +82,7 @@ function EntryActionDialog({
     try {
       await bridge.callTool(`quarantine_${action}`, {
         previewToken,
-        operationId: createRequestId(action),
+        operationId: entry.entryId,
       });
       toast.success(isPurge ? "Запись удалена навсегда." : "Восстановление запрошено.");
     } catch {
