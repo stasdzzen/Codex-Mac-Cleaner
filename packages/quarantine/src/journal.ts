@@ -21,10 +21,19 @@ export class OperationJournal {
   private initialized = false;
   private nextSequence = 1;
   private tail: Promise<void> = Promise.resolve();
+  private readonly eventKeys = new Set<string>();
   private readonly jsonStore: JsonStore;
 
   constructor(private readonly storeRoot: string) {
     this.jsonStore = new JsonStore(storeRoot);
+  }
+
+  private eventKey(
+    operationId: string,
+    state: QuarantineManifest["state"],
+    eventSequence: number,
+  ): string {
+    return `${operationId}\u0000${state}\u0000${eventSequence}`;
   }
 
   private async initialize(): Promise<void> {
@@ -44,18 +53,43 @@ export class OperationJournal {
       } catch (error) {
         throw new QuarantineError("MANIFEST_INCONSISTENT", { cause: error });
       }
-      const sequence = (event as { eventSequence?: unknown }).eventSequence;
+      const candidate = event as {
+        eventSequence?: unknown;
+        operationId?: unknown;
+        state?: unknown;
+      };
+      const sequence = candidate.eventSequence;
       if (
         !Number.isSafeInteger(sequence) ||
         typeof sequence !== "number" ||
-        sequence <= previous
+        sequence <= previous ||
+        typeof candidate.operationId !== "string" ||
+        typeof candidate.state !== "string"
       ) {
         throw new QuarantineError("MANIFEST_INCONSISTENT");
       }
+      this.eventKeys.add(
+        this.eventKey(
+          candidate.operationId,
+          candidate.state as QuarantineManifest["state"],
+          sequence,
+        ),
+      );
       previous = sequence;
     }
     this.nextSequence = previous + 1;
     this.initialized = true;
+  }
+
+  async hasEvent(manifest: QuarantineManifest): Promise<boolean> {
+    await this.initialize();
+    return this.eventKeys.has(
+      this.eventKey(
+        manifest.operationId,
+        manifest.state,
+        manifest.eventSequence,
+      ),
+    );
   }
 
   async withNextSequence<T>(
@@ -91,5 +125,12 @@ export class OperationJournal {
     };
     await this.jsonStore.appendEvent("journal/operations.ndjson", event);
     await syncDirectory(join(this.storeRoot, "journal"));
+    this.eventKeys.add(
+      this.eventKey(
+        manifest.operationId,
+        manifest.state,
+        manifest.eventSequence,
+      ),
+    );
   }
 }

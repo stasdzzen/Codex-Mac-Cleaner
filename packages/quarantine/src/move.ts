@@ -459,7 +459,13 @@ export class QuarantineController {
       }
 
       let next: QuarantineManifest;
-      if (current.state === state && state !== "moved") {
+      if (
+        current.state === "moved" &&
+        state === "moved" &&
+        (await this.journal.hasEvent(current))
+      ) {
+        next = current;
+      } else if (current.state === state && state !== "moved") {
         next = current;
       } else if (current.state === "moved" && state === "aborted") {
         next = await this.persistState(current, "inconsistent", {

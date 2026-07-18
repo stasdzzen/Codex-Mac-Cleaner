@@ -41,6 +41,30 @@ async function moveWithFault(
   ).rejects.toMatchObject({ point });
 }
 
+async function expectRepeatedRecoveryStable(
+  harness: SyntheticHarness,
+  operationId: string,
+): Promise<void> {
+  const manifestBefore = await harness.readManifest(operationId);
+  const journalBefore = await harness.readJournal();
+
+  const first = await harness.createController().recoverPreparedOperations();
+  const manifestAfterFirst = await harness.readManifest(operationId);
+  const journalAfterFirst = await harness.readJournal();
+  const second = await harness.createController().recoverPreparedOperations();
+  const manifestAfterSecond = await harness.readManifest(operationId);
+  const journalAfterSecond = await harness.readJournal();
+
+  expect(first).toEqual([manifestBefore]);
+  expect(second).toEqual([manifestBefore]);
+  expect(manifestAfterFirst).toEqual(manifestBefore);
+  expect(manifestAfterSecond).toEqual(manifestBefore);
+  expect(manifestAfterFirst.eventSequence).toBe(manifestBefore.eventSequence);
+  expect(manifestAfterSecond.eventSequence).toBe(manifestBefore.eventSequence);
+  expect(journalAfterFirst).toEqual(journalBefore);
+  expect(journalAfterSecond).toEqual(journalBefore);
+}
+
 describe("fault injection и recovery", () => {
   let harness: SyntheticHarness | undefined;
 
@@ -100,6 +124,34 @@ describe("fault injection и recovery", () => {
       operationId: "op-before-journal",
       state: "moved",
     });
+  });
+
+  it("два повторных recovery не меняют согласованные manifest и journal после successful move", async () => {
+    harness = await createSyntheticHarness();
+    const controller = harness.createController();
+    const preview = await controller.prepareMove({
+      findingId: harness.subject.findingId,
+      auditRevision: 1,
+      uiSessionId: "ui-stable-success",
+    });
+    await controller.moveToQuarantine({
+      token: preview.secret,
+      operationId: "op-stable-success",
+      uiSessionId: "ui-stable-success",
+    });
+
+    await expectRepeatedRecoveryStable(harness, "op-stable-success");
+  });
+
+  it("два повторных recovery не меняют manifest и journal после первого catch-up", async () => {
+    harness = await createSyntheticHarness();
+    await moveWithFault(harness, "op-stable-catch-up", "beforeJournalAppend");
+    const [caughtUp] = await harness
+      .createController()
+      .recoverPreparedOperations();
+    expect(caughtUp).toMatchObject({ state: "moved" });
+
+    await expectRepeatedRecoveryStable(harness, "op-stable-catch-up");
   });
 
   it("recovery matrix 1/1 даёт conflicted", async () => {
