@@ -30,6 +30,8 @@ const expectedAnnotations = {
   dashboard_open: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   finding_inspect: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   finding_reveal: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  schedule_intent_get: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  schedule_intent_complete: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
 } as const;
 
 describe("model-visible MCP skeleton", () => {
@@ -54,7 +56,7 @@ describe("model-visible MCP skeleton", () => {
     blockingReasons: [],
   } as const;
 
-  it("регистрирует ровно семь канонических tools с точными annotations", () => {
+  it("регистрирует все канонические model-visible tools с точными annotations", () => {
     expect(Object.keys(MODEL_VISIBLE_TOOL_DEFINITIONS)).toEqual([
       "audit_start",
       "audit_status",
@@ -63,6 +65,8 @@ describe("model-visible MCP skeleton", () => {
       "dashboard_open",
       "finding_inspect",
       "finding_reveal",
+      "schedule_intent_get",
+      "schedule_intent_complete",
     ]);
     for (const [name, annotations] of Object.entries(expectedAnnotations)) {
       expect(MODEL_VISIBLE_TOOL_DEFINITIONS[name as keyof typeof expectedAnnotations].annotations).toEqual(
@@ -71,7 +75,7 @@ describe("model-visible MCP skeleton", () => {
     }
   });
 
-  it("реальный SDK tools/list видит те же семь strict schemas", async () => {
+  it("реальный SDK tools/list видит те же strict schemas", async () => {
     const server = createMcpServer({
       platform: "darwin",
       arch: "arm64",
@@ -87,7 +91,12 @@ describe("model-visible MCP skeleton", () => {
     try {
       const listed = await client.listTools();
       const modelTools = listed.tools.filter(
-        (tool) => tool._meta?.ui === undefined,
+        (tool) =>
+          (
+            tool._meta as
+              | { ui?: { visibility?: readonly string[] } }
+              | undefined
+          )?.ui?.visibility?.includes("app") !== true,
       );
       expect(modelTools.map((tool) => tool.name)).toEqual(
         Object.keys(MODEL_VISIBLE_TOOL_DEFINITIONS),
@@ -207,6 +216,24 @@ describe("model-visible MCP skeleton", () => {
         { widget: { canonicalPath } },
       ),
     ).toThrow();
+  });
+
+  it.each([
+    "rawConfig",
+    "configValue",
+    "personalInventory",
+    "applicationInventory",
+    "exclusionIdentities",
+    "protectedDetails",
+  ])("запрещает приватное поле widget meta %s", (privateField) => {
+    expect(() =>
+      buildToolResult(
+        "audit_start",
+        { auditId: "audit-1", state: "queued", stateVersion: 1 },
+        "Аудит поставлен в очередь",
+        { widget: { [privateField]: "synthetic-value" } },
+      ),
+    ).toThrow("PRIVATE_WIDGET_META_FIELD");
   });
 
   it("разрешает canonicalPath только в widget-only _meta", () => {
