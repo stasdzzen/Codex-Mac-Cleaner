@@ -1,14 +1,23 @@
 export type RuleInputType =
-  | "owner_identity"
-  | "installed_state"
+  | "owner_binding"
+  | "artifact_existence"
+  | "owner_application"
+  | "owner_executable"
   | "activity"
   | "open_file_state"
-  | "target_existence"
-  | "receipt"
+  | "startup_target"
+  | "receipt_lifecycle"
+  | "official_uninstaller"
   | "dependency"
   | "temporal"
   | "data_kind"
   | "capability"
+  | "requirement_profile"
+  /** Legacy v1 inputs remain analysis-only and never create v2 authority. */
+  | "owner_identity"
+  | "installed_state"
+  | "target_existence"
+  | "receipt"
   | "removal_method"
   | "duplicate_identity"
   | "name_match";
@@ -65,7 +74,7 @@ export interface EvidenceItem {
 }
 
 export interface EvidenceSet {
-  readonly schemaVersion: 1;
+  readonly schemaVersion: 1 | 2;
   readonly targetIdentity: string;
   readonly snapshotFingerprint: string;
   readonly supportLevel: "candidate" | "analysis_only" | "unsupported_manual";
@@ -83,5 +92,22 @@ export interface EvidenceSet {
     | "advanced_mode"
     | "inspect_only";
   readonly stale: boolean;
+  readonly authority?:
+    | Readonly<{ mode: "legacy_non_actionable" }>
+    | Readonly<{
+        mode: "correlation_revision" | "correlation_revision_v2";
+        correlationRevisionId: string;
+        auditRevision: number;
+        snapshotBFingerprint: string;
+        edgeSetDigest: string;
+        coverageReportDigest: string;
+        ownerBindingFingerprint?: string;
+        requirementProfileId?: "private_regenerable_remnant_v1" | "inspection_only_v1";
+        requirementProfileFingerprint?: string;
+        ruleSetVersion: number;
+        policyVersion: number;
+        derivationVersion: number;
+        exclusionStateVersion: number;
+      }>;
   readonly items: readonly EvidenceItem[];
 }

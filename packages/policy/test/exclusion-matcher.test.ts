@@ -1,9 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { UserExclusion } from "@codex-mac-cleaner/contracts";
+import type {
+  KeyedUserExclusion,
+  UserExclusion,
+} from "@codex-mac-cleaner/contracts";
 
 import {
   assertDestructiveTokenAllowed,
+  assertKeyedDestructiveTokenAllowed,
+  matchKeyedUserExclusions,
   matchUserExclusions,
   prefilterExcludedFindings,
 } from "../src/index.js";
@@ -35,7 +40,89 @@ const candidate = {
   ownerTypeFingerprint: exclusion.ownerTypeFingerprint,
 };
 
+const keyedExclusion: KeyedUserExclusion = {
+  schemaVersion: 2,
+  exclusionId: "exclusion-keyed-a",
+  ruleId: exclusion.ruleId,
+  artifactKind: exclusion.artifactKind,
+  keyId: "key-synthetic-a",
+  derivationVersion: 1,
+  subjectDigest: `hmac-sha256:v1:${identityA}`,
+  claimDigests: [
+    { kind: "bundle", digest: `hmac-sha256:v1:${"c".repeat(64)}` },
+    { kind: "owner_type", digest: `hmac-sha256:v1:${"d".repeat(64)}` },
+    { kind: "target", digest: `hmac-sha256:v1:${"e".repeat(64)}` },
+  ],
+  createdAt: exclusion.createdAt,
+  reasonCategory: exclusion.reasonCategory,
+};
+
+const keyedCandidate = {
+  ruleId: keyedExclusion.ruleId,
+  artifactKind: keyedExclusion.artifactKind,
+  keyId: keyedExclusion.keyId,
+  derivationVersion: keyedExclusion.derivationVersion,
+  subjectDigest: keyedExclusion.subjectDigest,
+  claimDigests: keyedExclusion.claimDigests,
+};
+
 describe("identity matcher и audit prefilter", () => {
+  it("keyed matcher совпадает только по полному installation-local namespace", () => {
+    expect(matchKeyedUserExclusions([keyedExclusion], keyedCandidate)).toEqual({
+      status: "matched",
+      exclusionId: keyedExclusion.exclusionId,
+    });
+  });
+
+  it.each([
+    ["namespace", { keyId: "key-synthetic-b" }],
+    ["derivation", { derivationVersion: 2 }],
+    [
+      "claim",
+      {
+        claimDigests: keyedCandidate.claimDigests.map((claim) =>
+          claim.kind === "bundle"
+            ? { ...claim, digest: `hmac-sha256:v1:${identityB}` as const }
+            : claim,
+        ),
+      },
+    ],
+  ] as const)("keyed %s mismatch не скрывает finding", (_case, patch) => {
+    expect(
+      matchKeyedUserExclusions([keyedExclusion], {
+        ...keyedCandidate,
+        ...patch,
+      }),
+    ).toEqual({
+      status: "identity_mismatch",
+      errorCode: "EXCLUSION_IDENTITY_MISMATCH",
+    });
+  });
+
+  it("single/path-only keyed claim не получает exclusion authority", () => {
+    expect(
+      matchKeyedUserExclusions(
+        [{ ...keyedExclusion, claimDigests: [keyedExclusion.claimDigests[2]] }],
+        keyedCandidate,
+      ),
+    ).toEqual({ status: "invalid", errorCode: "EXCLUSION_STATE_INVALID" });
+  });
+
+  it("keyed token gate перечитывает store и fail closed на match", async () => {
+    const load = vi.fn(async () => ({
+      status: "ready" as const,
+      exclusions: [keyedExclusion],
+    }));
+
+    await expect(
+      assertKeyedDestructiveTokenAllowed(keyedCandidate, load),
+    ).rejects.toMatchObject({
+      errorCode: "EXCLUDED_FINDING",
+      severity: "blocking",
+    });
+    expect(load).toHaveBeenCalledOnce();
+  });
+
   it("совпадает только по полной identity", () => {
     expect(matchUserExclusions([exclusion], candidate)).toEqual({
       status: "matched",

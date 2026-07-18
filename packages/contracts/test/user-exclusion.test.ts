@@ -7,6 +7,9 @@ import {
   ExclusionRemoveInputSchema,
   ExclusionResetInputSchema,
   ExclusionResetPrepareInputSchema,
+  KeyedUserExclusionSchema,
+  KeyedUserExclusionIdentitySchema,
+  KeyedUserExclusionStateSchema,
   UserExclusionSchema,
   UserExclusionStateSchema,
   UserExclusionStateV1Schema,
@@ -29,6 +32,63 @@ const exclusion = {
 } as const;
 
 describe("контракты постоянных исключений", () => {
+  it("новая persistence schema хранит только installation-keyed digests", () => {
+    const keyed = {
+      schemaVersion: 2,
+      exclusionId: "exclusion-keyed-a",
+      ruleId: "RULE_SYNTHETIC_CACHE",
+      artifactKind: "directory",
+      keyId: "key-synthetic-a",
+      derivationVersion: 1,
+      subjectDigest: `hmac-sha256:v1:${"b".repeat(64)}`,
+      claimDigests: [
+        { kind: "owner_type", digest: `hmac-sha256:v1:${"c".repeat(64)}` },
+        { kind: "target", digest: `hmac-sha256:v1:${"d".repeat(64)}` },
+      ],
+      createdAt: exclusion.createdAt,
+      reasonCategory: exclusion.reasonCategory,
+    } as const;
+    const state = {
+      schemaVersion: 3,
+      stateVersion: 1,
+      updatedAt: exclusion.createdAt,
+      keyId: keyed.keyId,
+      derivationVersion: keyed.derivationVersion,
+      exclusions: [keyed],
+    } as const;
+
+    expect(KeyedUserExclusionSchema.parse(keyed)).toEqual(keyed);
+    expect(
+      KeyedUserExclusionIdentitySchema.parse({
+        ruleId: keyed.ruleId,
+        artifactKind: keyed.artifactKind,
+        keyId: keyed.keyId,
+        derivationVersion: keyed.derivationVersion,
+        subjectDigest: keyed.subjectDigest,
+        claimDigests: keyed.claimDigests,
+      }),
+    ).toBeDefined();
+    expect(KeyedUserExclusionStateSchema.parse(state)).toEqual(state);
+    for (const forbidden of [
+      "normalizedTargetIdentity",
+      "bundleId",
+      "packageId",
+      "signingIdentity",
+      "ownerTypeFingerprint",
+      "path",
+    ]) {
+      expect(() =>
+        KeyedUserExclusionSchema.parse({ ...keyed, [forbidden]: "synthetic" }),
+      ).toThrow();
+    }
+    expect(() =>
+      KeyedUserExclusionSchema.parse({
+        ...keyed,
+        claimDigests: [{ kind: "target", digest: `sha256:v1:${"d".repeat(64)}` }],
+      }),
+    ).toThrow();
+  });
+
   it("строго валидирует запись и обе поддержанные версии state", () => {
     expect(UserExclusionSchema.parse(exclusion)).toEqual(exclusion);
     expect(

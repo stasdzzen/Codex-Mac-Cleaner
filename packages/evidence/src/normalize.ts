@@ -15,16 +15,24 @@ import type {
 const EPOCH = "1970-01-01T00:00:00.000Z";
 
 const summaries: Readonly<Record<RuleInputType, string>> = {
+  owner_binding: "Authoritative связь артефакта с владельцем проверена",
+  artifact_existence: "Существование Library-артефакта проверено по Snapshot B",
+  owner_application: "Состояние приложения-владельца проверено canonical inventory",
+  owner_executable: "Состояние executable владельца проверено отдельно",
   owner_identity: "Идентичность владельца проверена структурированным источником",
   installed_state: "Состояние установки проверено структурированным источником",
   activity: "Состояние процесса проверено структурированным источником",
   open_file_state: "Состояние открытых файлов проверено структурированным источником",
+  startup_target: "Состояние startup target проверено структурированным источником",
   target_existence: "Существование цели проверено структурированным источником",
   receipt: "Состояние receipt проверено структурированным источником",
+  receipt_lifecycle: "Жизненный цикл receipt проверен по canonical package database",
+  official_uninstaller: "Наличие официального uninstaller проверено структурированным источником",
   dependency: "Зависимости проверены структурированным источником",
   temporal: "Актуальность наблюдения проверена структурированным источником",
   data_kind: "Тип данных проверен структурированным источником",
   capability: "Доступность источника проверена структурированным источником",
+  requirement_profile: "Server-owned профиль требований проверен",
   removal_method: "Способ удаления подтверждён структурированным источником",
   duplicate_identity: "Дубликат проверен по устойчивой идентичности",
   name_match: "Совпадение имени учтено только как слабое доказательство",
@@ -58,7 +66,7 @@ function signalsFor(
     case "open_file":
       return [["open_file_state", "confirmed"]];
     case "startup_item":
-      return [["dependency", "confirmed"]];
+      return [["startup_target", "confirmed"]];
     case "missing_executable":
       return [["target_existence", "contradicted"]];
     case "receipt":
@@ -69,7 +77,10 @@ function signalsFor(
         ["temporal", "contradicted"],
       ];
     case "official_uninstaller":
-      return [["removal_method", "confirmed"]];
+      return [
+        ["official_uninstaller", "confirmed"],
+        ["removal_method", "confirmed"],
+      ];
     case "filesystem_metadata":
       return [["data_kind", "confirmed"]];
     case "apfs_observation":
@@ -231,6 +242,7 @@ function normalizeGroup(
     sensitivityFlags,
     recommendedRemovalMethod: removalMethod(sorted),
     stale: sorted.some((item) => item.staleDuringAudit),
+    authority: { mode: "legacy_non_actionable" },
     items: normalizedItems,
   };
 }

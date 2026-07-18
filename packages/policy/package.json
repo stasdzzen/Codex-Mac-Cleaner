@@ -14,6 +14,7 @@
     "zod": "4.4.3"
   },
   "devDependencies": {
+    "@codex-mac-cleaner/adapters": "workspace:*",
     "fast-check": "4.9.0",
     "@types/node": "24.13.3",
     "typescript": "7.0.2",

@@ -11,11 +11,30 @@ const REQUIRED_EVIDENCE: readonly RuleInputType[] = [
   "installed_state",
   "activity",
   "open_file_state",
+  "startup_target",
   "target_existence",
   "receipt",
+  "official_uninstaller",
   "dependency",
   "temporal",
   "data_kind",
+];
+
+const REQUIRED_EVIDENCE_V2: readonly RuleInputType[] = [
+  "owner_binding",
+  "artifact_existence",
+  "owner_application",
+  "owner_executable",
+  "activity",
+  "open_file_state",
+  "startup_target",
+  "receipt_lifecycle",
+  "official_uninstaller",
+  "dependency",
+  "temporal",
+  "data_kind",
+  "capability",
+  "requirement_profile",
 ];
 
 export const CLASSIFIER_RULES: readonly ClassifierRule[] = Object.freeze(
@@ -92,6 +111,7 @@ function unknown(
 }
 
 export function classifyEvidence(evidence: EvidenceSet): Classification {
+  if (evidence.schemaVersion === 2) return classifyEvidenceV2(evidence);
   const activity = outcomeFor(evidence, "activity");
   const openFile = outcomeFor(evidence, "open_file_state");
   if (activity === "confirmed" || openFile === "confirmed") {
@@ -130,8 +150,10 @@ export function classifyEvidence(evidence: EvidenceSet): Classification {
     outcomeFor(evidence, "owner_identity") === "confirmed" &&
     activity === "contradicted" &&
     openFile === "contradicted" &&
+    outcomeFor(evidence, "startup_target") === "contradicted" &&
     outcomeFor(evidence, "target_existence") === "confirmed" &&
     outcomeFor(evidence, "receipt") === "contradicted" &&
+    outcomeFor(evidence, "official_uninstaller") === "contradicted" &&
     outcomeFor(evidence, "dependency") === "contradicted" &&
     outcomeFor(evidence, "temporal") === "confirmed" &&
     outcomeFor(evidence, "data_kind") === "confirmed";
@@ -163,8 +185,75 @@ export function classifyEvidence(evidence: EvidenceSet): Classification {
     if (input === "installed_state" || input === "activity" || input === "open_file_state") {
       return false;
     }
-    if (input === "receipt" || input === "dependency") return outcome === "confirmed";
+    if (
+      input === "startup_target" ||
+      input === "receipt" ||
+      input === "official_uninstaller" ||
+      input === "dependency"
+    ) return outcome === "confirmed";
     return outcome === "contradicted";
   });
   return unknown(evidence, counterEvidence);
+}
+
+function classifyEvidenceV2(evidence: EvidenceSet): Classification {
+  const activity = outcomeFor(evidence, "activity");
+  const openFile = outcomeFor(evidence, "open_file_state");
+  if (activity === "confirmed" || openFile === "confirmed") {
+    return {
+      label: "active_required",
+      confidence: "high",
+      ruleIds: ["CLASSIFIER_V2_ACTIVE_OR_OPEN"],
+      explanation: "Активность владельца или открытый Library-артефакт требуют сохранения объекта",
+      counterEvidence: [
+        ...(activity === "confirmed" ? (["activity"] as const) : []),
+        ...(openFile === "confirmed" ? (["open_file_state"] as const) : []),
+      ],
+      missingEvidence: [],
+    };
+  }
+  const missingEvidence = REQUIRED_EVIDENCE_V2.filter((input) => {
+    const outcome = outcomeFor(evidence, input);
+    return outcome === undefined || outcome === "unknown";
+  });
+  if (missingEvidence.length > 0) {
+    return {
+      label: "unknown",
+      confidence: "low",
+      ruleIds: ["CLASSIFIER_V2_UNKNOWN_INCOMPLETE_EVIDENCE"],
+      explanation: "Server-owned binding, profile или coverage недостаточны для безопасной классификации",
+      counterEvidence: [],
+      missingEvidence,
+    };
+  }
+  const expectedConfirmed = new Set<RuleInputType>([
+    "owner_binding",
+    "artifact_existence",
+    "temporal",
+    "data_kind",
+    "capability",
+    "requirement_profile",
+  ]);
+  const counterEvidence = REQUIRED_EVIDENCE_V2.filter((input) => {
+    const outcome = outcomeFor(evidence, input);
+    return expectedConfirmed.has(input) ? outcome !== "confirmed" : outcome !== "contradicted";
+  });
+  if (counterEvidence.length === 0) {
+    return {
+      label: "orphaned",
+      confidence: "high",
+      ruleIds: ["CLASSIFIER_V2_ORPHANED_LIBRARY_REMNANT"],
+      explanation: "Полный профиль доказывает Library-остаток отсутствующего владельца",
+      counterEvidence: [],
+      missingEvidence: [],
+    };
+  }
+  return {
+    label: "unknown",
+    confidence: "low",
+    ruleIds: ["CLASSIFIER_V2_UNKNOWN_INCOMPLETE_EVIDENCE"],
+    explanation: "Положительное или противоречивое evidence блокирует orphan classification",
+    counterEvidence,
+    missingEvidence: [],
+  };
 }
