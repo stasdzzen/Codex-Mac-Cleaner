@@ -1,0 +1,24 @@
+{
+  "name": "@codex-mac-cleaner/adapters",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./command-runner": "./src/command-runner.ts",
+    "./filesystem-facade": "./src/filesystem-facade.ts",
+    "./safe-metadata": "./src/safe-metadata.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run test"
+  },
+  "dependencies": {
+    "@codex-mac-cleaner/contracts": "workspace:*",
+    "@codex-mac-cleaner/storage": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.3",
+    "typescript": "7.0.2",
+    "vitest": "4.1.10"
+  }
+}
