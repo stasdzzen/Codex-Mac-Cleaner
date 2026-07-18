@@ -19,8 +19,10 @@ const summaries: Readonly<Record<RuleInputType, string>> = {
   installed_state: "Состояние установки проверено структурированным источником",
   activity: "Состояние процесса проверено структурированным источником",
   open_file_state: "Состояние открытых файлов проверено структурированным источником",
+  startup_target: "Состояние startup target проверено структурированным источником",
   target_existence: "Существование цели проверено структурированным источником",
   receipt: "Состояние receipt проверено структурированным источником",
+  official_uninstaller: "Наличие официального uninstaller проверено структурированным источником",
   dependency: "Зависимости проверены структурированным источником",
   temporal: "Актуальность наблюдения проверена структурированным источником",
   data_kind: "Тип данных проверен структурированным источником",
@@ -58,7 +60,7 @@ function signalsFor(
     case "open_file":
       return [["open_file_state", "confirmed"]];
     case "startup_item":
-      return [["dependency", "confirmed"]];
+      return [["startup_target", "confirmed"]];
     case "missing_executable":
       return [["target_existence", "contradicted"]];
     case "receipt":
@@ -69,7 +71,10 @@ function signalsFor(
         ["temporal", "contradicted"],
       ];
     case "official_uninstaller":
-      return [["removal_method", "confirmed"]];
+      return [
+        ["official_uninstaller", "confirmed"],
+        ["removal_method", "confirmed"],
+      ];
     case "filesystem_metadata":
       return [["data_kind", "confirmed"]];
     case "apfs_observation":
@@ -231,6 +236,7 @@ function normalizeGroup(
     sensitivityFlags,
     recommendedRemovalMethod: removalMethod(sorted),
     stale: sorted.some((item) => item.staleDuringAudit),
+    authority: { mode: "legacy_non_actionable" },
     items: normalizedItems,
   };
 }

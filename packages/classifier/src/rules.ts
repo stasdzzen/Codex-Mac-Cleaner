@@ -11,8 +11,10 @@ const REQUIRED_EVIDENCE: readonly RuleInputType[] = [
   "installed_state",
   "activity",
   "open_file_state",
+  "startup_target",
   "target_existence",
   "receipt",
+  "official_uninstaller",
   "dependency",
   "temporal",
   "data_kind",
@@ -130,8 +132,10 @@ export function classifyEvidence(evidence: EvidenceSet): Classification {
     outcomeFor(evidence, "owner_identity") === "confirmed" &&
     activity === "contradicted" &&
     openFile === "contradicted" &&
+    outcomeFor(evidence, "startup_target") === "contradicted" &&
     outcomeFor(evidence, "target_existence") === "confirmed" &&
     outcomeFor(evidence, "receipt") === "contradicted" &&
+    outcomeFor(evidence, "official_uninstaller") === "contradicted" &&
     outcomeFor(evidence, "dependency") === "contradicted" &&
     outcomeFor(evidence, "temporal") === "confirmed" &&
     outcomeFor(evidence, "data_kind") === "confirmed";
@@ -163,7 +167,12 @@ export function classifyEvidence(evidence: EvidenceSet): Classification {
     if (input === "installed_state" || input === "activity" || input === "open_file_state") {
       return false;
     }
-    if (input === "receipt" || input === "dependency") return outcome === "confirmed";
+    if (
+      input === "startup_target" ||
+      input === "receipt" ||
+      input === "official_uninstaller" ||
+      input === "dependency"
+    ) return outcome === "confirmed";
     return outcome === "contradicted";
   });
   return unknown(evidence, counterEvidence);

@@ -105,6 +105,31 @@ export function evaluatePolicy(input: PolicyInput): PolicyDecision {
   };
 
   const canonicalClassification = classifyEvidence(input.evidenceSet);
+  const authority = input.evidenceSet.authority;
+  if (
+    authority?.mode !== "correlation_revision" ||
+    input.correlationRevision === undefined
+  ) {
+    block("POLICY_CORRELATION_REVISION_REQUIRED");
+  } else {
+    const revision = input.correlationRevision;
+    if (
+      authority.correlationRevisionId !== revision.correlationRevisionId ||
+      authority.auditRevision !== revision.auditRevision ||
+      authority.snapshotBFingerprint !== revision.snapshotBFingerprint ||
+      authority.edgeSetDigest !== revision.edgeSetDigest ||
+      authority.coverageReportDigest !== revision.coverageReportDigest ||
+      authority.ruleSetVersion !== revision.ruleSetVersion ||
+      authority.policyVersion !== revision.policyVersion ||
+      authority.derivationVersion !== revision.derivationVersion ||
+      authority.exclusionStateVersion !== revision.exclusionStateVersion
+    ) {
+      block("POLICY_CORRELATION_BINDING_MISMATCH");
+    }
+    if (revision.staleDuringAudit) {
+      block("POLICY_CORRELATION_SNAPSHOT_STALE");
+    }
+  }
   if (!classificationsEqual(input.classification, canonicalClassification)) {
     block("POLICY_CLASSIFICATION_EVIDENCE_MISMATCH");
   }
@@ -141,8 +166,13 @@ export function evaluatePolicy(input: PolicyInput): PolicyDecision {
   const installedState = outcomeFor(input.evidenceSet, "installed_state");
   const activityState = outcomeFor(input.evidenceSet, "activity");
   const openFileState = outcomeFor(input.evidenceSet, "open_file_state");
+  const startupTargetState = outcomeFor(input.evidenceSet, "startup_target");
   const targetExistence = outcomeFor(input.evidenceSet, "target_existence");
   const receiptState = outcomeFor(input.evidenceSet, "receipt");
+  const officialUninstallerState = outcomeFor(
+    input.evidenceSet,
+    "official_uninstaller",
+  );
   const dependencyState = outcomeFor(input.evidenceSet, "dependency");
   const temporalState = outcomeFor(input.evidenceSet, "temporal");
   const dataKindState = outcomeFor(input.evidenceSet, "data_kind");
@@ -164,6 +194,10 @@ export function evaluatePolicy(input: PolicyInput): PolicyDecision {
   if (openFileState === undefined || openFileState === "unknown") {
     block("POLICY_OPEN_FILE_UNKNOWN");
   }
+  if (startupTargetState === "confirmed") block("POLICY_STARTUP_TARGET_PRESENT");
+  if (startupTargetState === undefined || startupTargetState === "unknown") {
+    block("POLICY_STARTUP_TARGET_UNKNOWN");
+  }
   if (targetExistence === "contradicted") block("POLICY_TARGET_MISSING");
   if (targetExistence === undefined || targetExistence === "unknown") {
     block("POLICY_TARGET_EXISTENCE_UNKNOWN");
@@ -171,6 +205,15 @@ export function evaluatePolicy(input: PolicyInput): PolicyDecision {
   if (receiptState === "confirmed") block("POLICY_RECEIPT_PRESENT");
   if (receiptState === undefined || receiptState === "unknown") {
     block("POLICY_RECEIPT_UNKNOWN");
+  }
+  if (officialUninstallerState === "confirmed") {
+    block("POLICY_OFFICIAL_UNINSTALLER_REQUIRED");
+  }
+  if (
+    officialUninstallerState === undefined ||
+    officialUninstallerState === "unknown"
+  ) {
+    block("POLICY_OFFICIAL_UNINSTALLER_UNKNOWN");
   }
   if (dependencyState === "confirmed") block("POLICY_DEPENDENCY_PRESENT");
   if (dependencyState === undefined || dependencyState === "unknown") {

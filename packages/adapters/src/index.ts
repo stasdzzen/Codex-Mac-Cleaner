@@ -1,6 +1,7 @@
 export * from "./autostart.js";
 export * from "./command-runner.js";
 export * from "./coordinator.js";
+export * from "./correlation-claims.js";
 export * from "./filesystem-facade.js";
 export * from "./filesystem-metadata.js";
 export * from "./inspection-only.js";

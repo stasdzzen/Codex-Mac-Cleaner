@@ -6,6 +6,7 @@ import {
   SafeIntegerSchema,
 } from "./common.js";
 import { ArtifactKindSchema } from "./finding.js";
+import { KeyedDigestSchema } from "./correlation.js";
 
 const SHA256_IDENTITY_PATTERN = /^[a-f0-9]{64}$/u;
 
@@ -48,6 +49,93 @@ export const ExclusionReasonCategorySchema = z.enum([
   "keep_data",
   "other",
 ]);
+
+export const ExclusionClaimKindSchema = z.enum([
+  "target",
+  "bundle",
+  "package",
+  "signing",
+  "owner_type",
+]);
+
+export const KeyedExclusionClaimDigestSchema = z
+  .object({
+    kind: ExclusionClaimKindSchema,
+    digest: KeyedDigestSchema,
+  })
+  .strict();
+
+export const KeyedUserExclusionSchema = z
+  .object({
+    schemaVersion: z.literal(2),
+    exclusionId: OpaqueIdSchema,
+    ruleId: OpaqueIdSchema,
+    artifactKind: ArtifactKindSchema,
+    keyId: OpaqueIdSchema,
+    derivationVersion: SafeIntegerSchema.min(1),
+    subjectDigest: KeyedDigestSchema,
+    claimDigests: z
+      .array(KeyedExclusionClaimDigestSchema)
+      .min(2)
+      .superRefine((claims, context) => {
+        const kinds = claims.map(({ kind }) => kind);
+        if (new Set(kinds).size !== kinds.length) {
+          context.addIssue({ code: "custom", message: "Claim kinds не должны повторяться" });
+        }
+        if (!kinds.includes("target") || !kinds.includes("owner_type")) {
+          context.addIssue({ code: "custom", message: "Target и owner_type обязательны" });
+        }
+        if (kinds.join("\u0000") !== [...kinds].sort().join("\u0000")) {
+          context.addIssue({ code: "custom", message: "Claim digests должны быть отсортированы" });
+        }
+      }),
+    createdAt: IsoDateTimeSchema,
+    reasonCategory: ExclusionReasonCategorySchema,
+  })
+  .strict();
+
+export const KeyedUserExclusionIdentitySchema = KeyedUserExclusionSchema.pick({
+  ruleId: true,
+  artifactKind: true,
+  keyId: true,
+  derivationVersion: true,
+  subjectDigest: true,
+  claimDigests: true,
+}).strict();
+
+export const KeyedUserExclusionStateSchema = z
+  .object({
+    schemaVersion: z.literal(3),
+    stateVersion: SafeIntegerSchema,
+    updatedAt: IsoDateTimeSchema,
+    keyId: OpaqueIdSchema,
+    derivationVersion: SafeIntegerSchema.min(1),
+    exclusions: z.array(KeyedUserExclusionSchema),
+  })
+  .strict()
+  .superRefine((state, context) => {
+    if (
+      state.exclusions.some(
+        (exclusion) =>
+          exclusion.keyId !== state.keyId ||
+          exclusion.derivationVersion !== state.derivationVersion,
+      )
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["exclusions"],
+        message: "Все exclusions должны принадлежать namespace state",
+      });
+    }
+  });
+
+export const KeyedExclusionListItemSchema = KeyedUserExclusionSchema.pick({
+  exclusionId: true,
+  ruleId: true,
+  artifactKind: true,
+  createdAt: true,
+  reasonCategory: true,
+}).strict();
 
 export const UserExclusionSchema = z
   .object({
@@ -138,6 +226,14 @@ export const ExclusionResetOutputSchema = z
   .strict();
 
 export type UserExclusion = z.infer<typeof UserExclusionSchema>;
+export type KeyedUserExclusion = z.infer<typeof KeyedUserExclusionSchema>;
+export type KeyedUserExclusionIdentity = z.infer<
+  typeof KeyedUserExclusionIdentitySchema
+>;
+export type KeyedUserExclusionState = z.infer<
+  typeof KeyedUserExclusionStateSchema
+>;
+export type ExclusionClaimKind = z.infer<typeof ExclusionClaimKindSchema>;
 export type UserExclusionIdentity = z.infer<typeof UserExclusionIdentitySchema>;
 export type UserExclusionState = z.infer<typeof UserExclusionStateSchema>;
 export type ExclusionStateReadResult =

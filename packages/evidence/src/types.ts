@@ -3,8 +3,10 @@ export type RuleInputType =
   | "installed_state"
   | "activity"
   | "open_file_state"
+  | "startup_target"
   | "target_existence"
   | "receipt"
+  | "official_uninstaller"
   | "dependency"
   | "temporal"
   | "data_kind"
@@ -83,5 +85,19 @@ export interface EvidenceSet {
     | "advanced_mode"
     | "inspect_only";
   readonly stale: boolean;
+  readonly authority?:
+    | Readonly<{ mode: "legacy_non_actionable" }>
+    | Readonly<{
+        mode: "correlation_revision";
+        correlationRevisionId: string;
+        auditRevision: number;
+        snapshotBFingerprint: string;
+        edgeSetDigest: string;
+        coverageReportDigest: string;
+        ruleSetVersion: number;
+        policyVersion: number;
+        derivationVersion: number;
+        exclusionStateVersion: number;
+      }>;
   readonly items: readonly EvidenceItem[];
 }

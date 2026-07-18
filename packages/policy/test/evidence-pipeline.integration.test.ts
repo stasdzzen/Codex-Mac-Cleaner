@@ -101,13 +101,17 @@ function runPipeline(signals: readonly ServerCorrelationSignal[]) {
 }
 
 describe("public evidence → classifier → policy pipeline", () => {
-  it("достигает prepare_move только для полного безопасного orphan case", () => {
+  it("legacy correlation signals остаются non-actionable", () => {
     const result = runPipeline(completeSafeSignals());
 
-    expect(result.classification.label).toBe("orphaned");
-    expect(result.classification.missingEvidence).toEqual([]);
-    expect(result.classification.counterEvidence).toEqual([]);
-    expect(result.decision.allowedActions).toContain("prepare_move");
+    expect(result.classification.label).toBe("unknown");
+    expect(result.classification.missingEvidence).toEqual(
+      expect.arrayContaining(["startup_target", "official_uninstaller"]),
+    );
+    expect(result.decision.allowedActions).not.toContain("prepare_move");
+    expect(result.decision.blockingRuleIds).toContain(
+      "POLICY_CORRELATION_REVISION_REQUIRED",
+    );
   });
 
   it("Observation-only API остаётся fail closed", () => {

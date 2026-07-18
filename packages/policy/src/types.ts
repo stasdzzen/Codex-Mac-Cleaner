@@ -1,5 +1,6 @@
 import type { Classification } from "@codex-mac-cleaner/classifier";
 import type { EvidenceSet } from "@codex-mac-cleaner/evidence";
+import type { CorrelationRevision } from "@codex-mac-cleaner/contracts";
 import type { ProtectedScopeKind } from "./protected-scopes.js";
 
 export type AllowedAction =
@@ -86,6 +87,7 @@ export type PathValidationResult =
 export interface PolicyInput {
   readonly classification: Classification;
   readonly evidenceSet: EvidenceSet;
+  readonly correlationRevision?: CorrelationRevision;
   readonly supportLevel: "candidate" | "analysis_only" | "unsupported_manual";
   readonly category: FindingCategory;
   readonly sensitivityFlags: readonly SensitivityFlag[];

@@ -1,5 +1,6 @@
 export * from "./audit.js";
 export * from "./common.js";
+export * from "./correlation.js";
 export * from "./disk-observation.js";
 export * from "./errors.js";
 export * from "./finding.js";
