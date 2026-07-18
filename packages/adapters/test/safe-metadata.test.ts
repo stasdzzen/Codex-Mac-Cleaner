@@ -11,6 +11,49 @@ import {
 const fixtureUrl = (name: string): URL => new URL(`./fixtures/${name}`, import.meta.url);
 
 describe("SafeMetadata", () => {
+  it("разбирает adversarial YAML за ограниченное линейное время без утечки raw input", () => {
+    const parseAdversarialYaml = (spaces: number): Readonly<{
+      elapsedMs: number;
+      parseStatus: string;
+      serialized: string;
+    }> => {
+      const raw = `9:${" ".repeat(spaces)}\rsynthetic-raw-marker\rend`;
+      const startedAt = performance.now();
+      const result = parseSafeMetadata({
+        raw,
+        name: "adversarial.yaml",
+        modifiedAt: "2026-01-01T00:00:00.000Z",
+      });
+      return {
+        elapsedMs: performance.now() - startedAt,
+        parseStatus: result.parseStatus,
+        serialized: JSON.stringify(result),
+      };
+    };
+
+    const shortInput = parseAdversarialYaml(5_000);
+    const longInput = parseAdversarialYaml(30_000);
+
+    expect(longInput.elapsedMs).toBeLessThan(250);
+    expect(longInput.elapsedMs).toBeLessThan(shortInput.elapsedMs * 12 + 25);
+    expect(longInput.parseStatus).toBe("malformed");
+    expect(longInput.serialized).not.toContain("synthetic-raw-marker");
+    expect(longInput.serialized).not.toContain("9:");
+  });
+
+  it("сохраняет credential redaction для camelCase apiKey без raw value", () => {
+    const result = parseSafeMetadata({
+      raw: JSON.stringify({ apiKey: "synthetic-credential-value" }),
+      name: "credential.json",
+      modifiedAt: "2026-01-01T00:00:00.000Z",
+    });
+    const serialized = JSON.stringify(result);
+
+    expect(result.sensitivityFlags).toContain("credentials");
+    expect(serialized).not.toContain("apiKey");
+    expect(serialized).not.toContain("synthetic-credential-value");
+  });
+
   it.each([
     ["correct.json", "json", "parsed"],
     ["empty.json", "json", "parsed"],

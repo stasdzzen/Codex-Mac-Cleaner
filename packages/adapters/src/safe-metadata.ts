@@ -27,6 +27,39 @@ function detectFormat(name: string): SafeMetadata["format"] {
   return "unknown";
 }
 
+function isYamlMappingLine(line: string): boolean {
+  if (line === "---" || line === "...") return true;
+  const separator = line.indexOf(":");
+  return separator > 0 && line.slice(0, separator).trim().length > 0;
+}
+
+function isSafeYamlStructure(raw: string): boolean {
+  let lineStart = 0;
+  for (let index = 0; index <= raw.length; index += 1) {
+    const code = raw.charCodeAt(index);
+    if (index !== raw.length && code !== 10 && code !== 13) continue;
+
+    const line = raw.slice(lineStart, index).trim();
+    if (line.length > 0 && !line.startsWith("#") && !isYamlMappingLine(line)) {
+      return false;
+    }
+
+    if (code === 13 && raw.charCodeAt(index + 1) === 10) index += 1;
+    lineStart = index + 1;
+  }
+  return true;
+}
+
+function hasPlistEnvelope(raw: string): boolean {
+  const opening = raw.indexOf("<plist");
+  if (opening < 0) return false;
+  const boundary = raw.charAt(opening + "<plist".length);
+  if (boundary !== ">" && boundary !== " " && boundary !== "\t" && boundary !== "\r" && boundary !== "\n") {
+    return false;
+  }
+  return raw.trimEnd().endsWith("</plist>");
+}
+
 function parseStatus(format: SafeMetadata["format"], raw: string): SafeMetadata["parseStatus"] {
   if (format === "json") {
     try {
@@ -37,33 +70,33 @@ function parseStatus(format: SafeMetadata["format"], raw: string): SafeMetadata[
     }
   }
   if (format === "yaml") {
-    const meaningful = raw
-      .split(/\r?\n/u)
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0 && !line.startsWith("#"));
-    return meaningful.every((line) => /^(?:---|\.\.\.|[^:]+:\s*.*)$/u.test(line))
-      ? "parsed"
-      : "malformed";
+    return isSafeYamlStructure(raw) ? "parsed" : "malformed";
   }
   if (format === "plist") {
     if (raw.startsWith("bplist00")) return "unsupported";
-    return /<plist\b[^>]*>/iu.test(raw) && /<\/plist>\s*$/iu.test(raw)
-      ? "parsed"
-      : "malformed";
+    return hasPlistEnvelope(raw) ? "parsed" : "malformed";
   }
   return "unsupported";
 }
 
 function sensitivityFlags(raw: string): SensitivityFlag[] {
-  const checks: ReadonlyArray<readonly [SensitivityFlag, RegExp]> = [
-    ["credentials", /password|passwd|secret|credential|api[_-]?key/iu],
-    ["tokens", /token|bearer|oauth/iu],
-    ["subscription_url", /subscription.{0,24}(?:url|https?:\/\/)|https?:\/\/[^\s<]*(?:subscribe|subscription)/iu],
-    ["personal_data", /(?:email|phone|address|personal|document|savegame)/iu],
-    ["database", /(?:database|sqlite|\.db\b)/iu],
-    ["local_project", /(?:\.git\b|project(?:root)?)/iu],
+  const normalized = raw.toLocaleLowerCase("en-US");
+  const hasAny = (needles: readonly string[]): boolean =>
+    needles.some((needle) => normalized.includes(needle));
+  const hasWebAddress = normalized.includes("http://") || normalized.includes("https://");
+  const checks: ReadonlyArray<readonly [SensitivityFlag, boolean]> = [
+    ["credentials", hasAny(["password", "passwd", "secret", "credential", "apikey", "api_key", "api-key"])],
+    ["tokens", hasAny(["token", "bearer", "oauth"])],
+    [
+      "subscription_url",
+      (normalized.includes("subscription") && (normalized.includes("url") || hasWebAddress)) ||
+        (hasWebAddress && normalized.includes("subscribe")),
+    ],
+    ["personal_data", hasAny(["email", "phone", "address", "personal", "document", "savegame"])],
+    ["database", hasAny(["database", "sqlite", ".db"])],
+    ["local_project", hasAny([".git", "project", "projectroot"])],
   ];
-  return checks.filter(([, pattern]) => pattern.test(raw)).map(([flag]) => flag);
+  return checks.filter(([, matched]) => matched).map(([flag]) => flag);
 }
 
 export function parseSafeMetadata(input: SafeMetadataInput): SafeMetadata {
