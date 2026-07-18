@@ -32,8 +32,13 @@ export interface SyntheticHarness {
   readonly subject: MoveSubject;
   readonly safety: MutableSafetyState;
   createController(options?: {
+    candidateStorage?: () => Promise<{
+      candidateLogicalBytes: number;
+      candidatePhysicalBytes: number;
+    }>;
     faultInjector?: FaultInjector;
     fileSystem?: Partial<FileSystemOperations>;
+    now?: () => number;
   }): QuarantineController;
   readManifest(operationId: string): Promise<Record<string, unknown>>;
   readJournal(): Promise<Array<Record<string, unknown>>>;
@@ -117,12 +122,16 @@ export async function createSyntheticHarness(): Promise<SyntheticHarness> {
           return subject;
         },
         revalidate,
+        ...(options.candidateStorage === undefined
+          ? {}
+          : { candidateStorage: options.candidateStorage }),
         ...(options.faultInjector === undefined
           ? {}
           : { faultInjector: options.faultInjector }),
         ...(options.fileSystem === undefined
           ? {}
           : { fileSystem: options.fileSystem }),
+        ...(options.now === undefined ? {} : { now: options.now }),
       }),
     readManifest: async (operationId) =>
       JSON.parse(
