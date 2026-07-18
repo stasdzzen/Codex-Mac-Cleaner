@@ -55,6 +55,7 @@ export interface DashboardSnapshot {
   };
   readonly storageSummary: StorageSummary;
   readonly diskObservation: DiskObservation;
+  readonly excludedCount: number;
   readonly findings: readonly DashboardFinding[];
   readonly quarantineEntries: readonly QuarantineEntry[];
 }

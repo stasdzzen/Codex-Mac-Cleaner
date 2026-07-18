@@ -5,6 +5,7 @@ import {
   CircleAlertIcon,
   EyeIcon,
   ListFilterIcon,
+  LoaderCircleIcon,
   ShieldCheckIcon,
   SkipForwardIcon,
 } from "lucide-react";
@@ -12,6 +13,7 @@ import { toast } from "sonner";
 
 import { ActionDialog } from "@/components/action-dialog";
 import { AuditProgress } from "@/components/audit-progress";
+import { ExclusionsTab } from "@/components/exclusions-tab";
 import { FindingSheet } from "@/components/finding-sheet";
 import { QuarantineCenter } from "@/components/quarantine-center";
 import { StorageSummary } from "@/components/storage-summary";
@@ -37,10 +39,7 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  Tooltip,
-  TooltipContent,
   TooltipProvider,
-  TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
   acceptSnapshot,
@@ -81,6 +80,7 @@ function revisionKey(snapshot: DashboardSnapshot): string {
 export function AuditDashboard({ snapshot, bridge }: AuditDashboardProps) {
   const [acceptedSnapshot, setAcceptedSnapshot] = useState(snapshot);
   const [viewState, setViewState] = useState<WidgetViewState>(INITIAL_VIEW_STATE);
+  const [exclusionRefreshKey, setExclusionRefreshKey] = useState(0);
   const previousRevisionKey = useRef(revisionKey(snapshot));
   const tabRefs = useRef(new Map<DashboardTab, HTMLButtonElement>());
 
@@ -168,6 +168,23 @@ export function AuditDashboard({ snapshot, bridge }: AuditDashboardProps) {
     }
   }
 
+  async function excludeFinding(finding: DashboardFinding): Promise<void> {
+    if (acceptedSnapshot.revision === null) return;
+    await bridge.callTool("exclusion_create", {
+      findingId: finding.findingId,
+      auditRevision: acceptedSnapshot.revision,
+      requestId: createRequestId("exclusion-create"),
+      reasonCategory: "user_choice",
+    });
+    commitViewState((current) => ({
+      ...current,
+      skippedFindingIds: Array.from(
+        new Set([...current.skippedFindingIds, finding.findingId]),
+      ),
+    }));
+    setExclusionRefreshKey((current) => current + 1);
+  }
+
   return (
     <TooltipProvider>
       <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-5 p-4 sm:p-6">
@@ -253,7 +270,7 @@ export function AuditDashboard({ snapshot, bridge }: AuditDashboardProps) {
             <CardHeader>
               <CardTitle>Краткая сводка находок</CardTitle>
               <CardDescription>
-                Найдено: {acceptedSnapshot.findings.length}; проверено источников: {acceptedSnapshot.coverage.checkedSourceCount};
+                Найдено: {acceptedSnapshot.findings.length}; исключено: {acceptedSnapshot.excludedCount}; проверено источников: {acceptedSnapshot.coverage.checkedSourceCount};
                 пропущено: {acceptedSnapshot.coverage.skippedSourceCount}.
               </CardDescription>
             </CardHeader>
@@ -274,6 +291,7 @@ export function AuditDashboard({ snapshot, bridge }: AuditDashboardProps) {
             actionable={isActionableRevision}
             bridge={bridge}
             onInspect={inspectFinding}
+            onExclude={excludeFinding}
             onSkip={skipFinding}
           />
         </TabsContent>
@@ -283,11 +301,7 @@ export function AuditDashboard({ snapshot, bridge }: AuditDashboardProps) {
         </TabsContent>
 
         <TabsContent value="exclusions">
-          <DependencyCard
-            icon={ShieldCheckIcon}
-            title="Исключения пока недоступны"
-            description="Постоянные исключения появятся в CMC-12."
-          />
+          <ExclusionsTab bridge={bridge} refreshKey={exclusionRefreshKey} />
         </TabsContent>
 
         <TabsContent value="schedule">
@@ -323,6 +337,7 @@ interface FindingsTableProps {
   readonly actionable: boolean;
   readonly bridge: WidgetBridge;
   readonly onInspect: (finding: DashboardFinding) => void;
+  readonly onExclude: (finding: DashboardFinding) => Promise<void>;
   readonly onSkip: (finding: DashboardFinding) => void;
 }
 
@@ -332,6 +347,7 @@ function FindingsTable({
   actionable,
   bridge,
   onInspect,
+  onExclude,
   onSkip,
 }: FindingsTableProps) {
   if (findings.length === 0) {
@@ -372,6 +388,10 @@ function FindingsTable({
                 revision !== null &&
                 finding.allowedActions.includes("prepare_move");
               const canSkip = actionable && revision !== null;
+              const canExclude =
+                actionable &&
+                revision !== null &&
+                finding.allowedActions.includes("exclude");
               const reasons = Array.from(
                 new Set([
                   ...finding.blockingReasons,
@@ -430,17 +450,8 @@ function FindingsTable({
                           bridge={bridge}
                         />
                       )}
-                      {canMove && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span tabIndex={0}>
-                              <Button disabled variant="outline">
-                                Исключить
-                              </Button>
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent>Поведение добавит CMC-12.</TooltipContent>
-                        </Tooltip>
+                      {canExclude && (
+                        <ExclusionAction finding={finding} onExclude={onExclude} />
                       )}
                       {canSkip && finding.supportLevel === "candidate" && (
                         <Button variant="ghost" onClick={() => onSkip(finding)}>
@@ -457,6 +468,38 @@ function FindingsTable({
         </Table>
       </CardContent>
     </Card>
+  );
+}
+
+function ExclusionAction({
+  finding,
+  onExclude,
+}: {
+  readonly finding: DashboardFinding;
+  readonly onExclude: (finding: DashboardFinding) => Promise<void>;
+}) {
+  const [pending, setPending] = useState(false);
+
+  return (
+    <Button
+      variant="outline"
+      disabled={pending}
+      aria-label={`Исключить: ${finding.displayName}`}
+      onClick={() => {
+        setPending(true);
+        void onExclude(finding)
+          .then(() => toast.success("Находка добавлена в постоянные исключения."))
+          .catch(() => toast.error("Не удалось сохранить исключение."))
+          .finally(() => setPending(false));
+      }}
+    >
+      {pending ? (
+        <LoaderCircleIcon className="animate-spin" data-icon="inline-start" />
+      ) : (
+        <ShieldCheckIcon data-icon="inline-start" />
+      )}
+      Исключить
+    </Button>
   );
 }
 
