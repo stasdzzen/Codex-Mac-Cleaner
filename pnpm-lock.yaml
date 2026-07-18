@@ -20,12 +20,27 @@ importers:
 
   apps/mcp-server:
     dependencies:
+      '@codex-mac-cleaner/adapters':
+        specifier: workspace:*
+        version: link:../../packages/adapters
+      '@codex-mac-cleaner/classifier':
+        specifier: workspace:*
+        version: link:../../packages/classifier
       '@codex-mac-cleaner/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@codex-mac-cleaner/evidence':
+        specifier: workspace:*
+        version: link:../../packages/evidence
       '@codex-mac-cleaner/platform':
         specifier: workspace:*
         version: link:../../packages/platform
+      '@codex-mac-cleaner/policy':
+        specifier: workspace:*
+        version: link:../../packages/policy
+      '@codex-mac-cleaner/quarantine':
+        specifier: workspace:*
+        version: link:../../packages/quarantine
       '@codex-mac-cleaner/storage':
         specifier: workspace:*
         version: link:../../packages/storage

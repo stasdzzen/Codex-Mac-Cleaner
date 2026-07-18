@@ -61,12 +61,12 @@ export const QuarantineMoveInputSchema = z
 export const QuarantineListInputSchema = z.object({}).strict();
 
 export const QuarantineEntryInputSchema = z
-  .object({ quarantineEntryId: OpaqueIdSchema })
+  .object({ operationId: OpaqueIdSchema })
   .strict();
 
 export const QuarantineConfirmedEntryInputSchema = z
   .object({
-    quarantineEntryId: OpaqueIdSchema,
+    operationId: OpaqueIdSchema,
     previewToken: OpaqueIdSchema,
   })
   .strict();

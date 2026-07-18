@@ -1,4 +1,6 @@
-import { readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import {
@@ -247,25 +249,37 @@ describe("полная интеграция MCP App", () => {
     expect(documentShell).not.toMatch(
       /<(?:script|link)[^>]+(?:src|href)=["'][^"']+/i,
     );
+    expect(html).not.toMatch(
+      /audit-public-synthetic|finding-public-synthetic|quarantine-public-synthetic/,
+    );
+    expect(html).toContain("Ожидание безопасного snapshot");
   });
 
-  it("скомпилированный stdio runtime отвечает на MCP handshake", async () => {
+  it("скомпилированный stdio runtime выполняет безопасный audit/dashboard flow", async () => {
     const repositoryRoot = new URL("../../../", import.meta.url).pathname;
     const runtimePath = new URL(
       "../../../.codex-plugin/runtime/server.js",
       import.meta.url,
     ).pathname;
+    const syntheticRoot = await mkdtemp(join(tmpdir(), "cmc-compiled-runtime-"));
+    const syntheticHome = join(syntheticRoot, "home");
+    const syntheticData = join(
+      syntheticHome,
+      "Library",
+      "Application Support",
+      "Codex Mac Cleaner",
+      "plugin",
+    );
+    await mkdir(join(syntheticHome, "Library", "Caches"), { recursive: true });
     const transport = new StdioClientTransport({
       command: process.execPath,
       args: [runtimePath, "--stdio"],
       cwd: repositoryRoot,
       env: {
         ...getDefaultEnvironment(),
+        HOME: syntheticHome,
         CODEX_MAC_CLEANER_PLUGIN_ROOT: repositoryRoot,
-        CODEX_MAC_CLEANER_PLUGIN_DATA: new URL(
-          "../../../.plugin-test-data/",
-          import.meta.url,
-        ).pathname,
+        CODEX_MAC_CLEANER_PLUGIN_DATA: syntheticData,
       },
       stderr: "pipe",
     });
@@ -279,8 +293,65 @@ describe("полная интеграция MCP App", () => {
         uri: DASHBOARD_RESOURCE_URI,
         mimeType: "text/html;profile=mcp-app",
       });
+
+      const started = await client.callTool({
+        name: "audit_start",
+        arguments: {
+          requestId: "compiled-audit-request-1",
+          profile: "application_remnants",
+        },
+      });
+      expect(started.isError).not.toBe(true);
+      expect(started.structuredContent).toMatchObject({ state: "queued" });
+      const auditId = (started.structuredContent as { auditId: string }).auditId;
+
+      let status;
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        status = await client.callTool({
+          name: "audit_status",
+          arguments: { auditId },
+        });
+        const state = (status.structuredContent as { state?: string } | undefined)?.state;
+        if (["completed", "completed_with_warnings", "failed", "cancelled"].includes(state ?? "")) {
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      expect(status?.isError).not.toBe(true);
+      expect(status?.structuredContent).toMatchObject({
+        auditId,
+        state: expect.stringMatching(/^completed(?:_with_warnings)?$/),
+      });
+
+      const results = await client.callTool({
+        name: "audit_results",
+        arguments: { auditId, revision: 1, cursor: null, filters: {} },
+      });
+      expect(results.isError).not.toBe(true);
+      expect(results.structuredContent).toMatchObject({ auditId, revision: 1, findings: [] });
+
+      const dashboard = await client.callTool({
+        name: "dashboard_open",
+        arguments: { auditId, revision: 1 },
+      });
+      expect(dashboard.isError).not.toBe(true);
+      expect(dashboard.structuredContent).toMatchObject({
+        auditId,
+        revision: 1,
+        resourceUri: DASHBOARD_RESOURCE_URI,
+        findings: [],
+      });
+
+      const quarantine = await client.callTool({ name: "quarantine_list", arguments: {} });
+      expect(quarantine.isError).not.toBe(true);
+      expect(quarantine.structuredContent).toMatchObject({ quarantineEntries: [] });
+
+      const exclusions = await client.callTool({ name: "exclusion_list", arguments: {} });
+      expect(exclusions.isError).not.toBe(true);
+      expect(exclusions.structuredContent).toMatchObject({ exclusions: [] });
     } finally {
       await client.close();
+      await rm(syntheticRoot, { recursive: true, force: true });
     }
   });
 });

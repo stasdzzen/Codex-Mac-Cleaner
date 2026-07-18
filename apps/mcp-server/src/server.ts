@@ -53,6 +53,10 @@ import {
   registerDashboardResource,
 } from "./resources/dashboard.js";
 import {
+  createRuntimeCore,
+  type RuntimeServiceOptions,
+} from "./runtime.js";
+import {
   APP_VISIBLE_QUARANTINE_TOOL_DEFINITIONS,
   type AppVisibleQuarantineToolName,
   type QuarantineToolService,
@@ -725,6 +729,80 @@ type ScheduleService = Pick<
   "request" | "state" | "get" | "complete"
 >;
 
+export interface AuditToolService {
+  start(input: unknown): Promise<unknown>;
+  status(input: unknown): Promise<unknown>;
+  cancel(input: unknown): Promise<unknown>;
+  results(input: unknown): Promise<unknown>;
+  dashboard(input: unknown): Promise<{
+    readonly output: unknown;
+    readonly meta: unknown;
+  }>;
+  inspect(input: unknown): Promise<unknown>;
+  reveal(input: unknown): Promise<unknown>;
+}
+
+async function callAuditModelTool(
+  service: AuditToolService,
+  toolName: Exclude<
+    ModelVisibleToolName,
+    "schedule_intent_get" | "schedule_intent_complete"
+  >,
+  rawInput: unknown,
+): Promise<CallToolResult> {
+  try {
+    switch (toolName) {
+      case "audit_start":
+        return buildToolResult(
+          toolName,
+          await service.start(rawInput),
+          "Read-only аудит поставлен в очередь.",
+        );
+      case "audit_status":
+        return buildToolResult(
+          toolName,
+          await service.status(rawInput),
+          "Безопасный статус аудита обновлён.",
+        );
+      case "audit_cancel":
+        return buildToolResult(
+          toolName,
+          await service.cancel(rawInput),
+          "Запрос кооперативной отмены обработан.",
+        );
+      case "audit_results":
+        return buildToolResult(
+          toolName,
+          await service.results(rawInput),
+          "Безопасные результаты аудита получены.",
+        );
+      case "dashboard_open": {
+        const dashboard = await service.dashboard(rawInput);
+        return buildToolResult(
+          toolName,
+          dashboard.output,
+          "Dashboard готов к открытию.",
+          dashboard.meta,
+        );
+      }
+      case "finding_inspect":
+        return buildToolResult(
+          toolName,
+          await service.inspect(rawInput),
+          "Evidence находки безопасно перепроверены.",
+        );
+      case "finding_reveal":
+        return buildToolResult(
+          toolName,
+          await service.reveal(rawInput),
+          "Запрос Finder обработан без изменения файла.",
+        );
+    }
+  } catch {
+    return safeServiceError("Операция аудита безопасно остановлена.");
+  }
+}
+
 async function callScheduleModelTool(
   service: ScheduleService,
   toolName: "schedule_intent_get" | "schedule_intent_complete",
@@ -771,7 +849,8 @@ async function callScheduleAppTool(
   }
 }
 
-interface McpServerOptions {
+export interface McpServerOptions {
+  readonly auditService?: AuditToolService;
   readonly exclusionService?: ExclusionService;
   readonly quarantineService?: QuarantineToolService;
   readonly scheduleService?: ScheduleService;
@@ -808,7 +887,17 @@ export function createMcpServer(
         toolName === "schedule_intent_complete"
         ? (input: unknown) =>
             callScheduleModelTool(scheduleService, toolName, input)
-        : skeletonUnavailableResult,
+        : options.auditService === undefined
+          ? skeletonUnavailableResult
+          : (input: unknown) =>
+              callAuditModelTool(
+                options.auditService!,
+                toolName as Exclude<
+                  ModelVisibleToolName,
+                  "schedule_intent_get" | "schedule_intent_complete"
+                >,
+                input,
+              ),
     );
   }
   for (const [name, definition] of Object.entries(APP_VISIBLE_TOOL_DEFINITIONS)) {
@@ -877,7 +966,28 @@ function detectPlatformInput(): PlatformInput {
 export async function startMcpServer(
   platformInput: PlatformInput = detectPlatformInput(),
 ): Promise<McpServer> {
-  const server = createMcpServer(platformInput);
+  const server = createMcpServer(
+    platformInput,
+    await createDefaultRuntimeServices(),
+  );
   await server.connect(new StdioServerTransport());
   return server;
+}
+
+export async function createDefaultRuntimeServices(
+  options: RuntimeServiceOptions = {},
+): Promise<McpServerOptions> {
+  const core = await createRuntimeCore(options);
+  const exclusionService = new ExclusionService({
+    store: core.exclusionStore,
+    findings: core.auditService,
+    ...(options.now === undefined ? {} : { now: options.now }),
+    ...(options.createId === undefined ? {} : { createId: options.createId }),
+  });
+  const quarantineService = await core.createQuarantineService(exclusionService);
+  return {
+    auditService: core.auditService,
+    exclusionService,
+    quarantineService,
+  };
 }

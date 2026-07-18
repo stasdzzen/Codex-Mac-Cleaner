@@ -6,7 +6,6 @@ import {
   createStandaloneBridge,
 } from "@/lib/bridge";
 import type { DashboardSnapshot } from "@/lib/dashboard-types";
-import { standaloneFixture } from "@/lib/standalone-fixture";
 
 interface ToolResultLike {
   readonly structuredContent?: unknown;
@@ -20,11 +19,46 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function dashboardFromMeta(value: unknown): DashboardSnapshot | undefined {
   if (!isRecord(value) || !isRecord(value.dashboard)) return undefined;
   const dashboard = value.dashboard;
+  const validState = [
+    "queued",
+    "running",
+    "cancelling",
+    "cancelled",
+    "completed",
+    "completed_with_warnings",
+    "failed",
+  ].includes(typeof dashboard.state === "string" ? dashboard.state : "");
+  const revisionValid =
+    dashboard.revision === null ||
+    (typeof dashboard.revision === "number" &&
+      Number.isSafeInteger(dashboard.revision) &&
+      dashboard.revision >= 1);
   if (
     typeof dashboard.auditId !== "string" ||
+    !revisionValid ||
+    !validState ||
     typeof dashboard.stateVersion !== "number" ||
+    !Number.isSafeInteger(dashboard.stateVersion) ||
+    dashboard.stateVersion < 0 ||
+    !isRecord(dashboard.progress) ||
+    !isRecord(dashboard.coverage) ||
+    !isRecord(dashboard.storageSummary) ||
+    !isRecord(dashboard.diskObservation) ||
+    typeof dashboard.excludedCount !== "number" ||
     !Array.isArray(dashboard.findings) ||
-    !Array.isArray(dashboard.quarantineEntries)
+    !dashboard.findings.every(
+      (finding) =>
+        isRecord(finding) &&
+        typeof finding.findingId === "string" &&
+        Array.isArray(finding.allowedActions),
+    ) ||
+    !Array.isArray(dashboard.quarantineEntries) ||
+    !dashboard.quarantineEntries.every(
+      (entry) =>
+        isRecord(entry) &&
+        typeof entry.entryId === "string" &&
+        entry.state === "moved",
+    )
   ) {
     return undefined;
   }
@@ -32,13 +66,17 @@ function dashboardFromMeta(value: unknown): DashboardSnapshot | undefined {
 }
 
 function mergeSafeResult(
-  current: DashboardSnapshot,
+  current: DashboardSnapshot | null,
   result: ToolResultLike,
-): DashboardSnapshot {
+): DashboardSnapshot | null {
   const hydrated = dashboardFromMeta(result._meta);
-  if (hydrated !== undefined && hydrated.stateVersion >= current.stateVersion) {
+  if (
+    hydrated !== undefined &&
+    (current === null || hydrated.stateVersion >= current.stateVersion)
+  ) {
     return hydrated;
   }
+  if (current === null) return null;
   if (!isRecord(result.structuredContent)) return current;
   const safe = result.structuredContent;
   const incomingVersion = safe.stateVersion;
@@ -75,8 +113,8 @@ function initialToolResult(): ToolResultLike {
 
 export function App() {
   const bridge = useMemo(() => createStandaloneBridge(), []);
-  const [snapshot, setSnapshot] = useState(() =>
-    mergeSafeResult(standaloneFixture, initialToolResult()),
+  const [snapshot, setSnapshot] = useState<DashboardSnapshot | null>(() =>
+    mergeSafeResult(null, initialToolResult()),
   );
 
   useEffect(() => {
@@ -94,7 +132,20 @@ export function App() {
 
   return (
     <>
-      <AuditDashboard snapshot={snapshot} bridge={bridge} />
+      {snapshot === null ? (
+        <main className="mx-auto flex min-h-screen w-full max-w-3xl items-center p-6">
+          <section className="w-full rounded-xl border bg-card p-6 text-card-foreground shadow-sm">
+            <p className="text-sm text-muted-foreground">Codex Mac Cleaner</p>
+            <h1 className="mt-2 text-2xl font-semibold">Audit Dashboard</h1>
+            <h2 className="mt-6 text-base font-medium">Ожидание безопасного snapshot</h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Находки и действия появятся только после валидированного ответа локального MCP server.
+            </p>
+          </section>
+        </main>
+      ) : (
+        <AuditDashboard snapshot={snapshot} bridge={bridge} />
+      )}
       <Toaster position="bottom-right" />
     </>
   );
