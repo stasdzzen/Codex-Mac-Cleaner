@@ -44,10 +44,23 @@ function validateEntry(
   if (entry.gitMarker !== null) {
     return { ok: false, errorCode: "PROTECT_LOCAL_GIT_REPOSITORY" };
   }
+  if (!final && entry.fileType !== "directory" && entry.fileType !== "bundle") {
+    return { ok: false, errorCode: "PATH_ANCESTRY_NOT_DIRECTORY" };
+  }
+  if (
+    final &&
+    (entry.fileType === "unknown" || input.expectedFileType === "unknown")
+  ) {
+    return { ok: false, errorCode: "PATH_UNKNOWN_FILE_TYPE" };
+  }
   if (final && entry.fileType !== input.expectedFileType) {
     return { ok: false, errorCode: "PATH_TYPE_MISMATCH" };
   }
-  if (final && entry.fileType === "file" && entry.linkCount > 1) {
+  if (
+    final &&
+    (entry.fileType === "file" || entry.fileType === "plist") &&
+    entry.linkCount > 1
+  ) {
     return { ok: false, errorCode: "HARDLINK_ANOMALY" };
   }
   return undefined;

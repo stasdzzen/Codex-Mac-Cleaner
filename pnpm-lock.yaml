@@ -127,6 +127,9 @@ importers:
       '@codex-mac-cleaner/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@codex-mac-cleaner/evidence':
+        specifier: workspace:*
+        version: link:../evidence
       zod:
         specifier: 4.4.3
         version: 4.4.3

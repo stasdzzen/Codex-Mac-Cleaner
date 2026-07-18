@@ -15,6 +15,45 @@ export type RuleInputType =
 
 export type EvidenceOutcome = "confirmed" | "contradicted" | "unknown";
 
+export interface CorrelationStateByInput {
+  readonly owner_identity: "confirmed" | "mismatch" | "unknown";
+  readonly installed_state: "present" | "absent" | "unknown";
+  readonly activity: "present" | "absent" | "unknown";
+  readonly open_file_state: "present" | "absent" | "unknown";
+  readonly target_existence: "present" | "absent" | "unknown";
+  readonly receipt: "present" | "absent" | "unknown";
+  readonly dependency: "present" | "absent" | "unknown";
+  readonly temporal: "current" | "stale" | "unknown";
+  readonly data_kind: "known" | "unsafe" | "unknown";
+  readonly capability: "available" | "missing" | "unknown";
+}
+
+export type CorrelationRuleInputType = keyof CorrelationStateByInput;
+
+interface ServerCorrelationSignalBase {
+  readonly schemaVersion: 1;
+  readonly targetRef: string;
+  readonly observedAt: string;
+  readonly fingerprint: string;
+}
+
+export type ServerCorrelationSignal = {
+  [Input in CorrelationRuleInputType]: Readonly<
+    ServerCorrelationSignalBase & {
+      readonly ruleInputType: Input;
+      readonly state: CorrelationStateByInput[Input];
+    }
+  >;
+}[CorrelationRuleInputType];
+
+export type ServerCorrelationSignalInput<Input extends CorrelationRuleInputType> =
+  Readonly<
+    ServerCorrelationSignalBase & {
+      readonly ruleInputType: Input;
+      readonly state: CorrelationStateByInput[Input];
+    }
+  >;
+
 export interface EvidenceItem {
   readonly evidenceId: string;
   readonly ruleInputType: RuleInputType;

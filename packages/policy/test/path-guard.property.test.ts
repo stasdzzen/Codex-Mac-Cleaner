@@ -57,6 +57,61 @@ describe("validateMutationPath fail closed", () => {
     ).toEqual({ ok: false, errorCode: "HARDLINK_ANOMALY" });
   });
 
+  it("блокирует unknown у final entry даже при совпавшем expectedFileType", () => {
+    const ancestry = safePathGuardInput.ancestry.map((entry, index) =>
+      index === safePathGuardInput.ancestry.length - 1
+        ? { ...entry, fileType: "unknown" as const }
+        : entry,
+    );
+
+    expect(
+      validateMutationPath({
+        ...safePathGuardInput,
+        expectedFileType: "unknown",
+        ancestry,
+      }),
+    ).toEqual({ ok: false, errorCode: "PATH_UNKNOWN_FILE_TYPE" });
+  });
+
+  it.each(["file", "plist", "unknown"] as const)(
+    "блокирует недопустимый intermediate ancestry type %s",
+    (fileType) => {
+      const candidate = `${syntheticCandidate}/nested`;
+      const ancestry = [
+        safePathGuardInput.ancestry[0]!,
+        { ...safePathGuardInput.ancestry[1]!, fileType },
+        {
+          ...safePathGuardInput.ancestry[1]!,
+          canonicalPath: candidate,
+        },
+      ];
+
+      expect(
+        validateMutationPath({
+          ...safePathGuardInput,
+          candidate,
+          ancestry,
+        }),
+      ).toEqual({ ok: false, errorCode: "PATH_ANCESTRY_NOT_DIRECTORY" });
+    },
+  );
+
+  it("блокирует hardlink anomaly для plist как regular-file semantic type", () => {
+    const ancestry = safePathGuardInput.ancestry.map((entry, index) =>
+      index === safePathGuardInput.ancestry.length - 1
+        ? { ...entry, fileType: "plist" as const, linkCount: 2 }
+        : entry,
+    );
+
+    expect(
+      validateMutationPath({
+        ...safePathGuardInput,
+        expectedFileType: "plist",
+        ancestry,
+      }),
+    ).toEqual({ ok: false, errorCode: "HARDLINK_ANOMALY" });
+  });
+
   it.each([
     ["uid", 502, "PATH_OWNER_MISMATCH"],
     ["mountPoint", true, "MOUNT_POINT_DETECTED"],

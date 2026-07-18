@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { evaluatePolicy } from "../src/index.js";
-import { safeFinding } from "./fixtures.js";
+import { safeFinding, withEvidenceOutcome } from "./fixtures.js";
 
 describe("fail-closed policy matrix", () => {
   it("разрешает prepare_move только для полностью подтверждённого safe candidate", () => {
@@ -41,14 +41,18 @@ describe("fail-closed policy matrix", () => {
   );
 
   it("orphaned с открытым файлом блокируется", () => {
-    const decision = evaluatePolicy({ ...safeFinding, openFileState: "present" });
+    const decision = evaluatePolicy(
+      withEvidenceOutcome(safeFinding, "open_file_state", "confirmed"),
+    );
 
     expect(decision.allowedActions).not.toContain("prepare_move");
     expect(decision.blockingRuleIds).toContain("POLICY_OPEN_FILE");
   });
 
   it("кэш активного приложения блокируется", () => {
-    const decision = evaluatePolicy({ ...safeFinding, activityState: "present" });
+    const decision = evaluatePolicy(
+      withEvidenceOutcome(safeFinding, "activity", "confirmed"),
+    );
 
     expect(decision.blockingRuleIds).toContain("POLICY_ACTIVE_PROCESS");
   });
@@ -68,37 +72,44 @@ describe("fail-closed policy matrix", () => {
   });
 
   it.each([
-    ["ownerIdentityState", "unknown", "POLICY_OWNER_IDENTITY_MISSING"],
-    ["ownerIdentityState", "mismatch", "POLICY_OWNER_MISMATCH"],
-    ["installedState", "unknown", "POLICY_INSTALLED_STATE_UNKNOWN"],
-    ["activityState", "unknown", "POLICY_ACTIVITY_UNKNOWN"],
-    ["openFileState", "unknown", "POLICY_OPEN_FILE_UNKNOWN"],
-    ["targetExistenceState", "unknown", "POLICY_TARGET_EXISTENCE_UNKNOWN"],
-    ["receiptState", "unknown", "POLICY_RECEIPT_UNKNOWN"],
-    ["dependencyState", "unknown", "POLICY_DEPENDENCY_UNKNOWN"],
-    ["temporalState", "unknown", "POLICY_TEMPORAL_UNKNOWN"],
-    ["dataKindState", "unknown", "POLICY_DATA_KIND_UNKNOWN"],
-    ["capabilityState", "missing", "POLICY_CAPABILITY_MISSING"],
-  ] as const)("fail closed для %s=%s", (field, state, ruleId) => {
-    const decision = evaluatePolicy({ ...safeFinding, [field]: state });
+    ["owner_identity", "unknown", "POLICY_OWNER_IDENTITY_MISSING"],
+    ["owner_identity", "contradicted", "POLICY_OWNER_MISMATCH"],
+    ["installed_state", "unknown", "POLICY_INSTALLED_STATE_UNKNOWN"],
+    ["activity", "unknown", "POLICY_ACTIVITY_UNKNOWN"],
+    ["open_file_state", "unknown", "POLICY_OPEN_FILE_UNKNOWN"],
+    ["target_existence", "unknown", "POLICY_TARGET_EXISTENCE_UNKNOWN"],
+    ["receipt", "unknown", "POLICY_RECEIPT_UNKNOWN"],
+    ["dependency", "unknown", "POLICY_DEPENDENCY_UNKNOWN"],
+    ["temporal", "unknown", "POLICY_TEMPORAL_UNKNOWN"],
+    ["data_kind", "unknown", "POLICY_DATA_KIND_UNKNOWN"],
+    ["capability", "contradicted", "POLICY_CAPABILITY_MISSING"],
+  ] as const)("fail closed для %s=%s", (inputType, outcome, ruleId) => {
+    const decision = evaluatePolicy(
+      withEvidenceOutcome(safeFinding, inputType, outcome),
+    );
 
     expect(decision.allowedActions).not.toContain("prepare_move");
     expect(decision.blockingRuleIds).toContain(ruleId);
   });
 
   it.each([
-    ["installedState", "present", "POLICY_INSTALLED_OWNER_PRESENT"],
-    ["targetExistenceState", "absent", "POLICY_TARGET_MISSING"],
-    ["receiptState", "present", "POLICY_RECEIPT_PRESENT"],
-    ["dependencyState", "present", "POLICY_DEPENDENCY_PRESENT"],
-    ["temporalState", "stale", "POLICY_STALE_EVIDENCE"],
-    ["capabilityState", "unknown", "POLICY_CAPABILITY_MISSING"],
-  ] as const)("owner/evidence matrix блокирует %s=%s", (field, state, ruleId) => {
-    const decision = evaluatePolicy({ ...safeFinding, [field]: state });
+    ["installed_state", "confirmed", "POLICY_INSTALLED_OWNER_PRESENT"],
+    ["target_existence", "contradicted", "POLICY_TARGET_MISSING"],
+    ["receipt", "confirmed", "POLICY_RECEIPT_PRESENT"],
+    ["dependency", "confirmed", "POLICY_DEPENDENCY_PRESENT"],
+    ["temporal", "contradicted", "POLICY_STALE_EVIDENCE"],
+    ["capability", "unknown", "POLICY_CAPABILITY_MISSING"],
+  ] as const)(
+    "owner/evidence matrix блокирует %s=%s",
+    (inputType, outcome, ruleId) => {
+      const decision = evaluatePolicy(
+        withEvidenceOutcome(safeFinding, inputType, outcome),
+      );
 
-    expect(decision.allowedActions).not.toContain("prepare_move");
-    expect(decision.blockingRuleIds).toContain(ruleId);
-  });
+      expect(decision.allowedActions).not.toContain("prepare_move");
+      expect(decision.blockingRuleIds).toContain(ruleId);
+    },
+  );
 
   it("блокирует stale fingerprint", () => {
     const decision = evaluatePolicy({

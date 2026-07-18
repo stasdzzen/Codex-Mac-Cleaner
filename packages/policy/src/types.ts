@@ -1,4 +1,5 @@
 import type { Classification } from "@codex-mac-cleaner/classifier";
+import type { EvidenceSet } from "@codex-mac-cleaner/evidence";
 import type { ProtectedScopeKind } from "./protected-scopes.js";
 
 export type AllowedAction =
@@ -68,6 +69,8 @@ export type PathGuardErrorCode =
   | "PATH_INVALID"
   | "PATH_OUTSIDE_ALLOWLIST"
   | "PATH_ANCESTRY_INCOMPLETE"
+  | "PATH_ANCESTRY_NOT_DIRECTORY"
+  | "PATH_UNKNOWN_FILE_TYPE"
   | "SYMLINK_BOUNDARY"
   | "PATH_OWNER_MISMATCH"
   | "PATH_TYPE_MISMATCH"
@@ -82,19 +85,10 @@ export type PathValidationResult =
 
 export interface PolicyInput {
   readonly classification: Classification;
+  readonly evidenceSet: EvidenceSet;
   readonly supportLevel: "candidate" | "analysis_only" | "unsupported_manual";
   readonly category: FindingCategory;
   readonly sensitivityFlags: readonly SensitivityFlag[];
-  readonly ownerIdentityState: "confirmed" | "mismatch" | "unknown";
-  readonly installedState: "present" | "absent" | "unknown";
-  readonly activityState: "present" | "absent" | "unknown";
-  readonly openFileState: "present" | "absent" | "unknown";
-  readonly targetExistenceState: "present" | "absent" | "unknown";
-  readonly receiptState: "present" | "absent" | "unknown";
-  readonly dependencyState: "present" | "absent" | "unknown";
-  readonly temporalState: "current" | "stale" | "unknown";
-  readonly dataKindState: "known" | "unknown";
-  readonly capabilityState: "available" | "missing" | "unknown";
   readonly protectedScopeKinds: readonly ProtectedScopeKind[];
   readonly exclusionMatch: ExclusionMatch;
   readonly officialUninstallerApplicable: boolean;

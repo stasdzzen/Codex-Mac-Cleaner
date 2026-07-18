@@ -2,11 +2,14 @@ import { createHash } from "node:crypto";
 
 import type { Observation } from "@codex-mac-cleaner/adapters";
 
+import { createServerCorrelationSignal } from "./correlation.js";
+
 import type {
   EvidenceItem,
   EvidenceOutcome,
   EvidenceSet,
   RuleInputType,
+  ServerCorrelationSignal,
 } from "./types.js";
 
 const EPOCH = "1970-01-01T00:00:00.000Z";
@@ -80,6 +83,46 @@ function signalsFor(
   }
 }
 
+function correlationOutcome(signal: ServerCorrelationSignal): EvidenceOutcome {
+  switch (signal.ruleInputType) {
+    case "owner_identity":
+      return signal.state === "confirmed"
+        ? "confirmed"
+        : signal.state === "mismatch"
+          ? "contradicted"
+          : "unknown";
+    case "installed_state":
+    case "activity":
+    case "open_file_state":
+    case "target_existence":
+    case "receipt":
+    case "dependency":
+      return signal.state === "present"
+        ? "confirmed"
+        : signal.state === "absent"
+          ? "contradicted"
+          : "unknown";
+    case "temporal":
+      return signal.state === "current"
+        ? "confirmed"
+        : signal.state === "stale"
+          ? "contradicted"
+          : "unknown";
+    case "data_kind":
+      return signal.state === "known"
+        ? "confirmed"
+        : signal.state === "unsafe"
+          ? "contradicted"
+          : "unknown";
+    case "capability":
+      return signal.state === "available"
+        ? "confirmed"
+        : signal.state === "missing"
+          ? "contradicted"
+          : "unknown";
+  }
+}
+
 function supportLevel(observations: readonly Observation[]): EvidenceSet["supportLevel"] {
   if (observations.some((item) => item.supportLevel === "unsupported_manual")) {
     return "unsupported_manual";
@@ -108,6 +151,7 @@ function removalMethod(
 function normalizeGroup(
   rawTarget: string,
   observations: readonly Observation[],
+  correlations: readonly ServerCorrelationSignal[],
 ): EvidenceSet {
   const sorted = [...observations].sort((left, right) =>
     [left.source, left.evidenceKind, left.fingerprint, left.observationId]
@@ -141,12 +185,40 @@ function normalizeGroup(
     }
   }
 
+  for (const signal of correlations) {
+    const outcome = correlationOutcome(signal);
+    const material = [
+      "server_correlation",
+      signal.ruleInputType,
+      signal.state,
+      signal.fingerprint,
+    ].join("\u0000");
+    const fingerprint = `evidence:v1:${sha256(material)}`;
+    const key = `${signal.ruleInputType}:${outcome}:${fingerprint}`;
+    items.set(key, {
+      evidenceId: `evidence-${sha256(key).slice(0, 24)}`,
+      ruleInputType: signal.ruleInputType,
+      sourceAdapter: "server_correlation",
+      outcome,
+      observedAt: safeObservedAt(signal.observedAt),
+      summary: summaries[signal.ruleInputType],
+      fingerprint,
+    });
+  }
+
   const normalizedItems = [...items.values()].sort((left, right) =>
     [left.ruleInputType, left.outcome, left.fingerprint]
       .join(":")
       .localeCompare([right.ruleInputType, right.outcome, right.fingerprint].join(":")),
   );
-  const snapshotMaterial = [...new Set(sorted.map((item) => item.fingerprint))]
+  const snapshotMaterial = [
+    ...new Set([
+      ...sorted.map((item) => item.fingerprint),
+      ...correlations.map((signal) =>
+        [signal.ruleInputType, signal.state, signal.fingerprint].join(":"),
+      ),
+    ]),
+  ]
     .sort()
     .join("\u0000");
   const sensitivityFlags = [...new Set(sorted.flatMap((item) => item.sensitivityFlags))].sort();
@@ -166,6 +238,13 @@ function normalizeGroup(
 export function normalizeObservations(
   observations: readonly Observation[],
 ): readonly EvidenceSet[] {
+  return normalizeEvidence(observations, []);
+}
+
+export function normalizeEvidence(
+  observations: readonly Observation[],
+  rawCorrelations: readonly ServerCorrelationSignal[],
+): readonly EvidenceSet[] {
   const grouped = new Map<string, Observation[]>();
   for (const observation of observations) {
     const existing = grouped.get(observation.targetRef) ?? [];
@@ -173,7 +252,22 @@ export function normalizeObservations(
     grouped.set(observation.targetRef, existing);
   }
 
+  const correlations = rawCorrelations.map((signal) =>
+    createServerCorrelationSignal(signal),
+  );
+  const correlationsByTarget = new Map<string, ServerCorrelationSignal[]>();
+  for (const signal of correlations) {
+    if (!grouped.has(signal.targetRef)) {
+      throw new TypeError("Correlation signal не связан с candidate observation");
+    }
+    const existing = correlationsByTarget.get(signal.targetRef) ?? [];
+    existing.push(signal);
+    correlationsByTarget.set(signal.targetRef, existing);
+  }
+
   return [...grouped.entries()]
-    .map(([target, group]) => normalizeGroup(target, group))
+    .map(([target, group]) =>
+      normalizeGroup(target, group, correlationsByTarget.get(target) ?? []),
+    )
     .sort((left, right) => left.targetIdentity.localeCompare(right.targetIdentity));
 }

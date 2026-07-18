@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import type { Observation } from "@codex-mac-cleaner/adapters";
 
-import { normalizeObservations } from "../src/index.js";
+import {
+  createServerCorrelationSignal,
+  normalizeEvidence,
+  normalizeObservations,
+} from "../src/index.js";
 
 const observedAt = "2026-07-18T00:00:00.000Z";
 
@@ -114,5 +118,41 @@ describe("normalizeObservations", () => {
     ]) {
       expect(serialized).not.toContain(forbidden);
     }
+  });
+});
+
+describe("server-owned correlation contract", () => {
+  const validSignal = {
+    schemaVersion: 1,
+    targetRef: "synthetic-target-a",
+    ruleInputType: "installed_state",
+    state: "absent",
+    observedAt,
+    fingerprint: `correlation:v1:${"d".repeat(64)}`,
+  } as const;
+
+  it.each(["path", "config", "stderr", "displayName", "secret", "uiPolicy", "score"])(
+    "отклоняет запрещённое поле %s",
+    (field) => {
+      expect(() =>
+        createServerCorrelationSignal({
+          ...validSignal,
+          [field]: "synthetic-private-value",
+        } as never),
+      ).toThrow();
+    },
+  );
+
+  it("не сохраняет raw target или correlation fingerprint в EvidenceSet", () => {
+    const signal = createServerCorrelationSignal(validSignal);
+    const input = observation({
+      observationId: "observation-correlated",
+      evidenceKind: "library_artifact",
+    });
+    const serialized = JSON.stringify(normalizeEvidence([input], [signal]));
+
+    expect(serialized).not.toContain(validSignal.targetRef);
+    expect(serialized).not.toContain(validSignal.fingerprint);
+    expect(serialized).not.toContain("synthetic-private-value");
   });
 });

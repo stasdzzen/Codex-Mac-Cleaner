@@ -1,4 +1,9 @@
-import type { Classification } from "@codex-mac-cleaner/classifier";
+import { classifyEvidence, type Classification } from "@codex-mac-cleaner/classifier";
+import type {
+  EvidenceOutcome,
+  EvidenceSet,
+  RuleInputType,
+} from "@codex-mac-cleaner/evidence";
 
 import type {
   PathGuardInput,
@@ -9,14 +14,53 @@ import type {
 export const syntheticRoot = "/synthetic/Library/Caches";
 export const syntheticCandidate = `${syntheticRoot}/artifact-a`;
 
-export const orphanedClassification: Classification = {
-  label: "orphaned",
-  confidence: "high",
-  ruleIds: ["CLASSIFIER_V1_ORPHANED_COMPLETE_EVIDENCE"],
-  explanation: "Полный независимый набор доказательств указывает на остаток",
-  counterEvidence: [],
-  missingEvidence: [],
+const safeOutcomes: Readonly<Record<RuleInputType, EvidenceOutcome>> = {
+  owner_identity: "confirmed",
+  installed_state: "contradicted",
+  activity: "contradicted",
+  open_file_state: "contradicted",
+  target_existence: "confirmed",
+  receipt: "contradicted",
+  dependency: "contradicted",
+  temporal: "confirmed",
+  data_kind: "confirmed",
+  capability: "confirmed",
+  removal_method: "contradicted",
+  duplicate_identity: "contradicted",
+  name_match: "contradicted",
 };
+
+export const safeEvidenceSet: EvidenceSet = {
+  schemaVersion: 1,
+  targetIdentity: `target:v1:${"a".repeat(64)}`,
+  snapshotFingerprint: `snapshot:v1:${"b".repeat(64)}`,
+  supportLevel: "candidate",
+  sensitivityFlags: [],
+  recommendedRemovalMethod: "quarantine",
+  stale: false,
+  items: [
+    "owner_identity",
+    "installed_state",
+    "activity",
+    "open_file_state",
+    "target_existence",
+    "receipt",
+    "dependency",
+    "temporal",
+    "data_kind",
+    "capability",
+  ].map((ruleInputType) => ({
+    evidenceId: `evidence-${ruleInputType.replaceAll("_", "-")}`,
+    ruleInputType: ruleInputType as RuleInputType,
+    sourceAdapter: "server_correlation",
+    outcome: safeOutcomes[ruleInputType as RuleInputType],
+    observedAt: "2026-07-18T00:00:00.000Z",
+    summary: "Синтетическое нормализованное доказательство",
+    fingerprint: `evidence:v1:${ruleInputType.replaceAll("_", "-")}`,
+  })),
+};
+
+export const orphanedClassification: Classification = classifyEvidence(safeEvidenceSet);
 
 export const snapshotFingerprint: SnapshotFingerprint = {
   device: "device-a",
@@ -68,19 +112,10 @@ export const safePathGuardInput: PathGuardInput = {
 
 export const safeFinding: PolicyInput = {
   classification: orphanedClassification,
+  evidenceSet: safeEvidenceSet,
   supportLevel: "candidate",
   category: "cache",
   sensitivityFlags: [],
-  ownerIdentityState: "confirmed",
-  installedState: "absent",
-  activityState: "absent",
-  openFileState: "absent",
-  targetExistenceState: "present",
-  receiptState: "absent",
-  dependencyState: "absent",
-  temporalState: "current",
-  dataKindState: "known",
-  capabilityState: "available",
   protectedScopeKinds: [],
   exclusionMatch: { status: "none" },
   officialUninstallerApplicable: false,
@@ -91,3 +126,21 @@ export const safeFinding: PolicyInput = {
     canonicalPath: syntheticCandidate,
   },
 };
+
+export function withEvidenceOutcome(
+  input: PolicyInput,
+  ruleInputType: RuleInputType,
+  outcome: EvidenceOutcome,
+): PolicyInput {
+  const evidenceSet: EvidenceSet = {
+    ...input.evidenceSet,
+    items: input.evidenceSet.items.map((item) =>
+      item.ruleInputType === ruleInputType ? { ...item, outcome } : item,
+    ),
+  };
+  return {
+    ...input,
+    evidenceSet,
+    classification: classifyEvidence(evidenceSet),
+  };
+}
