@@ -1,0 +1,21 @@
+{
+  "name": "@codex-mac-cleaner/policy",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run test"
+  },
+  "dependencies": {
+    "@codex-mac-cleaner/classifier": "workspace:*",
+    "@codex-mac-cleaner/contracts": "workspace:*",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "fast-check": "4.9.0",
+    "@types/node": "24.13.3",
+    "typescript": "7.0.2",
+    "vitest": "4.1.10"
+  }
+}
