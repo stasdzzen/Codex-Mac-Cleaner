@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { lstat, readdir } from "node:fs/promises";
 import { homedir } from "node:os";
-import { basename, dirname, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import {
   ALLOWLISTED_LIBRARY_ROOTS,
@@ -65,6 +65,13 @@ const TERMINAL_STATES = new Set([
 ]);
 const PROTECTED_NAME =
   /(?:^|[._ -])(?:credential|keychain|password|secret|token|wallet|safari|chrome|firefox|browser|mail|message|photo|contact|calendar|codex)(?:$|[._ -])/iu;
+const MAX_GIT_SCAN_DEPTH = 128;
+const MAX_GIT_SCAN_ENTRIES = 100_000;
+
+interface GitProtectionScan {
+  readonly marker: "directory" | "file" | null;
+  readonly blocked: boolean;
+}
 
 function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
@@ -144,16 +151,121 @@ class RuntimeFileSystemFacade implements FileSystemFacade {
     );
   }
 
-  private async gitMarker(path: string): Promise<"directory" | "file" | null> {
+  private isWithinBoundary(boundary: string, path: string): boolean {
+    const fromBoundary = relative(resolve(boundary), resolve(path));
+    return (
+      fromBoundary === "" ||
+      (!isAbsolute(fromBoundary) &&
+        fromBoundary !== ".." &&
+        !fromBoundary.startsWith(`..${sep}`))
+    );
+  }
+
+  private async directGitMarker(path: string): Promise<GitProtectionScan> {
     try {
-      const marker = await lstat(join(path, ".git"));
-      if (marker.isDirectory()) return "directory";
-      if (marker.isFile()) return "file";
-      return "file";
+      const marker = await lstat(join(path, ".git"), { bigint: true });
+      if (marker.isDirectory()) return { marker: "directory", blocked: false };
+      if (marker.isFile()) return { marker: "file", blocked: false };
+      return { marker: "file", blocked: false };
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
-      throw error;
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        return { marker: null, blocked: false };
+      }
+      return { marker: null, blocked: true };
     }
+  }
+
+  private async gitProtection(
+    candidatePath: string,
+    candidateKind: AdapterFileEntry["kind"],
+    signal?: AbortSignal,
+  ): Promise<GitProtectionScan> {
+    const candidateBoundary = resolve(candidatePath);
+    if (!this.isWithinBoundary(this.homeDirectory, candidateBoundary)) {
+      return { marker: null, blocked: true };
+    }
+
+    if (candidateKind === "directory") {
+      let rootStats;
+      try {
+        rootStats = await lstat(candidateBoundary, { bigint: true });
+      } catch {
+        return { marker: null, blocked: true };
+      }
+      if (rootStats.isSymbolicLink() || !rootStats.isDirectory()) {
+        return { marker: null, blocked: true };
+      }
+
+      const pending: Array<{ readonly path: string; readonly depth: number }> = [
+        { path: candidateBoundary, depth: 0 },
+      ];
+      let scannedEntries = 0;
+      while (pending.length > 0) {
+        signal?.throwIfAborted();
+        const current = pending.pop();
+        if (current === undefined || current.depth > MAX_GIT_SCAN_DEPTH) {
+          return { marker: null, blocked: true };
+        }
+
+        let entries;
+        try {
+          entries = await readdir(current.path, { withFileTypes: true });
+        } catch {
+          return { marker: null, blocked: true };
+        }
+        for (const entry of entries) {
+          signal?.throwIfAborted();
+          scannedEntries += 1;
+          if (
+            scannedEntries > MAX_GIT_SCAN_ENTRIES ||
+            entry.name === "" ||
+            entry.name === "." ||
+            entry.name === ".." ||
+            entry.name.includes(sep) ||
+            entry.name.includes("\0")
+          ) {
+            return { marker: null, blocked: true };
+          }
+
+          const childPath = join(current.path, entry.name);
+          if (!this.isWithinBoundary(candidateBoundary, childPath)) {
+            return { marker: null, blocked: true };
+          }
+          let childStats;
+          try {
+            childStats = await lstat(childPath, { bigint: true });
+          } catch {
+            return { marker: null, blocked: true };
+          }
+          if (childStats.dev !== rootStats.dev) {
+            return { marker: null, blocked: true };
+          }
+          if (entry.name === ".git") {
+            return {
+              marker: childStats.isDirectory() ? "directory" : "file",
+              blocked: false,
+            };
+          }
+          if (childStats.isSymbolicLink()) continue;
+          if (childStats.isDirectory()) {
+            pending.push({ path: childPath, depth: current.depth + 1 });
+          }
+        }
+      }
+    }
+
+    const homeBoundary = resolve(this.homeDirectory);
+    let ancestor = dirname(candidateBoundary);
+    while (this.isWithinBoundary(homeBoundary, ancestor)) {
+      signal?.throwIfAborted();
+      const marker = await this.directGitMarker(ancestor);
+      if (marker.marker !== null || marker.blocked) return marker;
+      if (ancestor === homeBoundary) break;
+      const parent = dirname(ancestor);
+      if (parent === ancestor) return { marker: null, blocked: true };
+      ancestor = parent;
+    }
+    return { marker: null, blocked: false };
   }
 
   async revalidateCandidate(candidate: RuntimeCandidate): Promise<{
@@ -162,9 +274,7 @@ class RuntimeFileSystemFacade implements FileSystemFacade {
   }> {
     const root = await captureFingerprint(candidate.allowedRoot);
     const current = await captureFingerprint(candidate.path);
-    const marker = current.fileType === "directory"
-      ? await this.gitMarker(candidate.path)
-      : null;
+    const gitProtection = await this.gitProtection(candidate.path, candidate.kind);
     const pathValidation = validateMutationPath({
       root: candidate.allowedRoot,
       candidate: candidate.path,
@@ -194,7 +304,7 @@ class RuntimeFileSystemFacade implements FileSystemFacade {
           mountPoint:
             current.device !== root.device || current.mountId !== root.mountId,
           linkCount: current.linkCount,
-          gitMarker: marker,
+          gitMarker: gitProtection.marker,
         },
       ],
     });
@@ -202,6 +312,7 @@ class RuntimeFileSystemFacade implements FileSystemFacade {
       pathValidation,
       protected:
         this.isProtected(candidate.path, basename(candidate.path)) ||
+        gitProtection.blocked ||
         !pathValidation.ok,
     };
   }
@@ -237,9 +348,7 @@ class RuntimeFileSystemFacade implements FileSystemFacade {
       const ref = `candidate-${sha256(path).slice(0, 24)}`;
       const snapshot = await captureFingerprint(path);
       const parentFingerprint = await captureFingerprint(dirname(path));
-      const marker = snapshot.fileType === "directory"
-        ? await this.gitMarker(path)
-        : null;
+      const gitProtection = await this.gitProtection(path, kind, signal);
       const pathValidation = validateMutationPath({
         root: allowedRoot,
         candidate: path,
@@ -270,11 +379,12 @@ class RuntimeFileSystemFacade implements FileSystemFacade {
               snapshot.device !== rootStats.dev.toString() ||
               snapshot.mountId !== `device:${rootStats.dev.toString()}`,
             linkCount: snapshot.linkCount,
-            gitMarker: marker,
+            gitMarker: gitProtection.marker,
           },
         ],
       });
-      const failClosedProtected = protectedEntry || !pathValidation.ok;
+      const failClosedProtected =
+        protectedEntry || gitProtection.blocked || !pathValidation.ok;
       this.candidates.set(ref, {
         ref,
         path,

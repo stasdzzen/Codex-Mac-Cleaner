@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -270,7 +270,22 @@ describe("полная интеграция MCP App", () => {
       "Codex Mac Cleaner",
       "plugin",
     );
-    await mkdir(join(syntheticHome, "Library", "Caches"), { recursive: true });
+    const syntheticCaches = join(syntheticHome, "Library", "Caches");
+    await mkdir(
+      join(syntheticCaches, "Nested Git Directory Parent", "Nested Project", ".git"),
+      { recursive: true },
+    );
+    const nestedGitFileParent = join(
+      syntheticCaches,
+      "Nested Git File Parent",
+      "Nested Project",
+    );
+    await mkdir(nestedGitFileParent, { recursive: true });
+    await writeFile(
+      join(nestedGitFileParent, ".git"),
+      "gitdir: synthetic-metadata\n",
+      "utf8",
+    );
     const transport = new StdioClientTransport({
       command: process.execPath,
       args: [runtimePath, "--stdio"],

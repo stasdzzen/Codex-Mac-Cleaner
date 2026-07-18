@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -16,6 +16,7 @@ import {
 
 const platform = { platform: "darwin", arch: "arm64", release: "26.0.0" } as const;
 const roots: string[] = [];
+type GitMarkerKind = "directory" | "file";
 
 function correlation(
   observation: Observation,
@@ -50,11 +51,116 @@ function actionableCorrelations(observation: Observation): readonly ServerCorrel
   ];
 }
 
+async function createNestedGitMarker(
+  candidatePath: string,
+  markerKind: GitMarkerKind,
+): Promise<void> {
+  const nestedProject = join(candidatePath, "Nested Project");
+  await mkdir(nestedProject, { recursive: true });
+  if (markerKind === "directory") {
+    await mkdir(join(nestedProject, ".git"));
+    return;
+  }
+  await writeFile(join(nestedProject, ".git"), "gitdir: synthetic-metadata\n", "utf8");
+}
+
+async function completedAudit(client: Client, requestId: string) {
+  const started = await client.callTool({
+    name: "audit_start",
+    arguments: { requestId, profile: "application_remnants" },
+  });
+  const auditId = (started.structuredContent as { auditId: string }).auditId;
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const status = await client.callTool({ name: "audit_status", arguments: { auditId } });
+    const state = (status.structuredContent as { state: string }).state;
+    if (state === "completed" || state === "completed_with_warnings") {
+      return client.callTool({
+        name: "audit_results",
+        arguments: { auditId, revision: 1, cursor: null, filters: {} },
+      });
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  throw new Error("Synthetic audit did not complete");
+}
+
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
 describe("production runtime services", () => {
+  it.each(["directory", "file"] as const)(
+    "исключает candidate до finding при вложенном .git-%s",
+    async (markerKind) => {
+      const root = await mkdtemp(join(tmpdir(), `cmc-runtime-git-${markerKind}-`));
+      roots.push(root);
+      const homeDirectory = join(root, "home");
+      const candidatePath = join(homeDirectory, "Library", "Caches", "Parent Candidate");
+      await createNestedGitMarker(candidatePath, markerKind);
+
+      const services = await createDefaultRuntimeServices({
+        homeDirectory,
+        stateRoot: join(root, "state"),
+        correlationsForObservation: actionableCorrelations,
+      });
+      const server = createMcpServer(platform, services);
+      const client = new Client({ name: `runtime-git-${markerKind}`, version: "1.0.0" });
+      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+      await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+      try {
+        const results = await completedAudit(client, `nested-git-${markerKind}-audit`);
+        const findings = (results.structuredContent as {
+          findings: Array<{ displayName: string }>;
+        }).findings;
+        expect(findings).not.toContainEqual(
+          expect.objectContaining({ displayName: "Parent Candidate" }),
+        );
+      } finally {
+        await client.close();
+        await server.close();
+      }
+    },
+  );
+
+  it.each(["directory", "file"] as const)(
+    "не выдаёт destructive token после появления вложенного .git-%s",
+    async (markerKind) => {
+      const root = await mkdtemp(join(tmpdir(), `cmc-runtime-git-token-${markerKind}-`));
+      roots.push(root);
+      const homeDirectory = join(root, "home");
+      const candidatePath = join(homeDirectory, "Library", "Caches", "Parent Candidate");
+      await mkdir(join(candidatePath, "Nested Project"), { recursive: true });
+
+      const services = await createDefaultRuntimeServices({
+        homeDirectory,
+        stateRoot: join(root, "state"),
+        correlationsForObservation: actionableCorrelations,
+      });
+      const server = createMcpServer(platform, services);
+      const client = new Client({ name: `runtime-git-token-${markerKind}`, version: "1.0.0" });
+      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+      await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+      try {
+        const results = await completedAudit(client, `nested-git-${markerKind}-token-audit`);
+        const finding = (results.structuredContent as {
+          findings: Array<{ findingId: string; displayName: string }>;
+        }).findings.find((item) => item.displayName === "Parent Candidate");
+        expect(finding).toBeDefined();
+
+        await createNestedGitMarker(candidatePath, markerKind);
+        const preview = await client.callTool({
+          name: "quarantine_prepare_move",
+          arguments: { findingId: finding?.findingId, auditRevision: 1 },
+        });
+        expect(preview.isError).toBe(true);
+        expect(preview.structuredContent ?? {}).not.toHaveProperty("previewToken");
+      } finally {
+        await client.close();
+        await server.close();
+      }
+    },
+  );
+
   it("проводит single-object prepare/move/restore через core quarantine на synthetic root", async () => {
     const root = await mkdtemp(join(tmpdir(), "cmc-runtime-core-"));
     roots.push(root);
