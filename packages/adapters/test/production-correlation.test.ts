@@ -129,6 +129,104 @@ function harness() {
   };
 }
 
+function packagePayloadHarness(options: Readonly<{
+  uninstaller: boolean;
+  exactPayloadExists: boolean;
+}>) {
+  const packageIdentifier = "org.vendor.owner";
+  const appName = options.uninstaller ? "Uninstall Owner.app" : "Owner.app";
+  const installLocation = "Library/Application Support/Vendor";
+  const exactAppPath = `/${installLocation}/${appName}`;
+  const exactExecutablePath = `${exactAppPath}/Contents/MacOS/Owner`;
+  const canonicalized: string[] = [];
+  const executor: ArgvExecutor = async (executable, argv) => {
+    if (executable === "/usr/sbin/pkgutil" && argv[0] === "--pkgs") {
+      return { stdout: `${packageIdentifier}\n`, stderr: "", exitCode: 0 };
+    }
+    if (executable === "/usr/sbin/pkgutil" && argv[0] === "--files") {
+      return {
+        stdout: `${appName}/Contents/Info.plist\n${appName}/Contents/MacOS/Owner\n`,
+        stderr: "",
+        exitCode: 0,
+      };
+    }
+    if (executable === "/usr/sbin/pkgutil" && argv[0] === "--pkg-info") {
+      return {
+        stdout: [
+          `package-id: ${packageIdentifier}`,
+          "version: 1.0",
+          "volume: /",
+          `location: ${installLocation}`,
+        ].join("\n"),
+        stderr: "",
+        exitCode: 0,
+      };
+    }
+    if (executable === "/usr/sbin/pkgutil" && argv[0] === "--file-info") {
+      return {
+        stdout: options.uninstaller ? `package-id: ${packageIdentifier}\n` : "",
+        stderr: "",
+        exitCode: 0,
+      };
+    }
+    if (executable === "/usr/bin/plutil") {
+      return {
+        stdout: JSON.stringify({
+          CFBundleIdentifier: "org.vendor.owner",
+          CFBundleExecutable: "Owner",
+        }),
+        stderr: "",
+        exitCode: 0,
+      };
+    }
+    if (executable === "/usr/bin/codesign") {
+      return {
+        stdout: "",
+        stderr: "designated => identifier org.vendor.owner and anchor apple generic\nTeamIdentifier=TEAMVENDOR\n",
+        exitCode: 0,
+      };
+    }
+    return { stdout: "", stderr: "", exitCode: 0 };
+  };
+  const standardCandidates = new Set([
+    `/Applications/${appName}`,
+    `/System/Applications/${appName}`,
+    `${home}/Applications/${appName}`,
+  ]);
+  const filesystem: MacOSCorrelationReadOnlyFileSystem = {
+    canonicalize: async (path) => {
+      canonicalized.push(path);
+      if (standardCandidates.has(path) || (path === exactAppPath && !options.exactPayloadExists)) {
+        throw Object.assign(new Error("missing"), { code: "ENOENT" });
+      }
+      return path;
+    },
+    stat: async (path) => ({
+      device: "device-package-payload",
+      inode: id(path),
+      fileType: path === exactAppPath ? "bundle" : path === exactExecutablePath || path === candidatePath ? "file" : "directory",
+      uid: 501,
+      gid: 20,
+      size: 1,
+      modifiedAtMs: 1,
+    }),
+    readDirectory: async () => [],
+  };
+  return {
+    adapter: createMacOSProductionCorrelationAdapter({
+      commands: createCommandRunner(executor),
+      candidates: createMacOSCandidateRegistry({
+        candidates: new Map([["candidate-ref-library", candidatePath]]),
+        userHome: home,
+      }),
+      filesystem,
+      now: () => fixedNow,
+    }),
+    canonicalized,
+    exactAppPath,
+  };
+}
+
 async function payloadFrom(adapter: ReturnType<typeof createMacOSProductionCorrelationAdapter>, snapshotId: string) {
   const input = await adapter.buildInput({
     candidateRef: "candidate-ref-library",
@@ -233,6 +331,46 @@ describe("concrete macOS production correlation collector v2", () => {
     expect(states.official_uninstallers).toBe("permission_denied");
     expect(states.owner_executables).toBe("permission_denied");
     expect(states.owner_bindings).toBe("permission_denied");
+  });
+
+  it("разрешает package-registered owner app по exact payload path вне app roots", async () => {
+    const test = packagePayloadHarness({ uninstaller: false, exactPayloadExists: true });
+    const payload = await payloadFrom(test.adapter, "snapshot-package-owner");
+    const installed = payload.queries.find(({ queryScope }) => queryScope === "installed_apps")!;
+
+    expect(test.canonicalized).toContain(test.exactAppPath);
+    expect(installed.state).toBe("complete");
+    expect(installed.subjects).toHaveLength(1);
+    expect(installed.subjects[0]?.claims).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: "package" }),
+      expect.objectContaining({ kind: "bundle" }),
+      expect.objectContaining({ kind: "signing" }),
+      expect.objectContaining({ kind: "executable" }),
+    ]));
+  });
+
+  it("находит package-registered uninstaller по exact payload path вне app roots", async () => {
+    const test = packagePayloadHarness({ uninstaller: true, exactPayloadExists: true });
+    const payload = await payloadFrom(test.adapter, "snapshot-package-uninstaller");
+    const uninstallers = payload.queries.find(({ queryScope }) => queryScope === "official_uninstallers")!;
+
+    expect(test.canonicalized).toContain(test.exactAppPath);
+    expect(uninstallers.state).toBe("complete");
+    expect(uninstallers.subjects).toHaveLength(1);
+    expect(uninstallers.subjects[0]?.claims).toEqual([
+      expect.objectContaining({ kind: "official_uninstaller" }),
+    ]);
+  });
+
+  it("не оставляет canonical coverage complete, если exact package payload не разрешён", async () => {
+    const test = packagePayloadHarness({ uninstaller: false, exactPayloadExists: false });
+    const payload = await payloadFrom(test.adapter, "snapshot-package-missing");
+    const states = Object.fromEntries(payload.queries.map(({ queryScope, state }) => [queryScope, state]));
+
+    expect(test.canonicalized).toContain(test.exactAppPath);
+    expect(states.installed_apps).toBe("partial_inventory");
+    expect(states.owner_executables).toBe("partial_inventory");
+    expect(states.official_uninstallers).toBe("partial_inventory");
   });
 
   it("Snapshot A/B race фиксируется в raw production snapshots", async () => {

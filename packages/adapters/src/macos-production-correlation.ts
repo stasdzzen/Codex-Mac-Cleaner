@@ -452,7 +452,54 @@ function packageAppPaths(stdout: string): readonly string[] | null {
   const paths = lines
     .map((line) => line.match(/^(.+?\.app)(?:\/|$)/u)?.[1])
     .filter((value): value is string => value !== undefined);
+  if (paths.some((path) => path.split("/").some((component) => component === "" || component === "." || component === ".."))) {
+    return null;
+  }
   return [...new Set(paths)].sort();
+}
+
+interface PackageInstallInfo {
+  readonly volume: string;
+  readonly location: string;
+}
+
+function packageInstallInfo(
+  stdout: string,
+  expectedPackageIdentifier: string,
+): PackageInstallInfo | null {
+  const fields = new Map<string, string[]>();
+  for (const line of stdout.split(/\r?\n/u).map((entry) => entry.trim()).filter(Boolean)) {
+    const match = line.match(/^([a-z-]+):\s*(.*)$/u);
+    if (!match) return null;
+    const values = fields.get(match[1]!) ?? [];
+    values.push(match[2]!);
+    fields.set(match[1]!, values);
+  }
+  const packageIds = fields.get("package-id") ?? [];
+  const volumes = fields.get("volume") ?? [];
+  const locations = fields.get("location") ?? [];
+  if (
+    packageIds.length !== 1 || packageIds[0] !== expectedPackageIdentifier ||
+    volumes.length !== 1 || !isAbsolute(volumes[0]!) || volumes[0]!.includes("\0") ||
+    locations.length !== 1 || locations[0]!.includes("\0")
+  ) return null;
+  const location = locations[0]!.replace(/^\/+|\/+$/gu, "");
+  if (location.split("/").some((component) => component === "." || component === "..")) return null;
+  return { volume: resolve(volumes[0]!), location };
+}
+
+function packagePayloadPath(
+  info: PackageInstallInfo,
+  relativePayloadPath: string,
+): string | null {
+  if (
+    isAbsolute(relativePayloadPath) || relativePayloadPath.includes("\0") ||
+    relativePayloadPath.split("/").some((component) => component === "" || component === "." || component === "..")
+  ) return null;
+  const target = resolve(info.volume, info.location, relativePayloadPath);
+  const fromVolume = relative(info.volume, target);
+  if (fromVolume === ".." || fromVolume.startsWith(`..${sep}`) || isAbsolute(fromVolume)) return null;
+  return target;
 }
 
 async function collectInstalledApps(
@@ -477,27 +524,43 @@ async function collectInstalledApps(
     const identifiers = [...new Set(packages.stdout.split(/\r?\n/u).map((line) => line.trim()).filter(Boolean))].sort();
     if (identifiers.length > MAX_SOURCE_RECORDS) state = mergeState(state, "truncated");
     for (const packageIdentifier of identifiers.slice(0, MAX_SOURCE_RECORDS)) {
-      const files = await runCommand(commands, "/usr/sbin/pkgutil", ["--files", packageIdentifier], signal);
-      state = mergeState(state, files.state);
-      if (files.state !== "complete") continue;
+      const [infoCommand, files] = await Promise.all([
+        runCommand(commands, "/usr/sbin/pkgutil", ["--pkg-info", packageIdentifier], signal),
+        runCommand(commands, "/usr/sbin/pkgutil", ["--files", packageIdentifier], signal),
+      ] as const);
+      state = mergeState(state, infoCommand.state, files.state);
+      if (infoCommand.state !== "complete" || files.state !== "complete") continue;
+      const info = packageInstallInfo(infoCommand.stdout, packageIdentifier);
       const relativeApps = packageAppPaths(files.stdout);
-      if (relativeApps === null) {
+      if (info === null || relativeApps === null) {
         state = mergeState(state, "parse_loss");
         continue;
       }
       for (const relativeApp of relativeApps) {
-        const candidates = roots.map((root) => join(root, relativeApp.replace(/^Applications\//u, "")));
-        for (const path of candidates) {
-          try {
-            const canonical = await filesystem.canonicalize(path, signal);
-            discovered.set(canonical, {
-              packageIdentifier,
-              uninstaller: /(?:uninstall|remove)/iu.test(basename(relativeApp)),
-            });
-            break;
-          } catch (error) {
-            if (errorCode(error) !== "ENOENT") state = mergeState(state, failureState(error));
+        const payloadPath = packagePayloadPath(info, relativeApp);
+        if (payloadPath === null) {
+          state = mergeState(state, "parse_loss");
+          continue;
+        }
+        try {
+          const canonical = await filesystem.canonicalize(payloadPath, signal);
+          const existing = discovered.get(canonical);
+          if (
+            existing?.packageIdentifier !== undefined &&
+            existing.packageIdentifier !== packageIdentifier
+          ) {
+            state = mergeState(state, "partial_inventory");
+            continue;
           }
+          discovered.set(canonical, {
+            packageIdentifier,
+            uninstaller: /(?:uninstall|remove)/iu.test(basename(relativeApp)),
+          });
+        } catch (error) {
+          state = mergeState(
+            state,
+            errorCode(error) === "ENOENT" ? "partial_inventory" : failureState(error),
+          );
         }
       }
     }
