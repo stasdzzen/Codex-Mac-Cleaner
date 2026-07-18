@@ -21,6 +21,7 @@ const ANALYSIS_ONLY_CATEGORIES = new Set<PolicyInput["category"]>([
   "sync_data",
   "vpn_data",
   "personal_file",
+  "unknown",
 ]);
 
 function fingerprintsEqual(
@@ -121,6 +122,7 @@ export function evaluatePolicy(input: PolicyInput): PolicyDecision {
   if (ANALYSIS_ONLY_CATEGORIES.has(input.category)) {
     block("POLICY_ANALYSIS_ONLY_CATEGORY");
   }
+  if (input.category === "unknown") block("POLICY_UNKNOWN_CATEGORY");
   if (
     input.sensitivityFlags.length > 0 ||
     input.evidenceSet.sensitivityFlags.length > 0
@@ -198,6 +200,8 @@ export function evaluatePolicy(input: PolicyInput): PolicyDecision {
     input.evidenceSet.recommendedRemovalMethod === "official_uninstaller"
   ) {
     block("POLICY_OFFICIAL_UNINSTALLER_REQUIRED");
+  } else if (input.evidenceSet.recommendedRemovalMethod !== "quarantine") {
+    block("POLICY_NON_QUARANTINE_REMOVAL_METHOD");
   }
   if (!fingerprintsEqual(input.snapshotFingerprint, input.currentFingerprint)) {
     block("POLICY_STALE_FINGERPRINT");

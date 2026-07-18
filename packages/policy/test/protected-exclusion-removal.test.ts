@@ -132,4 +132,37 @@ describe("official uninstaller precedence", () => {
       expect(selectRecommendedRemovalMethod(official, current)).toBe(expected);
     },
   );
+
+  it.each(["advanced_mode", "inspect_only"] as const)(
+    "%s из EvidenceSet блокирует prepare_move",
+    (recommendedRemovalMethod) => {
+      const decision = evaluatePolicy({
+        ...safeFinding,
+        evidenceSet: {
+          ...safeFinding.evidenceSet,
+          recommendedRemovalMethod,
+        },
+      });
+
+      expect(decision.allowedActions).not.toContain("prepare_move");
+      expect(decision.blockingRuleIds).toContain(
+        "POLICY_NON_QUARANTINE_REMOVAL_METHOD",
+      );
+    },
+  );
+
+  it("quarantine остаётся единственным actionable recommended method", () => {
+    const decision = evaluatePolicy({
+      ...safeFinding,
+      evidenceSet: {
+        ...safeFinding.evidenceSet,
+        recommendedRemovalMethod: "quarantine",
+      },
+    });
+
+    expect(decision.blockingRuleIds).not.toContain(
+      "POLICY_NON_QUARANTINE_REMOVAL_METHOD",
+    );
+    expect(decision.allowedActions).toContain("prepare_move");
+  });
 });

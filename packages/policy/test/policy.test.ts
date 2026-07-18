@@ -29,6 +29,13 @@ describe("fail-closed policy matrix", () => {
     expect(decision.blockingRuleIds).toContain("POLICY_ANALYSIS_ONLY_CATEGORY");
   });
 
+  it("блокирует mutation для unknown category", () => {
+    const decision = evaluatePolicy({ ...safeFinding, category: "unknown" });
+
+    expect(decision.allowedActions).not.toContain("prepare_move");
+    expect(decision.blockingRuleIds).toContain("POLICY_UNKNOWN_CATEGORY");
+  });
+
   it.each(["analysis_only", "unsupported_manual"] as const)(
     "%s допускает inspect/exclude, но не prepare_move",
     (supportLevel) => {
