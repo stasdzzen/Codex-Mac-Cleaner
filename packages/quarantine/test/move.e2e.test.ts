@@ -7,6 +7,7 @@ import {
   nodeFileSystem,
   prepareMove,
   moveToQuarantine,
+  captureFingerprint,
   type FileSystemOperations,
 } from "../src/index.js";
 import { createSyntheticHarness, type SyntheticHarness } from "./helpers.js";
@@ -61,7 +62,7 @@ describe("quarantine transaction одного объекта", () => {
     expect(result.sourcePath).toBe(harness.sourcePath);
     expect(result.sourceFingerprint).toEqual(harness.subject.sourceFingerprint);
     expect(result.sourceParentFingerprint).toEqual(
-      harness.subject.sourceParentFingerprint,
+      await captureFingerprint(harness.allowedRoot),
     );
     expect(await exists(harness.sourcePath)).toBe(false);
     expect(await readFile(payloadPath, "utf8")).toBe("synthetic-object-a");

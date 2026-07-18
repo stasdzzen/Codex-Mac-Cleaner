@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { dirname } from "node:path";
+import { dirname, isAbsolute, join, relative, sep } from "node:path";
 
 import type { PolicyDecision, SnapshotFingerprint } from "@codex-mac-cleaner/policy";
 
@@ -9,14 +9,19 @@ import {
   type QuarantineErrorCode,
 } from "./errors.js";
 import {
+  captureFingerprint,
   fingerprintsEqual,
+  inspectAllowedDirectory,
   inspectMoveSource,
   nodeFileSystem,
+  parentIdentityMatches,
   pathExistsNoFollow,
+  payloadIdentityMatches,
   syncDirectory,
   type FileSystemOperations,
   type ObservedMoveState,
 } from "./filesystem.js";
+import { observeDisk } from "./disk-observation.js";
 import { OperationJournal } from "./journal.js";
 import { KeyedMutex } from "./lock.js";
 import {
@@ -30,6 +35,20 @@ import {
   type PreviewToken,
   type StoredPreviewToken,
 } from "./preview-token.js";
+import type {
+  PreparePurgeInput,
+  PurgeQuarantineEntryInput,
+} from "./purge.js";
+import type {
+  PrepareRestoreInput,
+  RestoreFromQuarantineInput,
+} from "./restore.js";
+import {
+  readStorageSummary as readStorageSummarySnapshot,
+  type CandidateStorage,
+  type QuarantineActionResult,
+  type StorageSummary,
+} from "./summary.js";
 
 export interface MoveSubject {
   readonly auditId: string;
@@ -62,6 +81,7 @@ export interface ResolveSubjectInput {
 
 export interface QuarantineControllerOptions {
   readonly storeRoot: string;
+  readonly candidateStorage?: () => Promise<CandidateStorage>;
   readonly resolveSubject: (input: ResolveSubjectInput) => Promise<MoveSubject>;
   readonly revalidate: (
     subject: MoveSubject,
@@ -97,6 +117,23 @@ function mapFileSystemError(error: unknown): QuarantineError {
     return new QuarantineError("OPERATION_CONFLICT", { cause: error });
   }
   return new QuarantineError("SOURCE_CHANGED", { cause: error });
+}
+
+function mapRestoreFileSystemError(error: unknown): QuarantineError {
+  if (error instanceof QuarantineError) return error;
+  const code = (error as NodeJS.ErrnoException | undefined)?.code ?? "";
+  if (code === "EXDEV") {
+    return new QuarantineError("CROSS_VOLUME", { cause: error });
+  }
+  if (["EEXIST", "ENOTEMPTY"].includes(code)) {
+    return new QuarantineError("RESTORE_PATH_OCCUPIED", { cause: error });
+  }
+  return new QuarantineError("SOURCE_CHANGED", { cause: error });
+}
+
+function mapPurgeFileSystemError(error: unknown): QuarantineError {
+  if (error instanceof QuarantineError) return error;
+  return new QuarantineError("PURGE_FAILED", { cause: error });
 }
 
 function assertSafeRevalidation(
@@ -144,7 +181,7 @@ function transitionAllowed(
   const transitions: Readonly<Record<QuarantineState, readonly QuarantineState[]>> = {
     previewed: ["prepared", "aborted"],
     prepared: ["moved", "aborted", "conflicted", "inconsistent"],
-    moved: ["conflicted", "inconsistent"],
+    moved: ["restored", "purged", "conflicted", "inconsistent"],
     restored: [],
     purged: [],
     aborted: [],
@@ -166,6 +203,11 @@ export class QuarantineController {
   private readonly objectLocks = new KeyedMutex();
   private readonly operationLocks = new KeyedMutex();
   private readonly subjectsByTokenId = new Map<string, MoveSubject>();
+  private readonly restoreParentByTokenId = new Map<
+    string,
+    SnapshotFingerprint
+  >();
+  private readonly actionResults = new Map<string, QuarantineActionResult>();
   private readonly fileSystem: FileSystemOperations;
   private readonly now: () => number;
   private mutationBlocked = false;
@@ -214,6 +256,164 @@ export class QuarantineController {
       result,
     );
     return observed;
+  }
+
+  private actionKey(action: "move" | "restore" | "purge", operationId: string) {
+    return `${action}:${operationId}`;
+  }
+
+  private async buildActionResult(
+    manifest: QuarantineManifest,
+  ): Promise<QuarantineActionResult> {
+    const summary = await this.readStorageSummary();
+    const diskObservation = await observeDisk(this.options.storeRoot, {
+      now: this.now,
+    });
+    return {
+      ...manifest,
+      summary,
+      stateVersion: summary.stateVersion,
+      diskObservation,
+    };
+  }
+
+  async readStorageSummary(): Promise<StorageSummary> {
+    return readStorageSummarySnapshot({
+      storeRoot: this.options.storeRoot,
+      ...(this.options.candidateStorage === undefined
+        ? {}
+        : { candidateStorage: this.options.candidateStorage }),
+    });
+  }
+
+  private async assertManifestJournalCurrent(
+    manifest: QuarantineManifest,
+  ): Promise<void> {
+    if (!(await this.journal.hasEvent(manifest))) {
+      throw new QuarantineError("MANIFEST_INCONSISTENT");
+    }
+  }
+
+  private async inspectPayload(
+    manifest: QuarantineManifest,
+  ): Promise<SnapshotFingerprint> {
+    const paths = this.manifests.paths(manifest.operationId);
+    if (manifest.payloadPath !== paths.payloadPath) {
+      throw new QuarantineError("MANIFEST_INCONSISTENT");
+    }
+    let payload: ObservedMoveState;
+    try {
+      payload = await inspectMoveSource({
+        allowedRoot: paths.operationDirectory,
+        sourcePath: paths.payloadPath,
+      });
+    } catch (error) {
+      if (
+        error instanceof QuarantineError &&
+        ["SYMLINK_BOUNDARY", "CROSS_VOLUME", "PATH_OUTSIDE_ALLOWLIST"].includes(
+          error.code,
+        )
+      ) {
+        throw error;
+      }
+      throw new QuarantineError("MANIFEST_INCONSISTENT", { cause: error });
+    }
+    if (!payloadIdentityMatches(manifest.sourceFingerprint, payload.sourceFingerprint)) {
+      throw new QuarantineError("SOURCE_CHANGED");
+    }
+    return payload.sourceFingerprint;
+  }
+
+  private async resolveRestoreAllowedRoot(
+    manifest: QuarantineManifest,
+  ): Promise<string> {
+    let subject: MoveSubject;
+    try {
+      subject = await this.options.resolveSubject({
+        findingId: manifest.findingId,
+        auditRevision: manifest.auditRevision,
+      });
+    } catch (error) {
+      throw new QuarantineError("RESTORE_PARENT_CHANGED", { cause: error });
+    }
+    if (
+      subject.auditId !== manifest.auditId ||
+      subject.findingId !== manifest.findingId ||
+      subject.auditRevision !== manifest.auditRevision ||
+      subject.sourcePath !== manifest.sourcePath ||
+      !fingerprintsEqual(subject.sourceFingerprint, manifest.sourceFingerprint)
+    ) {
+      throw new QuarantineError("MANIFEST_INCONSISTENT");
+    }
+    return subject.allowedRoot;
+  }
+
+  private async inspectRestoreEntry(manifest: QuarantineManifest): Promise<{
+    readonly parentFingerprint: SnapshotFingerprint;
+    readonly payloadFingerprint: SnapshotFingerprint;
+  }> {
+    if (manifest.state !== "moved") {
+      throw new QuarantineError("OPERATION_CONFLICT");
+    }
+    await this.assertManifestJournalCurrent(manifest);
+    if (await pathExistsNoFollow(manifest.sourcePath)) {
+      throw new QuarantineError("RESTORE_PATH_OCCUPIED");
+    }
+    const allowedRoot = await this.resolveRestoreAllowedRoot(manifest);
+    let parentFingerprint: SnapshotFingerprint;
+    try {
+      parentFingerprint = await inspectAllowedDirectory({
+        allowedRoot,
+        directoryPath: dirname(manifest.sourcePath),
+      });
+    } catch (error) {
+      if (
+        error instanceof QuarantineError &&
+        ["SYMLINK_BOUNDARY", "CROSS_VOLUME", "PATH_OUTSIDE_ALLOWLIST"].includes(
+          error.code,
+        )
+      ) {
+        throw error;
+      }
+      throw new QuarantineError("RESTORE_PARENT_CHANGED", { cause: error });
+    }
+    if (
+      !parentIdentityMatches(
+        manifest.sourceParentFingerprint,
+        parentFingerprint,
+      )
+    ) {
+      throw new QuarantineError("RESTORE_PARENT_CHANGED");
+    }
+    const payloadFingerprint = await this.inspectPayload(manifest);
+    if (
+      parentFingerprint.device !== payloadFingerprint.device ||
+      parentFingerprint.mountId !== payloadFingerprint.mountId
+    ) {
+      throw new QuarantineError("CROSS_VOLUME");
+    }
+    return {
+      parentFingerprint,
+      payloadFingerprint,
+    };
+  }
+
+  private assertActionReplayBinding(
+    manifest: QuarantineManifest,
+    action: "restore" | "purge",
+    tokenSecret: string,
+    uiSessionId: string,
+  ): StoredPreviewToken {
+    const token = this.tokens.resolve(tokenSecret);
+    if (
+      token.action !== action ||
+      token.subjectId !== manifest.operationId ||
+      token.uiSessionId !== uiSessionId ||
+      !payloadIdentityMatches(manifest.sourceFingerprint, token.fingerprint)
+    ) {
+      throw new QuarantineError("OPERATION_CONFLICT");
+    }
+    return token;
   }
 
   async prepareMove(input: PrepareMoveInput): Promise<PreviewToken> {
@@ -341,14 +541,18 @@ export class QuarantineController {
 
   async moveToQuarantine(
     input: MoveToQuarantineInput,
-  ): Promise<QuarantineManifest> {
+  ): Promise<QuarantineActionResult> {
     assertOperationId(input.operationId);
     await this.refreshMutationBlock();
     return this.operationLocks.run(input.operationId, async () => {
       const existing = await this.manifests.readIfPresent(input.operationId);
       if (existing !== undefined) {
         this.assertReplayBinding(existing, input);
-        return existing;
+        const cached = this.actionResults.get(
+          this.actionKey("move", input.operationId),
+        );
+        if (cached !== undefined) return cached;
+        return this.buildActionResult(existing);
       }
 
       const resolved = this.tokens.resolve(input.token);
@@ -359,7 +563,11 @@ export class QuarantineController {
         const replay = await this.manifests.readIfPresent(input.operationId);
         if (replay !== undefined) {
           this.assertReplayBinding(replay, input);
-          return replay;
+          const cached = this.actionResults.get(
+            this.actionKey("move", input.operationId),
+          );
+          if (cached !== undefined) return cached;
+          return this.buildActionResult(replay);
         }
         const consumed = this.tokens.consume(input.token, {
           action: "move",
@@ -394,14 +602,243 @@ export class QuarantineController {
         }
         await this.options.faultInjector?.("afterRename", input.operationId);
 
+        const restoreParentFingerprint = await captureFingerprint(
+          dirname(subject.sourcePath),
+        );
         manifest = await this.persistState(
           manifest,
           "moved",
-          { movedAt: new Date(this.now()).toISOString() },
+          {
+            movedAt: new Date(this.now()).toISOString(),
+            sourceParentFingerprint: restoreParentFingerprint,
+          },
           { injectBeforeAppend: true },
         );
-        return manifest;
+        const result = await this.buildActionResult(manifest);
+        this.actionResults.set(this.actionKey("move", input.operationId), result);
+        return result;
       });
+    });
+  }
+
+  async prepareRestore(input: PrepareRestoreInput): Promise<PreviewToken> {
+    assertOperationId(input.operationId);
+    await this.refreshMutationBlock();
+    const manifest = await this.manifests.read(input.operationId);
+    const observed = await this.inspectRestoreEntry(manifest);
+    const token = this.tokens.issue({
+      action: "restore",
+      subjectId: manifest.operationId,
+      uiSessionId: input.uiSessionId,
+      fingerprint: observed.payloadFingerprint,
+    });
+    this.restoreParentByTokenId.set(
+      token.tokenId,
+      Object.freeze({ ...observed.parentFingerprint }),
+    );
+    return token;
+  }
+
+  async restoreFromQuarantine(
+    input: RestoreFromQuarantineInput,
+  ): Promise<QuarantineActionResult> {
+    assertOperationId(input.operationId);
+    await this.refreshMutationBlock();
+    return this.operationLocks.run(input.operationId, async () => {
+      let manifest = await this.manifests.read(input.operationId);
+      if (manifest.state === "restored") {
+        this.assertActionReplayBinding(
+          manifest,
+          "restore",
+          input.token,
+          input.uiSessionId,
+        );
+        const cached = this.actionResults.get(
+          this.actionKey("restore", input.operationId),
+        );
+        if (cached !== undefined) return cached;
+        return this.buildActionResult(manifest);
+      }
+      const resolved = this.assertActionReplayBinding(
+        manifest,
+        "restore",
+        input.token,
+        input.uiSessionId,
+      );
+      const expectedParent = this.restoreParentByTokenId.get(resolved.tokenId);
+      if (expectedParent === undefined) {
+        throw new QuarantineError("OPERATION_CONFLICT");
+      }
+      let observed = await this.inspectRestoreEntry(manifest);
+      if (!fingerprintsEqual(expectedParent, observed.parentFingerprint)) {
+        throw new QuarantineError("RESTORE_PARENT_CHANGED");
+      }
+      this.tokens.consume(input.token, {
+        action: "restore",
+        subjectId: manifest.operationId,
+        uiSessionId: input.uiSessionId,
+        fingerprint: observed.payloadFingerprint,
+      });
+      observed = await this.inspectRestoreEntry(manifest);
+      if (!fingerprintsEqual(expectedParent, observed.parentFingerprint)) {
+        throw new QuarantineError("RESTORE_PARENT_CHANGED");
+      }
+      let renamed = false;
+      try {
+        await this.fileSystem.rename(manifest.payloadPath, manifest.sourcePath);
+        renamed = true;
+        await syncDirectory(dirname(manifest.sourcePath));
+        await syncDirectory(dirname(manifest.payloadPath));
+      } catch (error) {
+        if (renamed) {
+          this.mutationBlocked = true;
+          throw new QuarantineError("MANIFEST_INCONSISTENT", { cause: error });
+        }
+        throw mapRestoreFileSystemError(error);
+      }
+      try {
+        manifest = await this.persistState(
+          manifest,
+          "restored",
+          { restoredAt: new Date(this.now()).toISOString() },
+          { injectBeforeAppend: true },
+        );
+      } catch (error) {
+        this.mutationBlocked = true;
+        throw new QuarantineError("MANIFEST_INCONSISTENT", { cause: error });
+      }
+      const result = await this.buildActionResult(manifest);
+      this.actionResults.set(
+        this.actionKey("restore", input.operationId),
+        result,
+      );
+      return result;
+    });
+  }
+
+  async preparePurge(input: PreparePurgeInput): Promise<PreviewToken> {
+    assertOperationId(input.operationId);
+    await this.refreshMutationBlock();
+    const manifest = await this.manifests.read(input.operationId);
+    if (manifest.state !== "moved") {
+      throw new QuarantineError("OPERATION_CONFLICT");
+    }
+    await this.assertManifestJournalCurrent(manifest);
+    const fingerprint = await this.inspectPayload(manifest);
+    return this.tokens.issue({
+      action: "purge",
+      subjectId: manifest.operationId,
+      uiSessionId: input.uiSessionId,
+      fingerprint,
+    });
+  }
+
+  private async removeTreeNoFollow(
+    root: string,
+    current: string,
+    rootDevice: bigint,
+  ): Promise<void> {
+    const fromRoot = relative(root, current);
+    if (
+      (fromRoot !== "" &&
+        (fromRoot === ".." ||
+          fromRoot.startsWith(`..${sep}`) ||
+          isAbsolute(fromRoot))) ||
+      current.includes("\u0000")
+    ) {
+      throw new QuarantineError("MANIFEST_INCONSISTENT");
+    }
+    const stats = await this.fileSystem.lstat(current);
+    if (BigInt(stats.dev) !== rootDevice) {
+      throw new QuarantineError("CROSS_VOLUME");
+    }
+    if (stats.isSymbolicLink() || !stats.isDirectory()) {
+      await this.fileSystem.unlink(current);
+      return;
+    }
+    for (const entry of await this.fileSystem.readdir(current)) {
+      if (entry === "" || entry === "." || entry === ".." || entry.includes(sep)) {
+        throw new QuarantineError("MANIFEST_INCONSISTENT");
+      }
+      await this.removeTreeNoFollow(root, join(current, entry), rootDevice);
+    }
+    await this.fileSystem.rmdir(current);
+  }
+
+  async purgeQuarantineEntry(
+    input: PurgeQuarantineEntryInput,
+  ): Promise<QuarantineActionResult> {
+    assertOperationId(input.operationId);
+    await this.refreshMutationBlock();
+    return this.operationLocks.run(input.operationId, async () => {
+      let manifest = await this.manifests.read(input.operationId);
+      if (manifest.state === "purged") {
+        this.assertActionReplayBinding(
+          manifest,
+          "purge",
+          input.token,
+          input.uiSessionId,
+        );
+        const cached = this.actionResults.get(
+          this.actionKey("purge", input.operationId),
+        );
+        if (cached !== undefined) return cached;
+        return this.buildActionResult(manifest);
+      }
+      if (manifest.state !== "moved") {
+        throw new QuarantineError("OPERATION_CONFLICT");
+      }
+      const observed = await this.inspectPayload(manifest);
+      this.tokens.consume(input.token, {
+        action: "purge",
+        subjectId: manifest.operationId,
+        uiSessionId: input.uiSessionId,
+        fingerprint: observed,
+      });
+      const rechecked = await this.inspectPayload(manifest);
+      let removed = false;
+      try {
+        const rootStats = await this.fileSystem.lstat(manifest.payloadPath);
+        if (
+          rootStats.isSymbolicLink() ||
+          !payloadIdentityMatches(
+            rechecked,
+            await captureFingerprint(manifest.payloadPath),
+          )
+        ) {
+          throw new QuarantineError("SOURCE_CHANGED");
+        }
+        await this.removeTreeNoFollow(
+          manifest.payloadPath,
+          manifest.payloadPath,
+          BigInt(rootStats.dev),
+        );
+        removed = true;
+        await syncDirectory(dirname(manifest.payloadPath));
+      } catch (error) {
+        if (removed) {
+          this.mutationBlocked = true;
+          throw new QuarantineError("MANIFEST_INCONSISTENT", { cause: error });
+        }
+        throw mapPurgeFileSystemError(error);
+      }
+      try {
+        manifest = await this.persistState(
+          manifest,
+          "purged",
+          { purgedAt: new Date(this.now()).toISOString() },
+          { injectBeforeAppend: true },
+        );
+      } catch (error) {
+        this.mutationBlocked = true;
+        throw new QuarantineError("MANIFEST_INCONSISTENT", { cause: error });
+      }
+      const result = await this.buildActionResult(manifest);
+      this.actionResults.set(
+        this.actionKey("purge", input.operationId),
+        result,
+      );
+      return result;
     });
   }
 
@@ -438,6 +875,13 @@ export class QuarantineController {
         recovered.push(current);
         continue;
       }
+      if (
+        (current.state === "restored" || current.state === "purged") &&
+        !(await this.journal.hasEvent(current))
+      ) {
+        this.mutationBlocked = true;
+        throw new QuarantineError("MANIFEST_INCONSISTENT");
+      }
       if (!new Set<QuarantineState>(["previewed", "prepared", "moved"]).has(current.state)) {
         continue;
       }
@@ -473,8 +917,13 @@ export class QuarantineController {
         });
         this.mutationBlocked = true;
       } else {
+        const restoreParentFingerprint =
+          state === "moved"
+            ? await captureFingerprint(dirname(current.sourcePath))
+            : current.sourceParentFingerprint;
         next = await this.persistState(current, state, {
           lastErrorCode,
+          sourceParentFingerprint: restoreParentFingerprint,
           movedAt:
             state === "moved"
               ? current.movedAt ?? new Date(this.now()).toISOString()
@@ -498,7 +947,7 @@ export async function prepareMove(
 export async function moveToQuarantine(
   controller: QuarantineController,
   input: MoveToQuarantineInput,
-): Promise<QuarantineManifest> {
+): Promise<QuarantineActionResult> {
   return controller.moveToQuarantine(input);
 }
 

@@ -4,7 +4,11 @@ import { isAbsolute, join } from "node:path";
 import type { SnapshotFingerprint } from "@codex-mac-cleaner/policy";
 import { JsonStore } from "@codex-mac-cleaner/storage";
 
-import { QuarantineError, type QuarantineErrorCode } from "./errors.js";
+import {
+  isQuarantineErrorCode,
+  QuarantineError,
+  type QuarantineErrorCode,
+} from "./errors.js";
 import { syncDirectory } from "./filesystem.js";
 
 export type QuarantineState =
@@ -38,8 +42,8 @@ export interface QuarantineManifest {
   readonly confirmedAt: string;
   readonly preparedAt: string | null;
   readonly movedAt: string | null;
-  readonly restoredAt: null;
-  readonly purgedAt: null;
+  readonly restoredAt: string | null;
+  readonly purgedAt: string | null;
   readonly lastErrorCode: QuarantineErrorCode | null;
   readonly eventSequence: number;
 }
@@ -162,16 +166,22 @@ export function parseManifest(value: unknown): QuarantineManifest {
     (manifest.sourcePath as string).includes("\u0000") ||
     (manifest.payloadPath as string).includes("\u0000") ||
     !Number.isFinite(Date.parse(manifest.confirmedAt as string)) ||
-    ![manifest.preparedAt, manifest.movedAt].every(
+    ![
+      manifest.preparedAt,
+      manifest.movedAt,
+      manifest.restoredAt,
+      manifest.purgedAt,
+    ].every(
       (timestamp) =>
         timestamp === null ||
         (typeof timestamp === "string" && Number.isFinite(Date.parse(timestamp))),
     ) ||
-    manifest.restoredAt !== null ||
-    manifest.purgedAt !== null ||
+    (manifest.state === "restored") !== (manifest.restoredAt !== null) ||
+    (manifest.state === "purged") !== (manifest.purgedAt !== null) ||
+    (manifest.restoredAt !== null && manifest.purgedAt !== null) ||
     !(
       manifest.lastErrorCode === null ||
-      typeof manifest.lastErrorCode === "string"
+      isQuarantineErrorCode(manifest.lastErrorCode)
     )
   ) {
     throw new QuarantineError("MANIFEST_INCONSISTENT");

@@ -1,4 +1,12 @@
-import { lstat, open, rename } from "node:fs/promises";
+import {
+  lstat,
+  open,
+  readdir,
+  rename,
+  rmdir,
+  unlink,
+} from "node:fs/promises";
+import type { Stats } from "node:fs";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import type { PathFileType, SnapshotFingerprint } from "@codex-mac-cleaner/policy";
@@ -6,10 +14,20 @@ import type { PathFileType, SnapshotFingerprint } from "@codex-mac-cleaner/polic
 import { QuarantineError } from "./errors.js";
 
 export interface FileSystemOperations {
+  lstat(path: string): Promise<Stats>;
+  readdir(path: string): Promise<string[]>;
   rename(source: string, destination: string): Promise<void>;
+  rmdir(path: string): Promise<void>;
+  unlink(path: string): Promise<void>;
 }
 
-export const nodeFileSystem: FileSystemOperations = { rename };
+export const nodeFileSystem: FileSystemOperations = {
+  lstat: (path) => lstat(path),
+  readdir: (path) => readdir(path),
+  rename,
+  rmdir,
+  unlink,
+};
 
 export interface InspectMoveSourceInput {
   readonly allowedRoot: string;
@@ -19,6 +37,11 @@ export interface InspectMoveSourceInput {
 export interface ObservedMoveState {
   readonly sourceFingerprint: SnapshotFingerprint;
   readonly sourceParentFingerprint: SnapshotFingerprint;
+}
+
+export interface InspectAllowedDirectoryInput {
+  readonly allowedRoot: string;
+  readonly directoryPath: string;
 }
 
 function fileTypeOf(stats: Awaited<ReturnType<typeof lstat>>): PathFileType {
@@ -73,6 +96,36 @@ export function fingerprintsEqual(
   );
 }
 
+export function payloadIdentityMatches(
+  expected: SnapshotFingerprint,
+  current: SnapshotFingerprint,
+): boolean {
+  return (
+    expected.device === current.device &&
+    expected.inode === current.inode &&
+    expected.mode === current.mode &&
+    expected.uid === current.uid &&
+    expected.gid === current.gid &&
+    expected.size === current.size &&
+    expected.mtimeNs === current.mtimeNs &&
+    expected.fileType === current.fileType &&
+    expected.mountId === current.mountId &&
+    expected.symbolicLink === current.symbolicLink &&
+    expected.linkCount === current.linkCount
+  );
+}
+
+export function parentIdentityMatches(
+  expected: SnapshotFingerprint,
+  current: SnapshotFingerprint,
+): boolean {
+  return (
+    expected.fileType === "directory" &&
+    current.fileType === "directory" &&
+    fingerprintsEqual(expected, current)
+  );
+}
+
 function validateRawPath(path: string): void {
   const components = path.slice(1).split(sep);
   if (
@@ -101,6 +154,48 @@ function ancestryPaths(root: string, source: string): string[] {
   }
   const parts = fromRoot.split(sep).filter(Boolean);
   return [root, ...parts.map((_, index) => join(root, ...parts.slice(0, index + 1)))];
+}
+
+function ancestryPathsIncludingRoot(root: string, source: string): string[] {
+  const fromRoot = relative(root, source);
+  if (
+    fromRoot === ".." ||
+    fromRoot.startsWith(`..${sep}`) ||
+    isAbsolute(fromRoot)
+  ) {
+    throw new QuarantineError("PATH_OUTSIDE_ALLOWLIST");
+  }
+  const parts = fromRoot.split(sep).filter(Boolean);
+  return [root, ...parts.map((_, index) => join(root, ...parts.slice(0, index + 1)))];
+}
+
+export async function inspectAllowedDirectory(
+  input: InspectAllowedDirectoryInput,
+): Promise<SnapshotFingerprint> {
+  validateRawPath(input.allowedRoot);
+  validateRawPath(input.directoryPath);
+  const root = resolve(input.allowedRoot);
+  const directory = resolve(input.directoryPath);
+  const ancestry = ancestryPathsIncludingRoot(root, directory);
+  let rootDevice: string | undefined;
+  let current: SnapshotFingerprint | undefined;
+  for (const path of ancestry) {
+    current = await captureFingerprint(path);
+    if (current.symbolicLink) {
+      throw new QuarantineError("SYMLINK_BOUNDARY");
+    }
+    if (current.fileType !== "directory") {
+      throw new QuarantineError("PATH_OUTSIDE_ALLOWLIST");
+    }
+    rootDevice ??= current.device;
+    if (current.device !== rootDevice) {
+      throw new QuarantineError("CROSS_VOLUME");
+    }
+  }
+  if (current === undefined) {
+    throw new QuarantineError("SOURCE_CHANGED");
+  }
+  return current;
 }
 
 export async function inspectMoveSource(
