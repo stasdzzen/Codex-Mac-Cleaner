@@ -1,7 +1,7 @@
 ```cto-issue
 schema: 1
 dependencies: #35
-conflicts: #9
+conflicts: none
 touched_paths: packages/contracts/; packages/adapters/; packages/evidence/; packages/classifier/; packages/policy/; packages/storage/; tests/security/; pnpm-lock.yaml
 risk: high
 parallel_safety: serial

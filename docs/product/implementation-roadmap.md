@@ -31,7 +31,7 @@ date: 2026-07-15
 | `CMC-08` | Пяти-вкладочный Dashboard shell, FindingFacts, «Удалить»/«Пропустить сейчас», support levels, Quarantine Center и метрики | `CMC-05` | Средний | Параллельно с `CMC-06` |
 | `CMC-12` | Versioned persistent exclusions, identity matching и вкладка «Исключения» | `CMC-07`, `CMC-08` | Высокий: policy/state | Только последовательно |
 | `CMC-20` | ADR-0012, correlation contract, privacy/coverage/snapshot semantics и handoff CMC-21 | `CMC-04`, `CMC-05`, `CMC-12` | Высокий: architecture/privacy | Только docs-first; merge до реализации |
-| `CMC-21` | Core server-owned correlation/evidence resolver, keyed exclusion derivation и deterministic tests | `CMC-20` | Высокий: security/policy/state | Только последовательно; конфликтует с текущей CMC-09 |
+| `CMC-21` | Core server-owned correlation/evidence resolver, keyed exclusion derivation и deterministic tests | `CMC-20` | Высокий: security/policy/state | Только последовательно; CMC-09 остаётся приостановленной и зависит от CMC-21 |
 | `CMC-09` | Public plugin manifest, Skill, `audit_cancel`, no-terminal flow и MCP App integration | `CMC-07`, `CMC-08`, `CMC-12`, `CMC-21` | Средний | Текущий PR #34 приостановлен; возобновить тот же Worker/worktree/branch/PR после CMC-21 |
 | `CMC-13` | Capability-aware monthly audit schedule и вкладка «Расписание» | `CMC-09` | Высокий: host integration | Только последовательно |
 | `CMC-10` | Universal policy/redaction, exclusions/schedule E2E, clean-room/new-task, security и release evidence | `CMC-13` | Высокий: release | Только последовательно; release не выполняется без владельца |
