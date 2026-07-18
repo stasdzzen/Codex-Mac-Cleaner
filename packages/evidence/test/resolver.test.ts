@@ -5,6 +5,10 @@ import { join } from "node:path";
 
 import {
   buildSyntheticCorrelationInput,
+  consumeEphemeralCorrelationInput,
+  EphemeralCorrelationInput,
+  type RawCorrelationPayload,
+  type RawIdentityClaim,
   type SyntheticCorrelationOptions,
 } from "@codex-mac-cleaner/adapters";
 import { describe, expect, it } from "vitest";
@@ -45,7 +49,244 @@ async function run(
   });
 }
 
+async function mutateRawInput(
+  mutate: (payload: RawCorrelationPayload) => RawCorrelationPayload,
+): Promise<EphemeralCorrelationInput> {
+  const tempRoot = await mkdtemp(join(tmpdir(), "cmc-correlation-invalid-"));
+  const raw = consumeEphemeralCorrelationInput(
+    buildSyntheticCorrelationInput({
+      seed: "invalid-input-seed",
+      tempRoot,
+      installedVariant: "resolved",
+    }),
+    (payload) => payload,
+  );
+  return new EphemeralCorrelationInput(mutate(raw));
+}
+
+function resolveRawInput(rawInput: EphemeralCorrelationInput) {
+  return resolveCorrelation({
+    auditId: "audit-invalid-input",
+    auditRevision: 1,
+    findingId: "finding-invalid-input",
+    exclusionStateVersion: 1,
+    ruleSetVersion: 1,
+    policyVersion: 1,
+    now: fixedNow,
+    deriver,
+    rawInput,
+  });
+}
+
+function conflictFor(kind: RawIdentityClaim["kind"]): RawIdentityClaim {
+  switch (kind) {
+    case "filesystem":
+      return {
+        kind,
+        canonicalPath: ["", "temporary", "conflict"].join("/"),
+        device: "device-conflict",
+        inode: "inode-conflict",
+        fileType: "directory",
+        uid: 502,
+        gid: 21,
+        fingerprint: "filesystem-conflict",
+      };
+    case "bundle":
+      return {
+        kind,
+        bundleIdentifier: "org.invalid.conflict",
+        metadataFingerprint: "bundle-conflict",
+      };
+    case "package":
+      return { kind, packageIdentifier: "package.invalid.conflict" };
+    case "signing":
+      return {
+        kind,
+        designatedRequirement: "requirement-conflict",
+        teamIdentifier: "team-conflict",
+        executableFingerprint: "executable-conflict",
+      };
+    case "owner":
+      return { kind, uid: 502, gid: 21 };
+    case "executable":
+      return { kind, executableFingerprint: "executable-conflict" };
+    default:
+      throw new TypeError("Тест ожидает candidate strong claim");
+  }
+}
+
 describe("deterministic correlation resolver", () => {
+  it("duplicate mandatory query scope fail closed до построения Map", async () => {
+    const input = await mutateRawInput((payload) => ({
+      ...payload,
+      queries: [
+        ...payload.queries,
+        {
+          ...payload.queries[0]!,
+          queryId: "query-installed-apps-duplicate",
+          sourceAdapter: "installed-apps-duplicate",
+        },
+      ],
+    }));
+
+    expect(() => resolveRawInput(input)).toThrowError(
+      expect.objectContaining({ errorCode: "CORRELATION_AMBIGUOUS" }),
+    );
+  });
+
+  it("missing/unknown scope и duplicate queryId имеют стабильные safe errors", async () => {
+    const missing = await mutateRawInput((payload) => ({
+      ...payload,
+      queries: payload.queries.filter(
+        ({ queryScope }) => queryScope !== "dependencies",
+      ),
+    }));
+    const unknown = await mutateRawInput((payload) => ({
+      ...payload,
+      queries: [
+        ...payload.queries.slice(1),
+        { ...payload.queries[0]!, queryScope: "unknown_scope" as never },
+      ],
+    }));
+    const duplicateId = await mutateRawInput((payload) => ({
+      ...payload,
+      queries: payload.queries.map((query, index) =>
+        index === 1 ? { ...query, queryId: payload.queries[0]!.queryId } : query,
+      ),
+    }));
+
+    expect(() => resolveRawInput(missing)).toThrowError(
+      expect.objectContaining({ errorCode: "CORRELATION_COVERAGE_INCOMPLETE" }),
+    );
+    expect(() => resolveRawInput(unknown)).toThrowError(
+      expect.objectContaining({ errorCode: "CORRELATION_SCHEMA_UNSUPPORTED" }),
+    );
+    expect(() => resolveRawInput(duplicateId)).toThrowError(
+      expect.objectContaining({ errorCode: "CORRELATION_SCHEMA_UNSUPPORTED" }),
+    );
+  });
+
+  it.each([
+    "filesystem",
+    "bundle",
+    "package",
+    "signing",
+    "owner",
+    "executable",
+  ] as const)("conflicting duplicate candidate %s не зависит от порядка", async (kind) => {
+    const makeInput = (conflictFirst: boolean) => mutateRawInput((payload) => {
+      const original = payload.candidate.claims.find((claim) => claim.kind === kind)!;
+      const remaining = payload.candidate.claims.filter((claim) => claim.kind !== kind);
+      const pair = conflictFirst
+        ? [conflictFor(kind), original]
+        : [original, conflictFor(kind)];
+      return {
+        ...payload,
+        candidate: { ...payload.candidate, claims: [...remaining, ...pair] },
+      };
+    });
+    const first = await makeInput(false);
+    const second = await makeInput(true);
+
+    expect(() => resolveRawInput(first)).toThrowError(
+      expect.objectContaining({ errorCode: "CORRELATION_AMBIGUOUS" }),
+    );
+    expect(() => resolveRawInput(second)).toThrowError(
+      expect.objectContaining({ errorCode: "CORRELATION_AMBIGUOUS" }),
+    );
+  });
+
+  it.each([
+    "filesystem",
+    "bundle",
+    "package",
+    "signing",
+    "owner",
+    "executable",
+  ] as const)("conflicting duplicate target %s не зависит от порядка", async (kind) => {
+    const makeInput = (conflictFirst: boolean) => mutateRawInput((payload) => {
+      const original = payload.candidate.claims.find((claim) => claim.kind === kind)!;
+      const pair = conflictFirst
+        ? [conflictFor(kind), original]
+        : [original, conflictFor(kind)];
+      return {
+        ...payload,
+        queries: payload.queries.map((query) =>
+          query.queryScope === "installed_apps"
+            ? {
+                ...query,
+                subjects: query.subjects.map((target) => ({
+                  ...target,
+                  claims: [
+                    ...target.claims.filter((claim) => claim.kind !== kind),
+                    ...pair,
+                  ],
+                })),
+              }
+            : query,
+        ),
+      };
+    });
+
+    const originalFirst = await makeInput(false);
+    const conflictFirst = await makeInput(true);
+
+    expect(() => resolveRawInput(originalFirst)).toThrowError(
+      expect.objectContaining({ errorCode: "CORRELATION_AMBIGUOUS" }),
+    );
+    expect(() => resolveRawInput(conflictFirst)).toThrowError(
+      expect.objectContaining({ errorCode: "CORRELATION_AMBIGUOUS" }),
+    );
+  });
+
+  it.each([
+    "filesystem",
+    "bundle",
+    "package",
+    "signing",
+    "owner",
+    "executable",
+  ] as const)("identical duplicate strong claim %s также запрещён", async (kind) => {
+    const candidateInput = await mutateRawInput((payload) => {
+      const original = payload.candidate.claims.find((claim) => claim.kind === kind)!;
+      return {
+        ...payload,
+        candidate: {
+          ...payload.candidate,
+          claims: [...payload.candidate.claims, original],
+        },
+      };
+    });
+    const targetInput = await mutateRawInput((payload) => {
+      const original = payload.candidate.claims.find((claim) => claim.kind === kind)!;
+      return {
+        ...payload,
+        queries: payload.queries.map((query) =>
+          query.queryScope === "installed_apps"
+            ? {
+                ...query,
+                subjects: query.subjects.map((target) => ({
+                  ...target,
+                  claims: [
+                    ...target.claims.filter((claim) => claim.kind !== kind),
+                    original,
+                    original,
+                  ],
+                })),
+              }
+            : query,
+        ),
+      };
+    });
+
+    expect(() => resolveRawInput(candidateInput)).toThrowError(
+      expect.objectContaining({ errorCode: "CORRELATION_AMBIGUOUS" }),
+    );
+    expect(() => resolveRawInput(targetInput)).toThrowError(
+      expect.objectContaining({ errorCode: "CORRELATION_AMBIGUOUS" }),
+    );
+  });
+
   it("выпускает absent только с complete same-snapshot certificates", async () => {
     const result = await run();
 
@@ -160,6 +401,25 @@ describe("deterministic correlation resolver", () => {
 
     expect(result.ownerResolutionState).toBe("mismatch");
     expect(result.safeView.facts.installedApp.state).toBe("absent");
+    expect(result.safeView.coverageSummary.gapCodes).toContain("mismatch");
+    expect(result.safeView.blockingReasonCodes).toContain("correlation_mismatch");
+  });
+
+  it("owner missing объясняется safe coverage и blocking reasons", async () => {
+    const input = await mutateRawInput((payload) => ({
+      ...payload,
+      candidate: {
+        ...payload.candidate,
+        claims: payload.candidate.claims.filter(({ kind }) => kind !== "owner"),
+      },
+    }));
+    const result = resolveRawInput(input);
+
+    expect(result.ownerResolutionState).toBe("missing");
+    expect(result.safeView.coverageSummary.gapCodes).toContain("missing");
+    expect(result.safeView.blockingReasonCodes).toEqual(
+      expect.arrayContaining(["coverage_incomplete", "correlation_missing"]),
+    );
   });
 
   it("строит все candidate-specific positive facts", async () => {

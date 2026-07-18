@@ -161,6 +161,31 @@ describe("safe core correlation → classifier → policy harness", () => {
 
     expect(harness.decision.allowedActions).not.toContain("prepare_move");
     expect(harness.decision.blockingRuleIds).toContain("POLICY_OWNER_MISMATCH");
+    expect(harness.safeInput.coverageSummary.gapCodes).toContain("mismatch");
+    expect(harness.safeInput.blockingReasonCodes).toContain(
+      "correlation_mismatch",
+    );
+  });
+
+  it("owner missing остаётся видимым safe gap и блокирует mutation", async () => {
+    const harness = runSafeCoreIntegrationHarness({
+      resolverResult: await resolverResult({ ownerMissing: true }),
+      evidenceOptions: {
+        supportLevel: "candidate",
+        sensitivityFlags: [],
+        dataKind: "known",
+      },
+      policyContext: policyContext(),
+    });
+
+    expect(harness.decision.allowedActions).not.toContain("prepare_move");
+    expect(harness.decision.blockingRuleIds).toContain(
+      "POLICY_OWNER_IDENTITY_MISSING",
+    );
+    expect(harness.safeInput.coverageSummary.gapCodes).toContain("missing");
+    expect(harness.safeInput.blockingReasonCodes).toEqual(
+      expect.arrayContaining(["coverage_incomplete", "correlation_missing"]),
+    );
   });
 
   it("revision binding нельзя подменить отдельно от evidence", async () => {

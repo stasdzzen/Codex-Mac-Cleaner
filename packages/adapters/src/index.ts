@@ -8,6 +8,7 @@ export * from "./inspection-only.js";
 export * from "./installed-apps.js";
 export * from "./library-roots.js";
 export * from "./processes.js";
+export * from "./production-correlation.js";
 export * from "./protected-scope-probe.js";
 export * from "./receipts.js";
 export * from "./safe-metadata.js";

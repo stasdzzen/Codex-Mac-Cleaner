@@ -153,6 +153,7 @@ export interface SyntheticCorrelationOptions {
   readonly positiveFacts?: readonly SyntheticPositiveFact[];
   readonly queryStates?: Partial<Record<QueryScope, RawQueryState>>;
   readonly mutateSnapshotB?: boolean;
+  readonly ownerMissing?: boolean;
   readonly ownerMismatch?: boolean;
   readonly querySnapshotMismatch?: QueryScope;
   readonly targetExecutablePresent?: boolean;
@@ -165,6 +166,141 @@ export interface SyntheticCorrelationOptions {
     | "open_file"
     | "receipt"
     | "dependency";
+}
+
+export const MANDATORY_QUERY_SCOPES = [
+  "installed_apps",
+  "processes",
+  "open_files",
+  "startup_targets",
+  "target_executables",
+  "receipts",
+  "official_uninstallers",
+  "dependencies",
+] as const satisfies readonly QueryScope[];
+
+export type CorrelationInputErrorCode =
+  | "CORRELATION_AMBIGUOUS"
+  | "CORRELATION_COVERAGE_INCOMPLETE"
+  | "CORRELATION_SCHEMA_UNSUPPORTED";
+
+/** Safe typed failure: сообщение и поля никогда не содержат raw identity. */
+export class CorrelationInputError extends Error {
+  readonly severity = "blocking" as const;
+  readonly retryable = false;
+
+  constructor(readonly errorCode: CorrelationInputErrorCode) {
+    super(errorCode);
+    this.name = "CorrelationInputError";
+  }
+}
+
+const RAW_QUERY_STATES = new Set<string>([
+  "complete",
+  "capability_missing",
+  "permission_denied",
+  "partial_inventory",
+  "truncated",
+  "parse_loss",
+  "timeout",
+  "cancelled",
+]);
+const RAW_CLAIM_KINDS = new Set<string>([
+  "filesystem",
+  "bundle",
+  "package",
+  "signing",
+  "owner",
+  "executable",
+  "process",
+  "open_file",
+  "startup_target",
+  "receipt_payload",
+  "official_uninstaller",
+  "dependency",
+  "hint",
+]);
+
+function failInput(errorCode: CorrelationInputErrorCode): never {
+  throw new CorrelationInputError(errorCode);
+}
+
+function validateSubject(subject: RawIdentitySubject): void {
+  if (
+    typeof subject !== "object" ||
+    subject === null ||
+    !Array.isArray(subject.claims)
+  ) {
+    failInput("CORRELATION_SCHEMA_UNSUPPORTED");
+  }
+  const strongKinds = new Set<string>();
+  for (const rawClaim of subject.claims as readonly unknown[]) {
+    if (
+      typeof rawClaim !== "object" ||
+      rawClaim === null ||
+      !("kind" in rawClaim) ||
+      typeof rawClaim.kind !== "string" ||
+      !RAW_CLAIM_KINDS.has(rawClaim.kind)
+    ) {
+      failInput("CORRELATION_SCHEMA_UNSUPPORTED");
+    }
+    if (rawClaim.kind === "hint") continue;
+    if (strongKinds.has(rawClaim.kind)) failInput("CORRELATION_AMBIGUOUS");
+    strongKinds.add(rawClaim.kind);
+  }
+}
+
+/**
+ * Fail-closed проверка server-only payload до построения любых scope maps.
+ * Ошибки намеренно не включают query IDs, пути или identity claims.
+ */
+export function validateRawCorrelationPayload(payload: RawCorrelationPayload): void {
+  if (
+    payload.schemaVersion !== 1 ||
+    !Array.isArray(payload.queries) ||
+    typeof payload.snapshotId !== "string"
+  ) {
+    failInput("CORRELATION_SCHEMA_UNSUPPORTED");
+  }
+  const mandatoryScopes = new Set<string>(MANDATORY_QUERY_SCOPES);
+  const queryIds = new Set<string>();
+  const scopes = new Set<string>();
+  const provenanceIds = new Set<string>();
+
+  validateSubject(payload.candidate);
+  for (const query of payload.queries as readonly RawSourceQuery[]) {
+    if (
+      typeof query !== "object" ||
+      query === null ||
+      query.sourceSchemaVersion !== 1 ||
+      typeof query.queryId !== "string" ||
+      query.queryId.length === 0 ||
+      typeof query.sourceAdapter !== "string" ||
+      query.sourceAdapter.length === 0 ||
+      !mandatoryScopes.has(query.queryScope) ||
+      !RAW_QUERY_STATES.has(query.state) ||
+      !Array.isArray(query.subjects)
+    ) {
+      failInput("CORRELATION_SCHEMA_UNSUPPORTED");
+    }
+    if (queryIds.has(query.queryId)) failInput("CORRELATION_SCHEMA_UNSUPPORTED");
+    queryIds.add(query.queryId);
+
+    const provenanceId = `provenance-${query.queryScope.replaceAll("_", "-")}`;
+    if (scopes.has(query.queryScope) || provenanceIds.has(provenanceId)) {
+      failInput("CORRELATION_AMBIGUOUS");
+    }
+    scopes.add(query.queryScope);
+    provenanceIds.add(provenanceId);
+    for (const subject of query.subjects) validateSubject(subject);
+  }
+
+  if (
+    scopes.size !== MANDATORY_QUERY_SCOPES.length ||
+    MANDATORY_QUERY_SCOPES.some((scope) => !scopes.has(scope))
+  ) {
+    failInput("CORRELATION_COVERAGE_INCOMPLETE");
+  }
 }
 
 interface SafeBoundaryDescriptor {
@@ -398,11 +534,13 @@ export function buildSyntheticCorrelationInput(
         teamIdentifier: values.team,
         executableFingerprint: values.executable,
       },
-      {
-        kind: "owner",
-        uid: options.ownerMismatch ? values.uid + 1 : values.uid,
-        gid: values.gid,
-      },
+      ...(options.ownerMissing
+        ? []
+        : [{
+            kind: "owner" as const,
+            uid: options.ownerMismatch ? values.uid + 1 : values.uid,
+            gid: values.gid,
+          }]),
       { kind: "executable", executableFingerprint: values.executable },
       { kind: "hint", hintKind: "basename", value: values.basename },
       { kind: "hint", hintKind: "display_name", value: values.displayName },

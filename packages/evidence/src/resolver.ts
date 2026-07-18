@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 import {
   consumeEphemeralCorrelationInput,
+  validateRawCorrelationPayload,
   type EphemeralCorrelationInput,
   type RawCorrelationPayload,
   type RawIdentityClaim,
@@ -459,6 +460,7 @@ function buildResult(
   input: ResolveCorrelationInput,
   payload: RawCorrelationPayload,
 ): CorrelationResolverResult {
+  validateRawCorrelationPayload(payload);
   const provenance = payload.queries.map((query) =>
     provenanceFor(query, payload.snapshotId, input.deriver),
   );
@@ -661,6 +663,8 @@ function buildResult(
   for (const state of Object.values(resolutionStates)) {
     if (state !== "resolved") gapCodes.add(state);
   }
+  if (ownerResolutionState === "missing") gapCodes.add("missing");
+  if (ownerResolutionState === "mismatch") gapCodes.add("mismatch");
   if (stale) gapCodes.add("snapshot_stale");
   const blockingReasonCodes: SafeCorrelationView["blockingReasonCodes"][number][] = [];
   const counterFacts: readonly CorrelationFactName[] = [
@@ -685,6 +689,12 @@ function buildResult(
     blockingReasonCodes.push("correlation_missing");
   }
   if (Object.values(resolutionStates).includes("mismatch")) {
+    blockingReasonCodes.push("correlation_mismatch");
+  }
+  if (ownerResolutionState === "missing") {
+    blockingReasonCodes.push("coverage_incomplete", "correlation_missing");
+  }
+  if (ownerResolutionState === "mismatch") {
     blockingReasonCodes.push("correlation_mismatch");
   }
   if (stale) blockingReasonCodes.push("snapshot_stale");

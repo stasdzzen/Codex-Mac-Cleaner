@@ -26,6 +26,7 @@ export interface SafeCoreIntegrationHarnessResult {
     correlationRevisionId: string;
     facts: CorrelationResolverResult["safeView"]["facts"];
     coverageSummary: CorrelationResolverResult["safeView"]["coverageSummary"];
+    blockingReasonCodes: CorrelationResolverResult["safeView"]["blockingReasonCodes"];
     staleDuringAudit: boolean;
   }>;
   readonly evidenceSet: EvidenceSet;
@@ -56,6 +57,7 @@ export function runSafeCoreIntegrationHarness(
         input.resolverResult.safeView.correlationRevisionId,
       facts: input.resolverResult.safeView.facts,
       coverageSummary: input.resolverResult.safeView.coverageSummary,
+      blockingReasonCodes: input.resolverResult.safeView.blockingReasonCodes,
       staleDuringAudit: input.resolverResult.safeView.staleDuringAudit,
     }),
     evidenceSet,
