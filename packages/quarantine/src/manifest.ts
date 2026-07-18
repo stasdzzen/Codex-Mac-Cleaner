@@ -85,9 +85,19 @@ const MANIFEST_FIELDS = new Set([
 const FILE_TYPES = new Set(["file", "directory", "bundle", "plist", "unknown"]);
 
 export function assertOperationId(operationId: string): void {
-  if (!OPERATION_ID.test(operationId)) {
+  if (!isOperationId(operationId)) {
     throw new QuarantineError("OPERATION_CONFLICT");
   }
+}
+
+export function isOperationId(value: unknown): value is string {
+  return typeof value === "string" && OPERATION_ID.test(value);
+}
+
+export function isQuarantineState(value: unknown): value is QuarantineState {
+  return (
+    typeof value === "string" && STATES.has(value as QuarantineState)
+  );
 }
 
 function isFingerprint(value: unknown): value is SnapshotFingerprint {
@@ -132,8 +142,7 @@ export function parseManifest(value: unknown): QuarantineManifest {
     keys.length !== MANIFEST_FIELDS.size ||
     keys.some((key) => !MANIFEST_FIELDS.has(key)) ||
     manifest.action !== "move" ||
-    typeof manifest.state !== "string" ||
-    !STATES.has(manifest.state as QuarantineState) ||
+    !isQuarantineState(manifest.state) ||
     strings.some((field) => typeof manifest[field] !== "string") ||
     !Number.isSafeInteger(manifest.auditRevision) ||
     (manifest.auditRevision as number) < 0 ||

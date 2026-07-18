@@ -154,6 +154,68 @@ describe("fault injection и recovery", () => {
     await expectRepeatedRecoveryStable(harness, "op-stable-catch-up");
   });
 
+  it.each([
+    {
+      name: "malformed schemaVersion",
+      mutate: (event: Record<string, unknown>) => ({
+        ...event,
+        schemaVersion: 2,
+      }),
+    },
+    {
+      name: "mismatched lastErrorCode",
+      mutate: (event: Record<string, unknown>) => ({
+        ...event,
+        lastErrorCode: "OPERATION_CONFLICT",
+      }),
+    },
+    {
+      name: "mismatched state",
+      mutate: (event: Record<string, unknown>) => ({
+        ...event,
+        state: "prepared",
+      }),
+    },
+  ])(
+    "повреждённый journal ($name) даёт MANIFEST_INCONSISTENT и блокирует mutation contour",
+    async ({ mutate }) => {
+      harness = await createSyntheticHarness();
+      const controller = harness.createController();
+      const preview = await controller.prepareMove({
+        findingId: harness.subject.findingId,
+        auditRevision: 1,
+        uiSessionId: "ui-invalid-journal",
+      });
+      await controller.moveToQuarantine({
+        token: preview.secret,
+        operationId: "op-invalid-journal",
+        uiSessionId: "ui-invalid-journal",
+      });
+
+      const journal = await harness.readJournal();
+      const last = journal.at(-1);
+      if (last === undefined) throw new Error("Синтетический journal пуст");
+      journal[journal.length - 1] = mutate(last);
+      await writeFile(
+        join(harness.storeRoot, "journal", "operations.ndjson"),
+        `${journal.map((event) => JSON.stringify(event)).join("\n")}\n`,
+      );
+
+      const recoveryController = harness.createController();
+      await expect(
+        recoveryController.recoverPreparedOperations(),
+      ).rejects.toMatchObject({ code: "MANIFEST_INCONSISTENT" });
+      expect(recoveryController.isMutationBlocked()).toBe(true);
+      await expect(
+        recoveryController.prepareMove({
+          findingId: harness.subject.findingId,
+          auditRevision: 1,
+          uiSessionId: "ui-invalid-journal-blocked",
+        }),
+      ).rejects.toMatchObject({ code: "MANIFEST_INCONSISTENT" });
+    },
+  );
+
   it("recovery matrix 1/1 даёт conflicted", async () => {
     harness = await createSyntheticHarness();
     await moveWithFault(harness, "op-conflicted", "afterPrepared");

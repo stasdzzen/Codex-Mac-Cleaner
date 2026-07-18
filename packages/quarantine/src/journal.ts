@@ -3,9 +3,16 @@ import { join } from "node:path";
 
 import { JsonStore } from "@codex-mac-cleaner/storage";
 
-import { QuarantineError } from "./errors.js";
+import {
+  isQuarantineErrorCode,
+  QuarantineError,
+} from "./errors.js";
 import { syncDirectory } from "./filesystem.js";
-import type { QuarantineManifest } from "./manifest.js";
+import {
+  isOperationId,
+  isQuarantineState,
+  type QuarantineManifest,
+} from "./manifest.js";
 
 export interface JournalEvent {
   readonly schemaVersion: 1;
@@ -17,23 +24,56 @@ export interface JournalEvent {
   readonly lastErrorCode: QuarantineManifest["lastErrorCode"];
 }
 
+const JOURNAL_EVENT_FIELDS = new Set([
+  "schemaVersion",
+  "operationId",
+  "action",
+  "state",
+  "eventSequence",
+  "occurredAt",
+  "lastErrorCode",
+]);
+const ISO_DATE_TIME =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/u;
+
+function parseJournalEvent(value: unknown): JournalEvent {
+  if (typeof value !== "object" || value === null) {
+    throw new QuarantineError("MANIFEST_INCONSISTENT");
+  }
+  const event = value as Record<string, unknown>;
+  const keys = Object.keys(event);
+  if (
+    keys.length !== JOURNAL_EVENT_FIELDS.size ||
+    keys.some((key) => !JOURNAL_EVENT_FIELDS.has(key)) ||
+    event.schemaVersion !== 1 ||
+    event.action !== "move" ||
+    !isOperationId(event.operationId) ||
+    !isQuarantineState(event.state) ||
+    !Number.isSafeInteger(event.eventSequence) ||
+    typeof event.eventSequence !== "number" ||
+    event.eventSequence < 1 ||
+    typeof event.occurredAt !== "string" ||
+    !ISO_DATE_TIME.test(event.occurredAt) ||
+    !Number.isFinite(Date.parse(event.occurredAt)) ||
+    !(
+      event.lastErrorCode === null ||
+      isQuarantineErrorCode(event.lastErrorCode)
+    )
+  ) {
+    throw new QuarantineError("MANIFEST_INCONSISTENT");
+  }
+  return event as unknown as JournalEvent;
+}
+
 export class OperationJournal {
   private initialized = false;
   private nextSequence = 1;
   private tail: Promise<void> = Promise.resolve();
-  private readonly eventKeys = new Set<string>();
+  private readonly eventsBySequence = new Map<number, JournalEvent>();
   private readonly jsonStore: JsonStore;
 
   constructor(private readonly storeRoot: string) {
     this.jsonStore = new JsonStore(storeRoot);
-  }
-
-  private eventKey(
-    operationId: string,
-    state: QuarantineManifest["state"],
-    eventSequence: number,
-  ): string {
-    return `${operationId}\u0000${state}\u0000${eventSequence}`;
   }
 
   private async initialize(): Promise<void> {
@@ -53,29 +93,15 @@ export class OperationJournal {
       } catch (error) {
         throw new QuarantineError("MANIFEST_INCONSISTENT", { cause: error });
       }
-      const candidate = event as {
-        eventSequence?: unknown;
-        operationId?: unknown;
-        state?: unknown;
-      };
-      const sequence = candidate.eventSequence;
-      if (
-        !Number.isSafeInteger(sequence) ||
-        typeof sequence !== "number" ||
-        sequence <= previous ||
-        typeof candidate.operationId !== "string" ||
-        typeof candidate.state !== "string"
-      ) {
+      const parsed = parseJournalEvent(event);
+      if (parsed.eventSequence <= previous) {
         throw new QuarantineError("MANIFEST_INCONSISTENT");
       }
-      this.eventKeys.add(
-        this.eventKey(
-          candidate.operationId,
-          candidate.state as QuarantineManifest["state"],
-          sequence,
-        ),
-      );
-      previous = sequence;
+      if (this.eventsBySequence.has(parsed.eventSequence)) {
+        throw new QuarantineError("MANIFEST_INCONSISTENT");
+      }
+      this.eventsBySequence.set(parsed.eventSequence, parsed);
+      previous = parsed.eventSequence;
     }
     this.nextSequence = previous + 1;
     this.initialized = true;
@@ -83,13 +109,19 @@ export class OperationJournal {
 
   async hasEvent(manifest: QuarantineManifest): Promise<boolean> {
     await this.initialize();
-    return this.eventKeys.has(
-      this.eventKey(
-        manifest.operationId,
-        manifest.state,
-        manifest.eventSequence,
-      ),
-    );
+    const event = this.eventsBySequence.get(manifest.eventSequence);
+    if (event === undefined) return false;
+    if (
+      event.schemaVersion !== manifest.schemaVersion ||
+      event.operationId !== manifest.operationId ||
+      event.action !== manifest.action ||
+      event.state !== manifest.state ||
+      event.eventSequence !== manifest.eventSequence ||
+      event.lastErrorCode !== manifest.lastErrorCode
+    ) {
+      throw new QuarantineError("MANIFEST_INCONSISTENT");
+    }
+    return true;
   }
 
   async withNextSequence<T>(
@@ -123,14 +155,12 @@ export class OperationJournal {
       occurredAt,
       lastErrorCode: manifest.lastErrorCode,
     };
-    await this.jsonStore.appendEvent("journal/operations.ndjson", event);
+    const parsed = parseJournalEvent(event);
+    if (this.eventsBySequence.has(parsed.eventSequence)) {
+      throw new QuarantineError("MANIFEST_INCONSISTENT");
+    }
+    await this.jsonStore.appendEvent("journal/operations.ndjson", parsed);
     await syncDirectory(join(this.storeRoot, "journal"));
-    this.eventKeys.add(
-      this.eventKey(
-        manifest.operationId,
-        manifest.state,
-        manifest.eventSequence,
-      ),
-    );
+    this.eventsBySequence.set(parsed.eventSequence, parsed);
   }
 }
