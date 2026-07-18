@@ -1,4 +1,11 @@
-import { readFile, stat, writeFile } from "node:fs/promises";
+import {
+  access,
+  mkdir,
+  readFile,
+  stat,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { mkdtemp } from "node:fs/promises";
@@ -72,5 +79,64 @@ describe("JsonStore", () => {
       code: "PATH_OUTSIDE_STORE",
       failClosed: true,
     } satisfies Partial<JsonStoreError>);
+  });
+
+  it("до write отклоняет несуществующий root под symlinked parent", async () => {
+    const sandbox = await mkdtemp(join(tmpdir(), "cmc-store-parent-link-"));
+    const external = join(sandbox, "external");
+    const linkedParent = join(sandbox, "linked-parent");
+    await mkdir(external, { mode: 0o700 });
+    await symlink(external, linkedParent);
+    const store = new JsonStore(join(linkedParent, "state"));
+
+    await expect(
+      store.writeJsonAtomic("exclusions.json", {
+        schemaVersion: 1,
+        value: "forbidden",
+      }),
+    ).rejects.toMatchObject({
+      code: "SYMLINK_BOUNDARY",
+      failClosed: true,
+    } satisfies Partial<JsonStoreError>);
+    await expect(access(join(external, "state"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
+
+  it("до write отклоняет symlinked root и не меняет внешний каталог", async () => {
+    const sandbox = await mkdtemp(join(tmpdir(), "cmc-store-root-link-"));
+    const external = join(sandbox, "external");
+    const stateRoot = join(sandbox, "state");
+    await mkdir(external, { mode: 0o700 });
+    await symlink(external, stateRoot);
+    const store = new JsonStore(stateRoot);
+
+    await expect(
+      store.writeJsonAtomic("exclusions.json", {
+        schemaVersion: 1,
+        value: "forbidden",
+      }),
+    ).rejects.toMatchObject({ code: "SYMLINK_BOUNDARY" });
+    await expect(access(join(external, "exclusions.json"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
+
+  it("до write отклоняет symlinked target и сохраняет внешний файл", async () => {
+    const sandbox = await mkdtemp(join(tmpdir(), "cmc-store-target-link-"));
+    const stateRoot = join(sandbox, "state");
+    const external = join(sandbox, "external.json");
+    await mkdir(stateRoot, { mode: 0o700 });
+    await writeFile(external, "synthetic-sentinel\n", { mode: 0o600 });
+    await symlink(external, join(stateRoot, "exclusions.json"));
+    const store = new JsonStore(stateRoot);
+
+    await expect(
+      store.writeJsonAtomic("exclusions.json", {
+        schemaVersion: 1,
+        value: "forbidden",
+      }),
+    ).rejects.toMatchObject({ code: "SYMLINK_BOUNDARY" });
+    expect(await readFile(external, "utf8")).toBe("synthetic-sentinel\n");
   });
 });

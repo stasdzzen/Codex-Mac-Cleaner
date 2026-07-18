@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
+import { realpathSync } from "node:fs";
 import {
   chmod,
+  lstat,
   mkdir,
   open,
   readdir,
@@ -8,7 +10,16 @@ import {
   rename,
   unlink,
 } from "node:fs/promises";
-import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path";
+import { homedir, tmpdir } from "node:os";
+import {
+  basename,
+  dirname,
+  isAbsolute,
+  parse,
+  relative,
+  resolve,
+  sep,
+} from "node:path";
 
 export interface RuntimeSchema<T> {
   parse(value: unknown): T;
@@ -16,6 +27,7 @@ export interface RuntimeSchema<T> {
 
 export type JsonStoreErrorCode =
   | "PATH_OUTSIDE_STORE"
+  | "SYMLINK_BOUNDARY"
   | "INVALID_JSON_VALUE"
   | "CORRUPT_STATE"
   | "STATE_UNAVAILABLE"
@@ -49,14 +61,42 @@ async function syncDirectory(path: string): Promise<void> {
   }
 }
 
+function isInside(parent: string, target: string): boolean {
+  const fromParent = relative(parent, target);
+  return (
+    fromParent === "" ||
+    (fromParent !== ".." &&
+      !fromParent.startsWith(`..${sep}`) &&
+      !isAbsolute(fromParent))
+  );
+}
+
+function normalizeRoot(root: string): { readonly root: string; readonly anchor: string } {
+  const absoluteRoot = resolve(root);
+  const trustedPrefix = [resolve(homedir()), resolve(tmpdir())]
+    .filter((candidate) => isInside(candidate, absoluteRoot))
+    .sort((left, right) => right.length - left.length)[0];
+  if (trustedPrefix === undefined) {
+    return { root: absoluteRoot, anchor: parse(absoluteRoot).root };
+  }
+  const canonicalPrefix = realpathSync.native(trustedPrefix);
+  return {
+    root: resolve(canonicalPrefix, relative(trustedPrefix, absoluteRoot)),
+    anchor: canonicalPrefix,
+  };
+}
+
 export class JsonStore {
   readonly root: string;
+  private readonly rootAnchor: string;
 
   constructor(root: string) {
     if (!isAbsolute(root)) {
       throw new JsonStoreError("PATH_OUTSIDE_STORE");
     }
-    this.root = resolve(root);
+    const normalized = normalizeRoot(root);
+    this.root = normalized.root;
+    this.rootAnchor = normalized.anchor;
   }
 
   private resolveRelative(relativePath: string): string {
@@ -76,15 +116,75 @@ export class JsonStore {
     return target;
   }
 
+  private async assertNotSymlink(path: string): Promise<void> {
+    try {
+      const metadata = await lstat(path);
+      if (metadata.isSymbolicLink()) {
+        throw new JsonStoreError("SYMLINK_BOUNDARY");
+      }
+    } catch (error) {
+      if (error instanceof JsonStoreError) throw error;
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+      throw new JsonStoreError("STORE_IO_FAILURE", { cause: error });
+    }
+  }
+
+  private async assertSecureTarget(target: string): Promise<void> {
+    await this.assertSecureRootPath();
+    const fromRoot = relative(this.root, target);
+    if (!fromRoot) return;
+    let current = this.root;
+    for (const component of fromRoot.split(sep)) {
+      current = resolve(current, component);
+      await this.assertNotSymlink(current);
+    }
+  }
+
+  private async assertSecureRootPath(): Promise<void> {
+    await this.assertNotSymlink(this.rootAnchor);
+    const fromAnchor = relative(this.rootAnchor, this.root);
+    let current = this.rootAnchor;
+    for (const component of fromAnchor ? fromAnchor.split(sep) : []) {
+      current = resolve(current, component);
+      await this.assertNotSymlink(current);
+    }
+  }
+
+  private async ensureRootDirectory(): Promise<void> {
+    const fromAnchor = relative(this.rootAnchor, this.root);
+    let current = this.rootAnchor;
+    for (const component of fromAnchor ? fromAnchor.split(sep) : []) {
+      current = resolve(current, component);
+      let created = false;
+      await this.assertNotSymlink(current);
+      await mkdir(current, { mode: 0o700 })
+        .then(() => {
+          created = true;
+        })
+        .catch((error: NodeJS.ErrnoException) => {
+          if (error.code !== "EEXIST") throw error;
+        });
+      await this.assertNotSymlink(current);
+      if (created || current === this.root) await chmod(current, 0o700);
+    }
+  }
+
   async ensureDirectory(relativeDirectory = "."): Promise<string> {
     const directory = this.resolveRelative(relativeDirectory);
     try {
-      await mkdir(directory, { recursive: true, mode: 0o700 });
-      let current = directory;
-      while (current === this.root || current.startsWith(`${this.root}${sep}`)) {
+      await this.assertSecureRootPath();
+      await this.ensureRootDirectory();
+
+      const fromRoot = relative(this.root, directory);
+      let current = this.root;
+      for (const component of fromRoot ? fromRoot.split(sep) : []) {
+        current = resolve(current, component);
+        await this.assertNotSymlink(current);
+        await mkdir(current, { mode: 0o700 }).catch((error: NodeJS.ErrnoException) => {
+          if (error.code !== "EEXIST") throw error;
+        });
+        await this.assertNotSymlink(current);
         await chmod(current, 0o700);
-        if (current === this.root) break;
-        current = dirname(current);
       }
       return directory;
     } catch (error) {
@@ -101,6 +201,7 @@ export class JsonStore {
     let temporaryExists = false;
 
     try {
+      await this.assertSecureTarget(target);
       const handle = await open(temporary, "wx", 0o600);
       temporaryExists = true;
       try {
@@ -129,6 +230,7 @@ export class JsonStore {
     const line = `${serializeJson(event)}\n`;
 
     try {
+      await this.assertSecureTarget(target);
       const handle = await open(target, "a", 0o600);
       try {
         await handle.chmod(0o600);
@@ -147,8 +249,10 @@ export class JsonStore {
     const target = this.resolveRelative(relativePath);
     let payload: string;
     try {
+      await this.assertSecureTarget(target);
       payload = await readFile(target, "utf8");
     } catch (error) {
+      if (error instanceof JsonStoreError) throw error;
       throw new JsonStoreError("STATE_UNAVAILABLE", { cause: error });
     }
 
@@ -164,8 +268,10 @@ export class JsonStore {
     const parent = dirname(target);
     const prefix = `.${basename(target)}.tmp-`;
     try {
+      await this.assertSecureTarget(parent);
       return (await readdir(parent)).filter((entry) => entry.startsWith(prefix)).sort();
     } catch (error) {
+      if (error instanceof JsonStoreError) throw error;
       throw new JsonStoreError("STATE_UNAVAILABLE", { cause: error });
     }
   }

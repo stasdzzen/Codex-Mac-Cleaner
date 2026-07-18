@@ -86,10 +86,13 @@ describe("model-visible MCP skeleton", () => {
     ]);
     try {
       const listed = await client.listTools();
-      expect(listed.tools.map((tool) => tool.name)).toEqual(
+      const modelTools = listed.tools.filter(
+        (tool) => tool._meta?.ui === undefined,
+      );
+      expect(modelTools.map((tool) => tool.name)).toEqual(
         Object.keys(MODEL_VISIBLE_TOOL_DEFINITIONS),
       );
-      for (const tool of listed.tools) {
+      for (const tool of modelTools) {
         expect(tool.annotations).toEqual(
           expectedAnnotations[tool.name as keyof typeof expectedAnnotations],
         );

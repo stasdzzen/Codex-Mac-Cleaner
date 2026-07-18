@@ -34,6 +34,7 @@ export const standaloneFixture = deepFreeze<DashboardSnapshot>({
     observedAt: "2026-07-18T10:05:00.000Z",
     source: "statfs",
   },
+  excludedCount: 1,
   findings: [
     {
       findingId: "finding-public-synthetic",

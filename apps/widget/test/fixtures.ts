@@ -34,6 +34,7 @@ const baseSnapshot: DashboardSnapshot = {
     observedAt: "2026-07-18T10:05:00.000Z",
     source: "statfs",
   },
+  excludedCount: 2,
   findings: [
     {
       findingId: "finding-synthetic-cache",

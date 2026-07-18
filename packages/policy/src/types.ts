@@ -150,8 +150,8 @@ export interface UserExclusionCandidateIdentity {
     | "receipt"
     | "unknown";
   readonly normalizedTargetIdentity: string;
-  readonly bundleId?: string | null;
-  readonly packageId?: string | null;
-  readonly signingIdentity?: string | null;
+  readonly bundleId?: string | null | undefined;
+  readonly packageId?: string | null | undefined;
+  readonly signingIdentity?: string | null | undefined;
   readonly ownerTypeFingerprint: string;
 }

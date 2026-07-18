@@ -18,6 +18,9 @@ function createBridge() {
     if (name === "quarantine_prepare_move") {
       return { previewToken: "preview-synthetic-001" };
     }
+    if (name === "exclusion_list") {
+      return { exclusions: [], stateVersion: 20 };
+    }
     return { stateVersion: 20 };
   });
   const bridge: WidgetBridge = {
@@ -36,7 +39,7 @@ afterEach(() => {
 });
 
 describe("Audit Dashboard contract", () => {
-  it("показывает пять вкладок и честные dependency states CMC-12/13", () => {
+  it("показывает пять вкладок, рабочие Исключения и dependency state CMC-13", async () => {
     const { bridge } = createBridge();
     render(<AuditDashboard snapshot={dashboardFixture} bridge={bridge} />);
 
@@ -45,7 +48,7 @@ describe("Audit Dashboard contract", () => {
     }
 
     fireEvent.click(screen.getByRole("tab", { name: "Исключения" }));
-    expect(screen.getByText("Постоянные исключения появятся в CMC-12.")).toBeVisible();
+    expect(await screen.findByText("Пользовательских исключений нет.")).toBeVisible();
 
     fireEvent.click(screen.getByRole("tab", { name: "Расписание" }));
     expect(screen.getByText("Расписание read-only аудита появится в CMC-13.")).toBeVisible();
