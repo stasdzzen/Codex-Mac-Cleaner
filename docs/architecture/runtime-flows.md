@@ -11,19 +11,21 @@ date: 2026-07-15
 # Аудит
 
 1. `audit_start` принимает новый `requestId` и профиль `application_remnants`.
-2. Capability Scanner фиксирует доступные корни, разрешения и источники.
+2. Capability Scanner создаёт logical `snapshotId`, фиксирует доступные корни, permissions, query scopes и источники.
 3. Protected Scope Registry исключает универсальные system/credential/browser-profile/personal/project/plugin/Codex scopes до создания кандидатов.
-4. Snapshot A фиксирует состояние путей, приложений, процессов и открытых файлов.
-5. Adapters получают минимальную stable identity и User Exclusion Store отфильтровывает совпавшие exclusions до дорогого анализа; исключённые объекты не получают action token.
-6. Независимые candidate adapters и targeted inspection sources возвращают observations и warnings, включая missing executable, stale receipt, official uninstaller, protected container metadata и inspection-only system cases.
-7. Safe Metadata Filter редактирует JSON/YAML/plist до persistence.
-8. Normalizer связывает observations в находки, назначает `supportLevel`, `FindingFacts` и `ReclaimEstimate`.
-9. Snapshot B повторно проверяет изменяемые признаки.
-10. Изменившиеся объекты получают `staleDuringAudit: true` и пустой список действий.
-11. Classifier формирует метку, уверенность и объяснение по независимым owner, activity, receipt, dependency, temporal и data-kind evidence.
-12. Policy Engine вычисляет `allowedActions`; `analysis_only`, `unsupported_manual` и excluded identities не получают mutation actions. Применимый официальный uninstaller блокирует manual quarantine и становится recommended method.
-13. Local Store сохраняет immutable audit revision, `StorageSummary`, `DiskObservation` и счётчик исключённых объектов без сырых конфигурационных значений.
-14. Dashboard получает краткий `structuredContent` и подробный widget-only `_meta`.
+4. Snapshot A фиксирует candidate/parent filesystem identity, source capabilities и начальные fingerprints. Raw paths остаются только в памяти сервера.
+5. Adapters выполняют типизированные queries в одном `snapshotId` и возвращают observations, ephemeral raw claims, source provenance и warnings. Пустой output сам по себе не создаёт negative evidence.
+6. Correlation Resolver строит opaque `CorrelationSubject`/`CorrelationEdge` по filesystem/bundle/package/signing/owner rules. Path, basename и display name не разрешают edge.
+7. Для полностью завершённого source scope Resolver выпускает `CoverageCertificate`; permission/capability gap, partial inventory, parse loss, cancellation, ambiguity или mismatch дают `unknown`.
+8. User Exclusion Store сопоставляет installation-keyed claim digests до дорогого анализа. Исключённые objects не получают destructive token; migration/key error оставляет findings видимыми и блокирует token issuance.
+9. Safe Metadata Filter редактирует JSON/YAML/plist до persistence.
+10. Positive installed app, process, open-file, startup target, receipt, uninstaller и dependency edges становятся candidate-specific counter-evidence независимо от полноты inventory.
+11. Snapshot B повторно проверяет candidate/parent identity и все claims, влияющие на policy. Изменение или невозможность перепроверки дают `staleDuringAudit: true`, инвалидируют negative evidence и очищают mutation actions.
+12. Resolver сохраняет immutable `CorrelationRevision` с digests graph, coverage report, Snapshot A/B и versioned rules; Normalizer создаёт `EvidenceSet` и безопасные `FindingFacts`.
+13. Classifier формирует метку, уверенность и объяснение по независимым owner, installed, activity, open-file, receipt, dependency, temporal и data-kind evidence.
+14. Policy Engine вычисляет `allowedActions`; обязательный `unknown`, ambiguity, mismatch, stale revision, `analysis_only`, `unsupported_manual` и excluded identity не получают mutation actions. Применимый официальный uninstaller блокирует manual quarantine.
+15. Local Store сохраняет safe immutable audit/correlation revision, `StorageSummary`, `DiskObservation` и агрегированный coverage/excluded count без raw identity graph, inventory, path или token material.
+16. Модель и Dashboard получают только `SafeCorrelationView`; widget-only `_meta` не содержит raw identities или paths.
 
 Состояния аудита: `queued`, `running`, `cancelling`, `cancelled`, `completed`, `completed_with_warnings`, `failed`.
 
@@ -39,11 +41,11 @@ date: 2026-07-15
 # Перемещение в карантин
 
 1. Пользователь нажимает «Удалить»; App вызывает `quarantine_prepare_move` с `findingId` и `auditRevision`.
-2. Сервер повторяет policy check и возвращает preview token со сроком пять минут.
+2. Сервер повторяет policy check на той же immutable `CorrelationRevision`, сохраняет preview token внутри server session и возвращает widget безопасный preview с opaque action handle на пять минут.
 3. `AlertDialog` показывает объект, `ReclaimEstimate`, риск, последствия и условия восстановления и явно говорит, что исходник будет перемещён в карантин.
-4. После подтверждения App вызывает `quarantine_move` с token и `operationId`.
-5. Action Controller берёт lock и повторяет path, inode, owner, mtime, device, process и open-file checks.
-6. Action Controller повторно проверяет Protected Scope Registry, `supportLevel` и sensitivity flags.
+4. После подтверждения App вызывает `quarantine_move` с action handle и `operationId`; path, identity и token material во входе отсутствуют.
+5. Action Controller берёт lock и повторяет path, inode, owner, mtime, device, process/open-file и обязательные correlation queries.
+6. Action Controller сверяет audit/correlation revision, edge/coverage digests, exclusion state, Protected Scope Registry, `supportLevel` и sensitivity flags. Любое расхождение блокирует действие.
 7. Манифест `prepared` записывается через временный файл, `fsync` и atomic rename.
 8. Исходный объект перемещается в `payload/object` через `rename` на том же томе.
 9. Манифест и append-only journal получают состояние `moved`.
@@ -69,10 +71,17 @@ date: 2026-07-15
 # Пользовательские исключения
 
 1. «Исключить» вызывает app-visible `exclusion_create` только с `findingId`, `auditRevision` и `requestId`.
-2. Сервер повторно разрешает stable identity, записывает `UserExclusion` атомарно и не создаёт mutation preview.
-3. Следующий аудит сравнивает identity до дорогого анализа. Path-only совпадение недостаточно; owner/type/signing/bundle-package/target mismatch возвращает finding.
+2. Сервер повторно разрешает stable subject и полный claim set, derivation выполняет installation-keyed HMAC, записывает только digests атомарно и не создаёт mutation preview.
+3. Следующий аудит сравнивает keyed subject/claim digests до дорогого анализа. Path/name-only совпадение недостаточно; owner/type/signing/bundle-package/target mismatch возвращает finding.
 4. «Снова проверять» удаляет одну запись по `exclusionId`. Сброс всех exclusions требует отдельного preview token и подтверждения.
-5. Неизвестная schema version не скрывает findings и блокирует destructive-token issuance до восстановления state.
+5. Неизвестная schema version, missing key или migration-required запись не скрывают findings и блокируют destructive-token issuance до восстановления state.
+
+# Migration correlation state
+
+1. При переходе на новую derivation version сервер инвалидирует legacy actionable audit revisions и preview tokens.
+2. Валидный legacy `UserExclusion` преобразуется локально в keyed digests через временный файл, `fsync`, atomic rename и reread validation.
+3. Если точная derivation невозможна, exclusion не применяется, finding остаётся видимым, state помечается `migration_required`, а mutation-контур блокируется.
+4. Legacy `Observation.targetRef` и `EvidenceSet` читаются только как analysis-only; новый Resolver не выводит `absent` из legacy данных.
 
 # Пользовательский no-op
 

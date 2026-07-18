@@ -85,26 +85,27 @@ date: 2026-07-15
 * Exclusion-tools принимают только `findingId`/revision либо server-generated `exclusionId`; path, owner, bundle ID и signing identity вычисляет сервер.
 * `schedule_request` принимает закрытые day/time/action fields и не принимает raw RRULE, cron, LaunchAgent, shell command или arbitrary prompt.
 * `schedule_intent_complete` может завершить только существующий pending intent и только записывает host outcome; само создание/изменение automation остаётся обязанностью Skill/host layer.
-* `findingId`, `auditRevision`, `operationId` и preview token обязательны там, где применимы.
+* `findingId`, `auditRevision`, `correlationRevisionId`, `operationId` и opaque action handle обязательны там, где применимы; preview token остаётся server-side.
 * `audit_cancel` не принимает profile, path, revision или mutation-параметры.
-* Preview token привязан к действию, UI session, finding или quarantine entry, fingerprint и сроку пять минут.
-* Token одноразовый. Повтор с тем же `operationId` возвращает прежний результат.
+* Preview token хранится server-side и привязан к действию, UI session, finding/quarantine entry, immutable audit/correlation revision, candidate/parent fingerprints, edge/coverage digests, policy/derivation versions, exclusion state и сроку пять минут.
+* App получает только opaque action handle без identity или token material. Token одноразовый. Повтор с тем же `operationId` возвращает прежний результат.
 * Любой неизвестный input field отклоняется schema validation.
 
 # Правила выходов
 
 * `structuredContent` содержит краткие model-visible данные и `stateVersion`.
 * `content` содержит короткое русскоязычное объяснение без полного пути.
-* `_meta` содержит widget-only hydration: полный путь, подробные evidence maps и локальные действия.
+* `_meta` содержит widget-only `SafeCorrelationView`, presentation state и server-owned actions. Полные пути, raw/digested identity claims, inventory, correlation edges, coverage certificates и token material отсутствуют.
 * `audit_results`, `dashboard_open` и `quarantine_list` возвращают серверную `StorageSummary`; UI не пересчитывает её.
 * `audit_results`, `dashboard_open` и результаты quarantine actions возвращают `DiskObservation` рядом с `StorageSummary`; UI не вычисляет free-space delta.
 * Каждая model-visible находка содержит `supportLevel`, безопасные metadata flags и blocking reason, но не raw config data.
-* Widget-only finding содержит `FindingFacts` и `ReclaimEstimate`; model-visible форма получает только безопасную краткую сводку без full path, app inventory и signing details.
+* Widget-only finding содержит safe `FindingFacts`, `coverageSummary`, `staleDuringAudit` и `ReclaimEstimate`; model-visible форма получает более краткую безопасную сводку. Обе формы не содержат full path, app inventory, bundle/package/signing claims или correlation graph.
 * Model-visible schedule output не содержит raw RRULE; automation ID считается opaque и возвращается только bridge flow, которому он нужен для update/pause/resume/delete.
 * Model-visible audit summary показывает только `excludedCount`, а не identities исключённых объектов.
+* `absent` показывается только как server-owned fact с полным same-snapshot coverage; причины `unknown` представлены безопасными gap codes.
 * `unsupported_manual` не содержит mutation actions, готовую shell-команду или sudo-рекомендацию.
 * Каждый tool с `structuredContent` объявляет точный `outputSchema`.
-* Секреты отсутствуют во всех трёх каналах ответа.
+* Секреты, raw local identities и destructive token material отсутствуют во всех трёх каналах ответа.
 
 # UI resource
 

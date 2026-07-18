@@ -12,7 +12,7 @@ date: 2026-07-15
 
 Один запуск аудита.
 
-Обязательные поля: `auditId`, `requestId`, `profile`, `state`, `stateVersion`, `startedAt`, `finishedAt`, `cancelRequestedAt`, `capabilities`, `coverage`, `warnings`, `revision`, `schemaVersion`.
+Обязательные поля: `auditId`, `requestId`, `profile`, `state`, `stateVersion`, `startedAt`, `finishedAt`, `cancelRequestedAt`, `capabilities`, `coverage`, `warnings`, `revision`, `correlationRevisionId`, `schemaVersion`.
 
 Допустимые состояния: `queued`, `running`, `cancelling`, `cancelled`, `completed`, `completed_with_warnings`, `failed`. После terminal state отчёт неизменяем. Только `completed` и `completed_with_warnings` могут содержать actionable revision; в `cancelled` все `allowedActions` пусты.
 
@@ -20,19 +20,19 @@ date: 2026-07-15
 
 Нормализованная находка внутри одной ревизии.
 
-Обязательные поля: `findingId`, `auditId`, `revision`, `displayName`, `componentDisplayName`, `canonicalPath`, `artifactKind`, `category`, `supportLevel`, `logicalSize`, `physicalSize`, `findingFacts`, `reclaimEstimate`, `ownerCandidates`, `safeMetadata`, `label`, `confidence`, `evidenceSet`, `risk`, `snapshotFingerprint`, `allowedActions`.
+Обязательные поля: `findingId`, `auditId`, `revision`, `correlationRevisionId`, `displayName`, `componentDisplayName`, `canonicalPath`, `artifactKind`, `category`, `supportLevel`, `logicalSize`, `physicalSize`, `findingFacts`, `reclaimEstimate`, `safeMetadata`, `label`, `confidence`, `evidenceSet`, `risk`, `snapshotFingerprint`, `staleDuringAudit`, `allowedActions`.
 
 `artifactKind`: `file`, `directory`, `bundle`, `plist`, `launch_item`, `receipt` или `unknown`. `category`: `cache`, `log`, `webkit`, `http_storage`, `saved_state`, `application_support`, `container`, `group_container`, `preference`, `database`, `sync_data`, `vpn_data`, `personal_file`, `autostart` или `unknown`. Размеры измеряются в байтах и относятся к ревизии аудита.
 
-`canonicalPath` остаётся локальным и передаётся модели только в обезличенной форме.
+`canonicalPath` — server-only поле local runtime. Модель, widget hydration, logs и persisted safe report не получают ни исходный, ни обратимо обезличенный путь. Reveal и mutation разрешают path по `findingId` и immutable revision внутри сервера.
 
 `supportLevel`: `candidate`, `analysis_only` или `unsupported_manual`. Для `analysis_only` и `unsupported_manual` из filesystem-действий допустим только `inspect`; локальное `exclude` может быть доступно отдельно, но не разрешает mutation.
 
 # `FindingFacts`
 
-Server-owned сводка содержит `lastObservedAt`, `temporalKind`, `mainBundleState`, `activityState`, `openFileState`, `startupKinds`, `targetExecutableState`, `receiptState`, `dependencyState`, `sensitivityFlags`, `recommendedRemovalMethod` и `blockingReasons`.
+Server-owned safe сводка содержит `lastObservedAt`, `temporalKind`, `mainBundleState`, `activityState`, `openFileState`, `startupKinds`, `targetExecutableState`, `receiptState`, `dependencyState`, `coverageSummary`, `staleDuringAudit`, `sensitivityFlags`, `recommendedRemovalMethod` и `blockingReasons`.
 
-Трёхзначные states используют `present | absent | unknown` либо эквивалентный закрытый enum. `recommendedRemovalMethod`: `quarantine`, `official_uninstaller`, `close_and_recheck`, `advanced_mode` или `inspect_only`. Неизвестное состояние не трактуется как отсутствие.
+Трёхзначные states используют `present | absent | unknown` либо эквивалентный закрытый enum. `absent` допустим только с полным same-snapshot `CoverageCertificate`; пустой output не является доказательством. Permission/capability gap, partial inventory, parse loss, ambiguous/missing/mismatch и stale snapshot дают `unknown`. `recommendedRemovalMethod`: `quarantine`, `official_uninstaller`, `close_and_recheck`, `advanced_mode` или `inspect_only`.
 
 # `ReclaimEstimate`
 
@@ -54,7 +54,12 @@ Server-owned сводка содержит `lastObservedAt`, `temporalKind`, `ma
 * `outcome`: `confirmed`, `contradicted` или `unknown`;
 * `observedAt`;
 * `summary`;
-* `details` без содержимого пользовательского файла.
+* safe `provenanceId`, `coverageState` и `correlationRevisionId`;
+* `details` без raw identity, содержимого пользовательского файла или inventory.
+
+# Correlation entities
+
+`CorrelationSubject`, `CorrelationEdge`, `SourceProvenance`, `CoverageCertificate` и `CorrelationRevision` являются server-only сущностями [отдельного контракта](correlation-identity.md). `Observation.targetRef` — transport reference, а не identity. External view получает только opaque revision ID, safe facts и coverage gaps.
 
 # `Classification`
 
@@ -76,9 +81,9 @@ Server-owned сводка содержит `lastObservedAt`, `temporalKind`, `ma
 
 # `UserExclusion`
 
-Изменяемое пользователем локальное правило, отдельное от `ProtectedScopeRule`. Содержит `schemaVersion`, `exclusionId`, `ruleId`, `artifactKind`, `normalizedTargetIdentity`, опциональные `bundleId`/`packageId`, `signingIdentity`, `ownerTypeFingerprint`, `createdAt` и безопасную `reasonCategory`.
+Изменяемое пользователем локальное правило, отдельное от `ProtectedScopeRule`. Новая схема содержит `schemaVersion`, `exclusionId`, `ruleId`, `artifactKind`, `keyId`, `derivationVersion`, `subjectDigest`, применимые typed `claimDigests`, `createdAt` и безопасную `reasonCategory`.
 
-Path-only equality запрещена. Match требует совпадения всех применимых identity fields. Несовпадение снова показывает finding. Совпавший exclusion не получает destructive action token. Model-visible output содержит только общий счётчик исключённых объектов.
+Path/name-only equality запрещена. Match требует совпадения полного обязательного keyed claim set той же derivation version. Plaintext bundle/package/signing/path fields не сохраняются. Несовпадение снова показывает finding. Совпавший exclusion не получает destructive action token. Model-visible output содержит только общий счётчик исключённых объектов.
 
 # `ScheduleIntent` и `ScheduleState`
 
@@ -89,6 +94,8 @@ Path-only equality запрещена. Match требует совпадения
 # `SnapshotFingerprint`
 
 Содержит признаки, достаточные для обнаружения гонки: `device`, `inode`, `mode`, `uid`, `gid`, `size`, `mtimeNs`, `ctimeNs`, `fileType`, `mountId` и признак симлинка.
+
+Snapshot A/B дополняются server-only fingerprints parent identity, source query и claims, влияющих на policy. Они входят в immutable `CorrelationRevision`; различие выставляет `staleDuringAudit` и инвалидирует actions.
 
 # `QuarantineOperation`
 
@@ -109,12 +116,13 @@ Path-only equality запрещена. Match требует совпадения
 
 Server-owned наблюдение содержит неотрицательные целые `availableBytes`, `totalBytes`, ISO-время `observedAt` и `source: statfs`. Оно относится к серверному snapshot, но не доказывает, что изменение свободного места вызвано последней операцией. Имена и идентификаторы томов в model-visible форму не входят.
 
-# `CapabilityReport`
+# `CapabilityReport` и coverage
 
-Перечисляет поддержанные источники, доступные корни, недоступные области и причину каждого пропуска. Неполное покрытие не маскируется значением «проверено».
+Перечисляет поддержанные источники, доступные корни, query scopes, недоступные области и причину каждого пропуска. Полный server-only coverage report связывает source provenance и completeness certificates с correlation revision. Safe view раскрывает только source class, counts и gap codes. Неполное покрытие не маскируется значением «проверено» и не создаёт `absent`.
 
 # Связанные концепты
 
 * [Модель аудита](../architecture/runtime-flows.md)
+* [Correlation identity](correlation-identity.md)
 * [Манифест карантина](quarantine-manifest.md)
 * [Safety model](../safety/safety-model.md)
