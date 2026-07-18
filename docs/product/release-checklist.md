@@ -50,6 +50,11 @@ date: 2026-07-15
 * [ ] Official uninstaller блокирует manual quarantine, когда он является рекомендуемым способом.
 * [ ] Excluded finding не получает preview; path-only и изменившаяся identity не создают ложное совпадение.
 * [ ] Unknown/corrupt exclusion schema не скрывает findings и блокирует destructive-token issuance.
+* [ ] Candidate-specific installed/process/open-file/receipt/dependency facts получены server-owned resolver без path/name/display-only resolution.
+* [ ] `absent` подтверждён completeness certificate полного same-snapshot query; partial/permission/capability/ambiguous/mismatch cases дают `unknown`.
+* [ ] Snapshot A/B race выставляет `staleDuringAudit`, а token привязан к immutable correlation revision и хранится server-side.
+* [ ] Exclusion store использует installation-keyed digests; plaintext identity, plain hash/public salt и неоднозначная migration не проходят gate.
+* [ ] Model/widget/package/log/test/PR privacy scan не находит raw path, inventory, bundle/package/signing claims, correlation graph или token material.
 
 # Privacy и UI
 

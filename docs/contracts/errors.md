@@ -12,7 +12,7 @@ date: 2026-07-15
 
 Ошибка содержит `errorCode`, `severity`, `scope`, `message`, `recommendedAction`, `retryable`, `correlationId` и безопасные `details`.
 
-Сырой `stderr`, stack trace и полный путь не попадают в model-visible ответ.
+Сырой `stderr`, stack trace, полный путь, inventory, bundle/package/signing claim и token material не попадают в model-visible или widget ответ, лог и PR evidence.
 
 # Уровни
 
@@ -28,6 +28,14 @@ date: 2026-07-15
 | `PERMISSION_DENIED` | warning или blocking | Показать coverage gap без совета использовать `sudo` или обходить TCC |
 | `AUDIT_STALE` | blocking | Повторить аудит |
 | `SOURCE_CHANGED` | blocking | Не менять объект; повторить аудит |
+| `CORRELATION_AMBIGUOUS` | blocking | Не выбирать совпадение; показать `unknown` и повторить аудит после устранения неоднозначности |
+| `CORRELATION_MISSING` | blocking | Не выводить `absent`; показать missing identity evidence |
+| `CORRELATION_MISMATCH` | blocking | Сохранить counter-evidence, не создавать edge или mutation preview |
+| `CORRELATION_COVERAGE_INCOMPLETE` | blocking | Показать safe coverage gap; пустой source result не считать отсутствием |
+| `CORRELATION_SNAPSHOT_STALE` | blocking | Инвалидировать revision/action handle и повторить аудит |
+| `CORRELATION_SCHEMA_UNSUPPORTED` | fatal для token issuance | Не использовать legacy/unknown identity как actionable; выполнить поддержанную migration |
+| `CORRELATION_KEY_UNAVAILABLE` | fatal для token issuance | Не применять exclusions и не выпускать tokens до восстановления или rekey |
+| `CORRELATION_MIGRATION_REQUIRED` | fatal для token issuance | Оставить findings видимыми; завершить или явно сбросить migration state |
 | `ACTIVE_PROCESS` | blocking | Закрыть приложение и проверить снова |
 | `OPEN_FILE` | blocking | Закрыть потребителя и проверить снова |
 | `PATH_OUTSIDE_ALLOWLIST` | blocking | Действие недоступно |
@@ -56,5 +64,6 @@ date: 2026-07-15
 
 * Ошибка одного adapter не завершает весь аудит.
 * Mutation-ошибка всегда работает fail closed.
+* Ошибка correlation/coverage никогда не понижается до `absent` и не раскрывает конфликтующие identities.
 * Автоматически повторяются только read-only операции и идемпотентный replay с тем же ID.
 * Каждое пользовательское сообщение объясняет следующий безопасный шаг.

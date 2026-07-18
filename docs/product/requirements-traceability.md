@@ -18,6 +18,9 @@ date: 2026-07-15
 | `REQ-CANCEL-01` | Идемпотентная отмена аудита без actionable partial revision | [ADR-0009](../decisions/ADR-0009-v01-safety-ux-completion.md) | `CMC-03`, `CMC-04`, `CMC-08`, `CMC-09`, `CMC-10` | C, D, G, H |
 | `REQ-COVER-01` | Coverage gaps видимы и структурированы | [Доменная модель](../contracts/domain-model.md) | `CMC-04` | C |
 | `REQ-EVID-01` | Named rules, evidence и counter-evidence | [Компоненты](../architecture/components.md) | `CMC-05` | C |
+| `REQ-CORR-01` | Server-owned subjects/edges связывают candidate с app/process/open-file/receipt/dependency без path/name-only resolution | [ADR-0012](../decisions/ADR-0012-server-owned-correlation-identity.md), [Correlation contract](../contracts/correlation-identity.md) | `CMC-20`, `CMC-21`, `CMC-09`, `CMC-10` | C, D, G, H |
+| `REQ-NEG-01` | `absent` только с полным same-snapshot coverage; permission/capability/partial/ambiguous/mismatch дают `unknown` | [Correlation contract](../contracts/correlation-identity.md) | `CMC-20`, `CMC-21`, `CMC-09`, `CMC-10` | C, D, H |
+| `REQ-REV-01` | Snapshot A/B, `staleDuringAudit` и token binding к immutable correlation revision | [ADR-0012](../decisions/ADR-0012-server-owned-correlation-identity.md) | `CMC-21`, `CMC-09`, `CMC-10` | C, D, E, H |
 | `REQ-POL-01` | Только server policy вычисляет действия | [Модель безопасности](../safety/safety-model.md) | `CMC-05` | D |
 | `REQ-PATH-01` | Allowlist и запрет link/mount escape | [Политика путей](../safety/path-policy.md) | `CMC-05`, `CMC-06` | D, E |
 | `REQ-PROT-01` | Универсальные protected classes без персональных app/path rules | [ADR-0011](../decisions/ADR-0011-public-plugin-exclusions-scheduling.md) | `CMC-03`, `CMC-04`, `CMC-05`, `CMC-10` | C, D, H |
@@ -30,11 +33,13 @@ date: 2026-07-15
 | `REQ-SIZE-01` | Логический/физический размер, карантин, purge и DiskObservation без ложного APFS claim | [Доменная модель](../contracts/domain-model.md) | `CMC-03`, `CMC-07`, `CMC-08`, `CMC-09`, `CMC-10` | F, G, H |
 | `REQ-MCP-01` | Model/app visibility и точные schemas | [MCP contract](../contracts/mcp-tools.md) | `CMC-03`, `CMC-09` | D |
 | `REQ-PRIV-01` | Без сети, телеметрии и полных путей модели | [Threat model](../safety/threat-model.md) | `CMC-03`, `CMC-09`, `CMC-10` | G |
+| `REQ-CORR-PRIV-01` | Raw paths/inventory/bundle-package-signing identities/graph/tokens server-only; widget получает safe facts/actions | [Correlation contract](../contracts/correlation-identity.md) | `CMC-20`, `CMC-21`, `CMC-09`, `CMC-10` | D, G, H |
 | `REQ-UI-01` | Тёмный shadcn Audit Dashboard с пятью вкладками | [ADR-0006](../decisions/ADR-0006-dark-shadcn-dashboard.md), [ADR-0009](../decisions/ADR-0009-v01-safety-ux-completion.md), [ADR-0011](../decisions/ADR-0011-public-plugin-exclusions-scheduling.md) | `CMC-08`, `CMC-09`, `CMC-12`, `CMC-13` | G |
 | `REQ-SKIP-01` | «Пропустить сейчас» — session-local no-op текущей ревизии | [ADR-0011](../decisions/ADR-0011-public-plugin-exclusions-scheduling.md) | `CMC-08`, `CMC-09`, `CMC-10` | G, H |
 | `REQ-FIND-01` | Карточка FindingFacts и честный `ReclaimEstimate` | [Публичный дизайн](../superpowers/specs/2026-07-17-public-plugin-contract-design.md) | `CMC-03`, `CMC-04`, `CMC-08`, `CMC-10` | C, G, H |
 | `REQ-EXCL-01` | Versioned identity-based persistent exclusions и UI управления | [ADR-0011](../decisions/ADR-0011-public-plugin-exclusions-scheduling.md) | `CMC-03`, `CMC-05`, `CMC-12`, `CMC-10` | D, G, H |
 | `REQ-EXCL-02` | Identity mismatch не скрывает новый объект; excluded finding не получает preview | [Safety model](../safety/safety-model.md) | `CMC-05`, `CMC-12`, `CMC-10` | D, H |
+| `REQ-EXCL-03` | Exclusion identity хранится installation-keyed digest; legacy migration и missing key работают fail closed | [ADR-0012](../decisions/ADR-0012-server-owned-correlation-identity.md) | `CMC-20`, `CMC-21`, `CMC-10` | D, G, H |
 | `REQ-SCHED-01` | Opt-in monthly read-only audit через capability-aware Codex automation bridge | [ADR-0011](../decisions/ADR-0011-public-plugin-exclusions-scheduling.md) | `CMC-09`, `CMC-13`, `CMC-10` | G, H |
 | `REQ-PUB-01` | Публичный bundle не содержит персональных решений, путей и app inventory разработчика | [Модель угроз](../safety/threat-model.md) | `CMC-03`, `CMC-04`, `CMC-09`, `CMC-10` | B, G, H |
 | `REQ-REPO-01` | Публичный репозиторий имеет community files, pinned Actions, security settings и защищённый `main` | [Политика репозитория](../development/public-repository-policy.md) | `CMC-16`, `CMC-10` | B, H |
@@ -68,5 +73,7 @@ Issue и PR не могут объявить требование выполне
 | `CMC-14` | [#14 — Advanced Cleanup v0.2](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/14) | `cto:blocked`, вне v0.1 и ждёт owner approval/ADR |
 | `CMC-15` | [#15 — Browser и Developer Storage v0.2](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/15) | `cto:blocked`, вне v0.1 и ждёт owner approval/threat models |
 | `CMC-16` | [#17 — защита публичного репозитория](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/17) | `cto:in-progress`, текущий governance PR |
+| `CMC-20` | [#35 — server-owned correlation identity](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/35) | `cto:in-progress`; эта docs-first архитектурная задача |
+| `CMC-21` | [#36 — core correlation/evidence resolver](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/36) | `cto:blocked` до merge #35; не запускать |
 
 Operational label не заменяет dependency validation. Источником текущего readiness остаётся GitHub и `issue_contract.py`.
