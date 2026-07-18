@@ -20,4 +20,5 @@
 * [CMC-17 — generated artifacts workspace](CMC-17-generated-artifacts.md), GitHub [#20](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/20)
 * [CMC-18 — синхронизация lockfile scope](CMC-18-lockfile-scope.md), GitHub [#23](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/23)
 * [CMC-19 — синхронизация lockfile scope очереди v0.1](CMC-19-lockfile-queue.md), GitHub [#26](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/26)
-* [CMC-21 — core correlation/evidence resolver](CMC-21-correlation-resolver.md), GitHub [#36](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/36), `cto:blocked` до merge #35
+* [CMC-21 — core correlation/evidence resolver](CMC-21-correlation-resolver.md), GitHub [#36](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/36), `cto:blocked` до merge #39
+* [CMC-22 — actionable Library remnant architecture](CMC-22-library-remnant-architecture.md), GitHub [#39](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/39)

@@ -5,7 +5,7 @@ description: Стабильные error codes, уровни серьёзност
 tags: [contracts, errors, fail-closed]
 status: approved
 owner: Architect
-date: 2026-07-15
+date: 2026-07-18
 ---
 
 # Формат
@@ -36,6 +36,9 @@ date: 2026-07-15
 | `CORRELATION_SCHEMA_UNSUPPORTED` | fatal для token issuance | Не использовать legacy/unknown identity как actionable; выполнить поддержанную migration |
 | `CORRELATION_KEY_UNAVAILABLE` | fatal для token issuance | Не применять exclusions и не выпускать tokens до восстановления или rekey |
 | `CORRELATION_MIGRATION_REQUIRED` | fatal для token issuance | Оставить findings видимыми; завершить или явно сбросить migration state |
+| `OWNER_BINDING_MISSING` | blocking | Оставить finding inspect-only; не связывать artifact с app по имени или пути |
+| `OWNER_BINDING_STALE` | blocking | Инвалидировать historical binding и повторно построить evidence без mutation authority |
+| `REQUIREMENT_PROFILE_UNSUPPORTED` | blocking | Показать границу v0.1; не выдавать profile или applicability со стороны клиента |
 | `ACTIVE_PROCESS` | blocking | Закрыть приложение и проверить снова |
 | `OPEN_FILE` | blocking | Закрыть потребителя и проверить снова |
 | `PATH_OUTSIDE_ALLOWLIST` | blocking | Действие недоступно |
@@ -65,5 +68,6 @@ date: 2026-07-15
 * Ошибка одного adapter не завершает весь аудит.
 * Mutation-ошибка всегда работает fail closed.
 * Ошибка correlation/coverage никогда не понижается до `absent` и не раскрывает конфликтующие identities.
+* `not_applicable` не используется вместо ошибки source query, `unknown` или `absent` и не скрывает positive evidence.
 * Автоматически повторяются только read-only операции и идемпотентный replay с тем же ID.
 * Каждое пользовательское сообщение объясняет следующий безопасный шаг.

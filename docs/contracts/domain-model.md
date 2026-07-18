@@ -5,7 +5,7 @@ description: Канонические сущности, связи и инвар
 tags: [contracts, domain, evidence, policy]
 status: approved
 owner: Architect
-date: 2026-07-15
+date: 2026-07-18
 ---
 
 # `AuditRun`
@@ -30,9 +30,13 @@ date: 2026-07-15
 
 # `FindingFacts`
 
-Server-owned safe сводка содержит `lastObservedAt`, `temporalKind`, `mainBundleState`, `activityState`, `openFileState`, `startupKinds`, `targetExecutableState`, `receiptState`, `dependencyState`, `coverageSummary`, `staleDuringAudit`, `sensitivityFlags`, `recommendedRemovalMethod` и `blockingReasons`.
+Server-owned safe сводка содержит `lastObservedAt`, `temporalKind`, `artifactExistenceState`, `ownerBindingState`, `ownerApplicationState`, `ownerExecutableState`, `activityState`, `openFileState`, `startupKinds`, `uninstallerState`, `receiptLifecycle`, `dependencyState`, `requirementProfileId`, `requirementApplicability`, `coverageSummary`, `staleDuringAudit`, `sensitivityFlags`, `recommendedRemovalMethod` и `blockingReasons`.
 
-Трёхзначные states используют `present | absent | unknown` либо эквивалентный закрытый enum. `absent` допустим только с полным same-snapshot `CoverageCertificate`; пустой output не является доказательством. Permission/capability gap, partial inventory, parse loss, ambiguous/missing/mismatch и stale snapshot дают `unknown`. `recommendedRemovalMethod`: `quarantine`, `official_uninstaller`, `close_and_recheck`, `advanced_mode` или `inspect_only`.
+`artifactExistenceState` относится к Library cleanup-target. `ownerApplicationState` и `ownerExecutableState` относятся к отдельно разрешённому owner. `ownerBindingState`: `resolved | ambiguous | missing | mismatch | stale`. Только `resolved` authoritative binding может участвовать в mutation policy. Legacy `targetExecutableState` разрешён только как analysis-only diagnostic и не отображается в actionable policy.
+
+Трёхзначные states используют `present | absent | unknown` либо эквивалентный закрытый enum. `absent` допустим только с полным same-snapshot `CoverageCertificate`; пустой output не является доказательством. Permission/capability gap, partial inventory, parse loss, ambiguous/missing/mismatch и stale snapshot дают `unknown`. `receiptLifecycle` использует `live | stale | absent | unknown`. `recommendedRemovalMethod`: `quarantine`, `official_uninstaller`, `close_and_recheck`, `advanced_mode` или `inspect_only`.
+
+`requirementApplicability` содержит безопасную карту `requirementId → required | not_applicable | unsupported`. `not_applicable` не является `absent`, не выпускает certificate и не подавляет positive evidence. Profile и applicability выбирает только server policy.
 
 # `ReclaimEstimate`
 
@@ -59,7 +63,7 @@ Server-owned safe сводка содержит `lastObservedAt`, `temporalKind`
 
 # Correlation entities
 
-`CorrelationSubject`, `CorrelationEdge`, `SourceProvenance`, `CoverageCertificate` и `CorrelationRevision` являются server-only сущностями [отдельного контракта](correlation-identity.md). `Observation.targetRef` — transport reference, а не identity. External view получает только opaque revision ID, safe facts и coverage gaps.
+`CorrelationSubject`, `CorrelationEdge`, `OwnerBinding`, `CorrelationRequirementProfile`, `SourceProvenance`, `CoverageCertificate` и `CorrelationRevision` являются server-only сущностями [отдельного контракта](correlation-identity.md). `Observation.targetRef` — transport reference, а не identity. External view получает только opaque revision ID, safe facts, profile ID и coverage gaps.
 
 # `Classification`
 
@@ -73,7 +77,7 @@ Server-owned safe сводка содержит `lastObservedAt`, `temporalKind`
 
 Допустимые действия: `inspect`, `reveal`, `exclude`, `prepare_move`, `prepare_restore`, `prepare_purge`.
 
-Классификация `orphaned` не гарантирует `prepare_move`.
+Классификация `orphaned` не гарантирует `prepare_move`. В v0.1 `prepare_move` допускается только для `private_regenerable_remnant_v1` и категорий `cache | log`; остальные категории application remnants остаются inspect-only.
 
 # `ProtectedScopeRule`
 

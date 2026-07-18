@@ -5,7 +5,7 @@ description: Блокирующие условия готовности реал
 tags: [quality, acceptance, release, gates]
 status: approved
 owner: Architect
-date: 2026-07-15
+date: 2026-07-18
 ---
 
 # Gate A — документация и лицензия
@@ -30,7 +30,7 @@ date: 2026-07-15
 * Audit не меняет mtime, xattrs, содержимое или структуру сканируемых объектов.
 * Все adapters возвращают observations или typed warnings.
 * Coverage gaps видимы и не интерпретируются как «остатков нет».
-* `absent` для installed/process/open-file/receipt/dependency выводится только при полном source coverage, завершённом same-snapshot query и валидном completeness certificate; пустой source result недостаточен.
+* `absent` для owner app/executable, process/open-file/startup/uninstaller/receipt/dependency выводится только при полном source coverage, завершённом same-snapshot query и валидном completeness certificate; пустой source result недостаточен.
 * Permission/capability gap, partial/truncated inventory, parse loss, cancellation, ambiguous/missing/mismatch identity и Snapshot A/B race дают `unknown`/`staleDuringAudit`, а не `absent`.
 * Classification воспроизводима named rules и golden tests.
 * Обычный аудит не выходит за allowlisted user Library roots.
@@ -41,6 +41,8 @@ date: 2026-07-15
 * `audit_cancel` идемпотентно переводит активный аудит в `cancelled` и не оставляет незакрытых потоков записи.
 * Частичные находки `cancelled` видимы только для чтения и имеют пустые `allowedActions`.
 * Deterministic synthetic builder и production adapter contract создают candidate-specific counter-evidence без path/name/display-only matching.
+* Production inventory установленного owner покрывает `/Applications`, `/System/Applications`, `~/Applications` и package-registered bundles; Spotlight остаётся supplemental source. Uninstaller inventory покрывает те же roots и package-registered uninstallers.
+* Cleanup-target и owner application представлены разными subjects; только authoritative `remnant_of` создаёт binding. Legacy `targetExecutableState` остаётся analysis-only.
 
 # Gate D — server-only policy
 
@@ -51,7 +53,10 @@ date: 2026-07-15
 * Built-in protected scopes нельзя ослабить через UI, model input, config или forged finding ID; сервер возвращает `PROTECTED_SCOPE`.
 * Name-only, sensitive/personal data, local Git project и кэш активного приложения блокируют mutation.
 * Path-only, display-name-only, bundle/package/signing/owner single-claim resolution не создаёт action authority; ambiguous/missing/mismatch работают fail closed.
-* Destructive token server-only и привязан к immutable audit/correlation revision, Snapshot B candidate/parent fingerprints, edge/coverage digests, policy/derivation versions и exclusion state; widget получает только opaque action handle.
+* Только exact receipt payload, OS-owned container metadata или валидный installation-local signed process/open-file history могут создать authoritative owner binding; user attestation остаётся hint.
+* Единственный actionable профиль v0.1 — `private_regenerable_remnant_v1` для `cache | log`; Application Support, Containers/Group Containers, Preferences, WebKit/HTTPStorages, Saved State, databases, sync/VPN/personal/autostart остаются inspect-only.
+* `not_applicable` не является `absent`, не создаёт certificate, не заменяет failed query и не подавляет positive evidence; `unsupported` блокирует mutation.
+* Destructive token server-only и привязан к immutable audit/correlation revision, Snapshot B candidate/parent fingerprints, owner-binding/profile/edge/coverage digests, policy/derivation versions и exclusion state; widget получает только opaque action handle.
 * Positive active process, open file, installed app, live startup/receipt/dependency counter-evidence блокирует mutation даже при partial inventory.
 * Совпавший `UserExclusion` блокирует preview; path-only match запрещён, а identity mismatch снова показывает finding.
 * Повреждённая или неизвестная exclusion schema не скрывает findings и блокирует destructive-token issuance.
@@ -77,14 +82,14 @@ date: 2026-07-15
 # Gate G — приватность и UI
 
 * Полные пути, raw config values, пароли, tokens и subscription URLs отсутствуют в model-visible ответах, обычных логах, fixtures и PR evidence.
-* Raw app inventory, bundle/package/signing identities, correlation graph, coverage certificates и destructive token material отсутствуют также в widget hydration, persisted safe reports, test snapshots и package artifacts.
+* Raw app inventory, bundle/package/signing identities, historical owner bindings, correlation graph, coverage certificates и destructive token material отсутствуют также в widget hydration, persisted safe reports, test snapshots и package artifacts.
 * Widget получает только `SafeCorrelationView` и server-owned actions, не вычисляет identity, evidence state, coverage completeness или policy.
 * В основном пользовательском сценарии нет сетевых запросов и телеметрии.
 * Dashboard использует semantic tokens, тёмную тему и утверждённые shadcn/ui components.
 * Coverage warning, риск, уверенность и причина запрета действия различимы без опоры только на цвет.
 * Dashboard имеет пять вкладок; Quarantine Center показывает поэлементные restore/purge без bulk action.
 * UI показывает `candidateLogicalBytes`, `candidatePhysicalBytes`, `quarantinePhysicalBytes`, `purgedPhysicalBytes` и timestamped `DiskObservation` без самостоятельного пересчёта и причинного APFS delta.
-* «Пропустить сейчас» — session-local no-op без tool call; «Исключить» создаёт versioned local state, а «Удалить» означает подтверждённый quarantine одного объекта.
+* «Пропустить сейчас» — session-local no-op без tool call; «Исключить» создаёт versioned local state, а «Переместить в карантин» означает подтверждённый quarantine одного объекта.
 * Вкладка «Исключения» поддерживает persistence, search/filter, «Снова проверять», поэлементное удаление и подтверждаемый reset all.
 * Exclusion store содержит installation-keyed domain-separated digests без plaintext identity; plain hash/public salt отклоняются, legacy migration atomic и fail closed.
 * Вкладка «Расписание» показывает capability, opt-in, day/time, next/last run и update/pause/resume/delete без raw RRULE.
@@ -102,9 +107,9 @@ date: 2026-07-15
 * Scheduled run выполняет только read-only аудит, применяет exclusions, не создаёт mutation token и не запрашивает `sudo`.
 * Повторное включение расписания обновляет одну automation; duplicate, pause, resume и delete покрыты тестами.
 * Публичный package allowlist и privacy scan не находят username, home paths, персональные app names/decisions или real-Mac inventory.
-* CMC-21 core resolver проходит deterministic synthetic fixtures, coverage/ambiguity/mismatch matrix и safe integration harness до возобновления CMC-09; затем тот же PR #34 проходит packaged stdio audit → prepare → move → restore E2E до merge.
+* После merge CMC-22 тот же CMC-21 PR #38 проходит deterministic synthetic fixtures, binding/profile/coverage/ambiguity/mismatch matrix и production `~/Library/Caches|Logs` audit → prepare → move → restore integration до возобновления CMC-09; затем тот же PR #34 проходит packaged stdio E2E до merge.
 * Real-Mac smoke на macOS 26 Apple Silicon подписан отдельным проверяющим или приложен как воспроизводимый протокол.
 
 # Решение о готовности
 
-Любой невыполненный пункт Gate D, E или F блокирует merge и release. Невыполненные `REQ-CANCEL-01`, `REQ-CORR-01`, `REQ-NEG-01`, `REQ-QCTR-01`, `REQ-SIZE-01`, `REQ-PROT-01`, `REQ-META-01`, `REQ-EXCL-01`, `REQ-SCHED-01`, `REQ-PUB-01` или `REQ-NOCLI-01` блокируют release. Ручной gate нельзя обозначить выполненным без факта проверки. Временное исключение возможно только через отдельный ADR, который не ослабляет инварианты безопасности.
+Любой невыполненный пункт Gate D, E или F блокирует merge и release. Невыполненные `REQ-CANCEL-01`, `REQ-CORR-01`, `REQ-OWNER-BIND-01`, `REQ-PROFILE-01`, `REQ-NEG-01`, `REQ-QCTR-01`, `REQ-SIZE-01`, `REQ-PROT-01`, `REQ-META-01`, `REQ-EXCL-01`, `REQ-SCHED-01`, `REQ-PUB-01` или `REQ-NOCLI-01` блокируют release. Ручной gate нельзя обозначить выполненным без факта проверки. Временное исключение возможно только через отдельный ADR, который не ослабляет инварианты безопасности.

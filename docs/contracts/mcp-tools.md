@@ -5,7 +5,7 @@ description: Имена, видимость, влияние и данные tool
 tags: [contracts, mcp, tools, ui]
 status: approved
 owner: Architect
-date: 2026-07-15
+date: 2026-07-18
 ---
 
 # Архитектурный тип
@@ -82,6 +82,7 @@ date: 2026-07-15
 # Правила входов
 
 * Mutation-tools не принимают путь.
+* Клиент не передаёт owner identity, correlation source, requirement profile или applicability. Эти значения разрешает и выбирает только сервер.
 * Exclusion-tools принимают только `findingId`/revision либо server-generated `exclusionId`; path, owner, bundle ID и signing identity вычисляет сервер.
 * `schedule_request` принимает закрытые day/time/action fields и не принимает raw RRULE, cron, LaunchAgent, shell command или arbitrary prompt.
 * `schedule_intent_complete` может завершить только существующий pending intent и только записывает host outcome; само создание/изменение automation остаётся обязанностью Skill/host layer.
@@ -99,7 +100,9 @@ date: 2026-07-15
 * `audit_results`, `dashboard_open` и `quarantine_list` возвращают серверную `StorageSummary`; UI не пересчитывает её.
 * `audit_results`, `dashboard_open` и результаты quarantine actions возвращают `DiskObservation` рядом с `StorageSummary`; UI не вычисляет free-space delta.
 * Каждая model-visible находка содержит `supportLevel`, безопасные metadata flags и blocking reason, но не raw config data.
-* Widget-only finding содержит safe `FindingFacts`, `coverageSummary`, `staleDuringAudit` и `ReclaimEstimate`; model-visible форма получает более краткую безопасную сводку. Обе формы не содержат full path, app inventory, bundle/package/signing claims или correlation graph.
+* Widget-only finding содержит safe `FindingFacts`, агрегированный `ownerBindingState`, server-owned `requirementProfileId`, `coverageSummary`, `staleDuringAudit` и `ReclaimEstimate`; model-visible форма получает более краткую безопасную сводку. Обе формы не содержат full path, app inventory, bundle/package/signing claims, historical bindings или correlation graph.
+* `artifactExistenceState` относится к cleanup-target, а `ownerApplicationState`/`ownerExecutableState` — к отдельно разрешённому owner. Legacy `targetExecutableState` не используется для выдачи mutation action.
+* `requirementApplicability=not_applicable` отображается как «не относится к этому профилю», а не как «не найдено». Positive evidence всегда остаётся blocking независимо от applicability других requirements.
 * Model-visible schedule output не содержит raw RRULE; automation ID считается opaque и возвращается только bridge flow, которому он нужен для update/pause/resume/delete.
 * Model-visible audit summary показывает только `excludedCount`, а не identities исключённых объектов.
 * `absent` показывается только как server-owned fact с полным same-snapshot coverage; причины `unknown` представлены безопасными gap codes.
@@ -122,3 +125,4 @@ MCP App не объявляет host-native automation tool и не вызыва
 1. [OpenAI Apps SDK: Define tools](https://developers.openai.com/apps-sdk/plan/tools/)
 2. [OpenAI Apps SDK: Build ChatGPT UI](https://developers.openai.com/apps-sdk/build/chatgpt-ui/)
 3. [OpenAI Apps SDK Reference](https://developers.openai.com/apps-sdk/reference/)
+4. [ADR-0013: actionable Library remnants](../decisions/ADR-0013-actionable-library-remnant-correlation.md)

@@ -2,6 +2,8 @@
 
 ## 2026-07-18
 
+* **Actionable Library remnants**: CMC-22/ADR-0013 разделил Library artifact и owner application, ввёл authoritative `remnant_of`, receipt lifecycle и server-owned requirement profiles; в v0.1 actionable только приватные регенерируемые cache/log, остальные категории inspect-only.
+* **Recovery CMC-21**: существующий CMC-21 PR #38 остаётся заблокирован до merge CMC-22 и затем продолжается в той же задаче, ветке и PR; CMC-09 PR #34 остаётся приостановлен.
 * **Lockfile scope очереди v0.1**: CMC-19 добавил корневой `pnpm-lock.yaml` в локальные контракты CMC-04/05/06/08/09, вставил dependency gate перед CMC-04 и закрепил frozen-install gate в пяти Worker-промптах.
 * **Lockfile scope**: CMC-18 добавил зависимость и корневой `pnpm-lock.yaml` в локальный контракт CMC-03, синхронизировал roadmap и закрепил frozen-lockfile gate для Worker.
 
