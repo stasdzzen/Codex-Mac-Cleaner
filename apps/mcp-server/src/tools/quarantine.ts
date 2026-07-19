@@ -15,6 +15,9 @@ const AppToolAnnotations = {
   destructiveHint: false,
   idempotentHint: true,
 } as const;
+const LegacyOpaqueActionHandleSchema = OpaqueIdSchema.describe(
+  "Legacy transport field previewToken содержит только opaque action handle; core token server-only.",
+);
 
 export const QuarantineEntryModelSchema = z
   .object({
@@ -41,7 +44,7 @@ export const QuarantinePrepareMoveInputSchema = z
 
 export const QuarantinePrepareMoveOutputSchema = z
   .object({
-    previewToken: OpaqueIdSchema,
+    previewToken: LegacyOpaqueActionHandleSchema,
     expiresAt: IsoDateTimeSchema,
     findingId: OpaqueIdSchema,
     auditRevision: SafeIntegerSchema.min(1),
@@ -53,7 +56,7 @@ export const QuarantinePrepareMoveOutputSchema = z
 
 export const QuarantineMoveInputSchema = z
   .object({
-    previewToken: OpaqueIdSchema,
+    previewToken: LegacyOpaqueActionHandleSchema,
     operationId: OpaqueIdSchema,
   })
   .strict();
@@ -67,13 +70,13 @@ export const QuarantineEntryInputSchema = z
 export const QuarantineConfirmedEntryInputSchema = z
   .object({
     operationId: OpaqueIdSchema,
-    previewToken: OpaqueIdSchema,
+    previewToken: LegacyOpaqueActionHandleSchema,
   })
   .strict();
 
 export const QuarantinePrepareEntryOutputSchema = z
   .object({
-    previewToken: OpaqueIdSchema,
+    previewToken: LegacyOpaqueActionHandleSchema,
     expiresAt: IsoDateTimeSchema,
     quarantineEntry: QuarantineEntryModelSchema,
     stateVersion: SafeIntegerSchema,
@@ -107,7 +110,7 @@ export const APP_VISIBLE_QUARANTINE_TOOL_DEFINITIONS = {
   quarantine_move: {
     title: "Переместить в карантин",
     description:
-      "Перемещает один подтверждённый объект по одноразовому preview token.",
+      "Перемещает один подтверждённый объект по одноразовому opaque action handle.",
     inputSchema: QuarantineMoveInputSchema,
     outputSchema: QuarantineActionOutputSchema,
     annotations: {

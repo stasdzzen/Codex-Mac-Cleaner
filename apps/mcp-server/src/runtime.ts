@@ -1311,8 +1311,99 @@ class AuditRuntimeService implements AuditToolService {
   }
 }
 
+type RuntimeActionHandleBinding =
+  | Readonly<{
+      action: "move";
+      uiSessionId: string;
+      findingId: string;
+      auditRevision: number;
+      secret: string;
+      expiresAt: string;
+    }>
+  | Readonly<{
+      action: "restore" | "purge";
+      uiSessionId: string;
+      operationId: string;
+      secret: string;
+      expiresAt: string;
+    }>;
+
+type RuntimeActionHandleExpectation =
+  | Readonly<{ action: "move"; uiSessionId: string }>
+  | Readonly<{
+      action: "restore" | "purge";
+      uiSessionId: string;
+      operationId: string;
+    }>;
+
+/**
+ * Session-local bridge между legacy transport field `previewToken` и
+ * server-only core preview secret. Ни handle, ни registry не персистятся.
+ */
+export class RuntimeActionHandleRegistry {
+  private readonly records = new Map<string, RuntimeActionHandleBinding>();
+  private readonly now: () => number;
+  private readonly createHandle: () => string;
+
+  constructor(
+    options: Readonly<{
+      now?: () => number;
+      createHandle?: () => string;
+    }> = {},
+  ) {
+    this.now = options.now ?? Date.now;
+    this.createHandle =
+      options.createHandle ?? (() => `action-handle-${randomUUID()}`);
+  }
+
+  issue(binding: RuntimeActionHandleBinding): string {
+    const expiresAt = Date.parse(binding.expiresAt);
+    if (!Number.isFinite(expiresAt) || expiresAt <= this.now()) {
+      throw new Error("ACTION_HANDLE_EXPIRED");
+    }
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const handle = this.createHandle();
+      if (
+        handle.length === 0 ||
+        handle === binding.secret ||
+        this.records.has(handle)
+      ) {
+        continue;
+      }
+      this.records.set(handle, Object.freeze({ ...binding }));
+      return handle;
+    }
+    throw new Error("ACTION_HANDLE_GENERATION_FAILED");
+  }
+
+  consume(handle: string, expected: RuntimeActionHandleExpectation): string {
+    const binding = this.records.get(handle);
+    if (binding === undefined) throw new Error("ACTION_HANDLE_INVALID");
+    if (Date.parse(binding.expiresAt) <= this.now()) {
+      this.records.delete(handle);
+      throw new Error("ACTION_HANDLE_EXPIRED");
+    }
+    const operationMatches =
+      binding.action === "move" && expected.action === "move"
+        ? true
+        : binding.action !== "move" &&
+          expected.action !== "move" &&
+          binding.operationId === expected.operationId;
+    if (
+      binding.action !== expected.action ||
+      binding.uiSessionId !== expected.uiSessionId ||
+      !operationMatches
+    ) {
+      throw new Error("ACTION_HANDLE_BINDING_MISMATCH");
+    }
+    this.records.delete(handle);
+    return binding.secret;
+  }
+}
+
 class RuntimeQuarantineService implements QuarantineToolService {
   private readonly uiSessionId = `ui-session-${randomUUID()}`;
+  private readonly actionHandles = new RuntimeActionHandleRegistry();
 
   constructor(
     private readonly controller: QuarantineController,
@@ -1355,8 +1446,16 @@ class RuntimeQuarantineService implements QuarantineToolService {
     );
     const finding = this.audit.finding(input.findingId, input.auditRevision);
     const preview = await this.controller.prepareMove({ ...input, uiSessionId: this.uiSessionId });
+    const actionHandle = this.actionHandles.issue({
+      action: "move",
+      uiSessionId: this.uiSessionId,
+      findingId: input.findingId,
+      auditRevision: input.auditRevision,
+      secret: preview.secret,
+      expiresAt: preview.expiresAt,
+    });
     return {
-      previewToken: preview.secret,
+      previewToken: actionHandle,
       expiresAt: preview.expiresAt,
       findingId: input.findingId,
       auditRevision: input.auditRevision,
@@ -1373,9 +1472,13 @@ class RuntimeQuarantineService implements QuarantineToolService {
   }
 
   async move(input: { previewToken: string; operationId: string }) {
+    const secret = this.actionHandles.consume(input.previewToken, {
+      action: "move",
+      uiSessionId: this.uiSessionId,
+    });
     return this.action(
       await this.controller.moveToQuarantine({
-        token: input.previewToken,
+        token: secret,
         operationId: input.operationId,
         uiSessionId: this.uiSessionId,
       }),
@@ -1402,8 +1505,15 @@ class RuntimeQuarantineService implements QuarantineToolService {
       operationId: input.operationId,
       uiSessionId: this.uiSessionId,
     });
+    const actionHandle = this.actionHandles.issue({
+      action: "restore",
+      uiSessionId: this.uiSessionId,
+      operationId: input.operationId,
+      secret: preview.secret,
+      expiresAt: preview.expiresAt,
+    });
     return {
-      previewToken: preview.secret,
+      previewToken: actionHandle,
       expiresAt: preview.expiresAt,
       quarantineEntry: this.entry(manifest),
       stateVersion: manifest.eventSequence,
@@ -1411,10 +1521,15 @@ class RuntimeQuarantineService implements QuarantineToolService {
   }
 
   async restore(input: { operationId: string; previewToken: string }) {
+    const secret = this.actionHandles.consume(input.previewToken, {
+      action: "restore",
+      uiSessionId: this.uiSessionId,
+      operationId: input.operationId,
+    });
     return this.action(
       await this.controller.restoreFromQuarantine({
         operationId: input.operationId,
-        token: input.previewToken,
+        token: secret,
         uiSessionId: this.uiSessionId,
       }),
     );
@@ -1426,8 +1541,15 @@ class RuntimeQuarantineService implements QuarantineToolService {
       operationId: input.operationId,
       uiSessionId: this.uiSessionId,
     });
+    const actionHandle = this.actionHandles.issue({
+      action: "purge",
+      uiSessionId: this.uiSessionId,
+      operationId: input.operationId,
+      secret: preview.secret,
+      expiresAt: preview.expiresAt,
+    });
     return {
-      previewToken: preview.secret,
+      previewToken: actionHandle,
       expiresAt: preview.expiresAt,
       quarantineEntry: this.entry(manifest),
       stateVersion: manifest.eventSequence,
@@ -1435,10 +1557,15 @@ class RuntimeQuarantineService implements QuarantineToolService {
   }
 
   async purge(input: { operationId: string; previewToken: string }) {
+    const secret = this.actionHandles.consume(input.previewToken, {
+      action: "purge",
+      uiSessionId: this.uiSessionId,
+      operationId: input.operationId,
+    });
     return this.action(
       await this.controller.purgeQuarantineEntry({
         operationId: input.operationId,
-        token: input.previewToken,
+        token: secret,
         uiSessionId: this.uiSessionId,
       }),
     );

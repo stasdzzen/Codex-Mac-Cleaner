@@ -418,13 +418,28 @@ describe("production runtime services", () => {
       });
       expect(preview.isError).not.toBe(true);
       const previewToken = (preview.structuredContent as { previewToken: string }).previewToken;
+      expect(previewToken).toMatch(/^action-handle-/u);
       const operationId = `synthetic-operation-${randomUUID()}`;
+      const forgedMove = await client.callTool({
+        name: "quarantine_move",
+        arguments: {
+          previewToken: `action-handle-forged-${randomUUID()}`,
+          operationId: `forged-operation-${randomUUID()}`,
+        },
+      });
+      expect(forgedMove.isError).toBe(true);
+      await expect(stat(candidatePath)).resolves.toBeDefined();
       const moved = await client.callTool({
         name: "quarantine_move",
         arguments: { previewToken, operationId },
       });
       expect(moved.isError).not.toBe(true);
       await expect(stat(candidatePath)).rejects.toMatchObject({ code: "ENOENT" });
+      const replayedMove = await client.callTool({
+        name: "quarantine_move",
+        arguments: { previewToken, operationId },
+      });
+      expect(replayedMove.isError).toBe(true);
 
       const restorePreview = await client.callTool({
         name: "quarantine_prepare_restore",
@@ -432,12 +447,31 @@ describe("production runtime services", () => {
       });
       const restoreToken = (restorePreview.structuredContent as { previewToken: string })
         .previewToken;
+      expect(restoreToken).toMatch(/^action-handle-/u);
+      const crossAction = await client.callTool({
+        name: "quarantine_purge",
+        arguments: { operationId, previewToken: restoreToken },
+      });
+      expect(crossAction.isError).toBe(true);
+      const crossObject = await client.callTool({
+        name: "quarantine_restore",
+        arguments: {
+          operationId: `other-operation-${randomUUID()}`,
+          previewToken: restoreToken,
+        },
+      });
+      expect(crossObject.isError).toBe(true);
       const restored = await client.callTool({
         name: "quarantine_restore",
         arguments: { operationId, previewToken: restoreToken },
       });
       expect(restored.isError).not.toBe(true);
       await expect(stat(candidatePath)).resolves.toBeDefined();
+      const replayedRestore = await client.callTool({
+        name: "quarantine_restore",
+        arguments: { operationId, previewToken: restoreToken },
+      });
+      expect(replayedRestore.isError).toBe(true);
     } finally {
       await client.close();
       await server.close();

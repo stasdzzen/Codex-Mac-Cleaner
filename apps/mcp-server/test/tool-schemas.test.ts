@@ -3,6 +3,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
 import {
+  APP_VISIBLE_TOOL_DEFINITIONS,
   MODEL_VISIBLE_TOOL_DEFINITIONS,
   buildToolResult,
   createMcpServer,
@@ -144,6 +145,17 @@ describe("model-visible MCP skeleton", () => {
       expect(() => definition.inputSchema.parse({ unknown: true })).toThrow();
       expect(() => definition.outputSchema.parse({ unknown: true })).toThrow();
     }
+  });
+
+  it("legacy previewToken field описан только как opaque action handle", () => {
+    const inputHandle =
+      APP_VISIBLE_TOOL_DEFINITIONS.quarantine_move.inputSchema.shape.previewToken;
+    const outputHandle =
+      APP_VISIBLE_TOOL_DEFINITIONS.quarantine_prepare_move.outputSchema.shape
+        .previewToken;
+    expect(inputHandle.description).toMatch(/opaque action handle/u);
+    expect(outputHandle.description).toMatch(/opaque action handle/u);
+    expect(inputHandle.description).toMatch(/core token server-only/u);
   });
 
   it("проверяет platform guard до создания server", () => {

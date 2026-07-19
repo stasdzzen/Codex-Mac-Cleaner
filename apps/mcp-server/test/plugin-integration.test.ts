@@ -436,6 +436,23 @@ describe("полная интеграция MCP App", () => {
     expect(html).toContain("Ожидание безопасного snapshot");
   });
 
+  it("не выпускает core preview secret в source или compiled package", async () => {
+    const [source, runtime] = await Promise.all([
+      readFile(new URL("../src/runtime.ts", import.meta.url), "utf8"),
+      readFile(
+        new URL("../../../.codex-plugin/runtime/server.js", import.meta.url),
+        "utf8",
+      ),
+    ]);
+    expect(source).not.toMatch(/previewToken:\s*preview\.secret/u);
+    expect(source).not.toMatch(/token:\s*input\.previewToken/u);
+    expect(runtime).toContain("action-handle-");
+    expect(runtime).not.toMatch(
+      /previewToken:[A-Za-z_$][\w$]*\.secret/u,
+    );
+    expect(runtime).not.toMatch(/token:[A-Za-z_$][\w$]*\.previewToken/u);
+  });
+
   it("скомпилированный stdio runtime выполняет безопасный audit/dashboard flow", async () => {
     const repositoryRoot = new URL("../../../", import.meta.url).pathname;
     const runtimePath = new URL(
@@ -641,6 +658,7 @@ describe("полная интеграция MCP App", () => {
         });
         const previewToken = (preview.structuredContent as { previewToken: string })
           .previewToken;
+        expect(previewToken).toMatch(/^action-handle-/u);
         const operationId = `operation-${randomUUID()}`;
         const moved = await client.callTool({
           name: "quarantine_move",
@@ -657,6 +675,7 @@ describe("полная интеграция MCP App", () => {
         const restoreToken = (
           restorePreview.structuredContent as { previewToken: string }
         ).previewToken;
+        expect(restoreToken).toMatch(/^action-handle-/u);
         const restored = await client.callTool({
           name: "quarantine_restore",
           arguments: { operationId, previewToken: restoreToken },
