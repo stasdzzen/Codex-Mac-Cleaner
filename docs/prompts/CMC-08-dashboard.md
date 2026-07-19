@@ -5,7 +5,7 @@ description: Готовый вход Worker для автономного тём
 tags: [prompt, worker, ui, shadcn, cmc-08]
 status: approved
 owner: Architect
-date: 2026-07-15
+date: 2026-07-19
 ---
 
 # Готовый промпт
@@ -17,7 +17,7 @@ date: 2026-07-15
 
 До любых package/runtime изменений запусти `corepack pnpm install --frozen-lockfile`, сохрани checksum `pnpm-lock.yaml` перед командой и подтверди, что frozen installation его не изменила; изменение lockfile на этом шаге — fail-closed blocker. Если реализация меняет package manifest, workspace dependency или pinned dependency, обнови `pnpm-lock.yaml` осознанно, обязательно включи требуемое изменение в PR этой же Issue, затем снова запусти `corepack pnpm install --frozen-lockfile` и подтверди неизменность уже подготовленного lockfile после проверки.
 
-Собери автономный тёмный Audit Dashboard на React/Vite и локальных shadcn components: Card, Progress, Table, Badge, Sheet, Alert, AlertDialog, Skeleton, Tabs, Button, Tooltip и sonner. Используй semantic tokens, не raw colors, не CDN и не ручные dark overrides. Dashboard имеет пять вкладок: «Обзор», «Находки», «Карантин», «Исключения», «Расписание»; behavior последних двух добавляют CMC-12/13, до этого они показывают честное dependency state.
+Собери автономный тёмный Audit Dashboard на React/Vite и локальных shadcn components: Card, Progress, Table, Badge, Sheet, Alert, AlertDialog, Skeleton, Tabs, Button, Tooltip и sonner. Используй semantic tokens, не raw colors, не CDN и не ручные dark overrides. Dashboard имеет пять вкладок: «Обзор», «Находки», «Карантин», «Исключения», «Расписание». Behavior «Исключений» добавляет CMC-12; «Расписание» во всём v0.1 остаётся честно disabled и предлагает только ручной аудит. Host lifecycle перенесён в post-v0.1 CMC-13.
 
 Работай через frozen synthetic field fixtures. UI показывает `FindingFacts`, `ReclaimEstimate`, coverage, `supportLevel`, label, confidence, risk, evidence и blocking reason текстом. `allowedActions`, `StorageSummary` и `DiskObservation` приходят с сервера; UI не вычисляет policy, размеры или free-space delta. Actionable finding имеет «Переместить в карантин», «Исключить» и «Пропустить сейчас»: skip меняет только `skippedFindingIds`, exclude делегируется будущему CMC-12, quarantine открывает подтверждение одного объекта с точными последствиями. `unsupported_manual` показывает «Требует расширенного режима» без mutation/shell. Поддержи `cancelling`/`cancelled`. В Quarantine Center только поэлементные «Восстановить» и «Удалить навсегда», без bulk/auto purge. Widget state не содержит path/token/policy. Старый `stateVersion` отбрасывается.
 

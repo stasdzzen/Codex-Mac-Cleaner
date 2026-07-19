@@ -5,7 +5,7 @@ description: Активы, доверенные границы, основные
 tags: [safety, threat-model, privacy, supply-chain]
 status: approved
 owner: Architect
-date: 2026-07-18
+date: 2026-07-19
 ---
 
 # Контекст
@@ -60,9 +60,9 @@ date: 2026-07-18
 | Legacy exclusion мигрирует неоднозначно | Старое правило скрывает другой объект | Atomic validated migration; `migration_required` оставляет finding видимым и блокирует tokens |
 | Excluded finding получает preview | Mutation объекта вопреки решению пользователя | Exclusion проверяется до дорогого анализа и перед token issuance; preview запрещён |
 | Повреждённая или новая schema exclusions | Тихая потеря правил либо скрытие findings | Versioned migrations; неизвестная schema не скрывает findings и блокирует destructive-token issuance |
-| Forged schedule request или duplicate click | Скрытая или дублирующая automation | Явный opt-in, server intent, host confirmation, один opaque automation ID и идемпотентный update |
-| Отсутствующая host capability | Скрытый cron/LaunchAgent fallback | Disabled state; никаких альтернативных scheduler-компонентов |
-| Scheduled run запускает mutation | Фоновое удаление без решения пользователя | Фиксированный read-only prompt, пустые mutation credentials/tokens и contract test |
+| Forged schedule request или lifecycle click в v0.1 | Скрытая automation или ложный release claim | Инертный contract skeleton, disabled UI, fail-closed lifecycle outcome и отсутствие opaque automation ID |
+| Отсутствующая host capability | Скрытый cron/LaunchAgent fallback | Disabled/manual-run state; никаких альтернативных scheduler-компонентов |
+| Будущий scheduled run запускает mutation | Фоновое удаление без решения пользователя | Post-v0.1 owner decision, фиксированный read-only prompt, пустые mutation credentials/tokens и отдельные CMC-13 tests |
 | Персональные данные разработчика попали в public package | Утечка путей, app inventory или решений владельца | Synthetic-only fixtures, package allowlist и privacy scan docs/snapshots/logs/PR evidence |
 | Raw correlation input попал в test snapshot или PR evidence | Публичная утечка app inventory/signing/package claims или token | Seeded runtime fixture builder; checked-in golden содержит только safe view/digests; privacy canary scan |
 | Официальный uninstaller проигнорирован | Неполное или небезопасное ручное удаление | Uninstaller evidence становится recommended method и блокирует manual quarantine, когда применим |
@@ -80,7 +80,7 @@ date: 2026-07-18
 * Widget → app-visible mutation-tool: UI-сессия и preview token не заменяют серверную политику.
 * Adapters → Correlation Resolver: raw local claims существуют только в памяти сервера; adapters и OS output недоверенны.
 * Correlation Resolver → Policy Engine: только immutable revision, typed facts и coverage certificates; safe view не является authority.
-* Widget → schedule intent → Skill/host layer: MCP App не имеет прямого доступа к host-native automation; capability и подтверждение обязательны.
+* Widget → schedule skeleton: в v0.1 MCP App не создаёт host action и показывает только disabled/manual-run fallback; post-v0.1 bridge остаётся отдельной boundary.
 * Сервер → ОС и файловая система: все ответы ОС и пути считаются изменяемыми.
 * Release pipeline → пользователь: артефакт должен быть связан с исходным коммитом и checksum.
 
@@ -91,7 +91,7 @@ date: 2026-07-18
 * Компрометация процесса с тем же UID после подтверждения может нарушить локальное состояние; recovery должен остановиться на противоречии.
 * Анализ владельца артефакта не может быть абсолютно точным; поэтому risk-категории остаются analysis-only.
 * `DiskObservation` может изменяться из-за APFS snapshots, compression и других процессов; продукт показывает время наблюдения и не приписывает delta себе.
-* Codex automation capability может отсутствовать или изменить контракт; продукт показывает состояние capability и не обещает расписание до подтверждённого host result.
+* Codex automation capability может отсутствовать или изменить контракт; v0.1 вообще не обещает расписание, а post-v0.1 capability нельзя заявить без отдельного owner decision и подтверждённого host result.
 * Stable identity может быть неполной для необычного объекта; в этом случае exclusion не совпадает, finding остаётся видимым, а mutation работает fail closed.
 * macOS sources не дают общей транзакционной snapshot API; logical Snapshot A/B и fingerprints обнаруживают известные изменения, но неопределённость остаётся `unknown`.
 * Installation key в файле `0600` не защищает от уже скомпрометированного процесса того же UID; продукт ограничивает переносимость и dictionary attack, но не заявляет защиту от такого malware.

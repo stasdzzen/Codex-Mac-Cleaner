@@ -5,7 +5,7 @@ description: Имена, видимость, влияние и данные tool
 tags: [contracts, mcp, tools, ui]
 status: approved
 owner: Architect
-date: 2026-07-18
+date: 2026-07-19
 ---
 
 # Архитектурный тип
@@ -23,8 +23,8 @@ date: 2026-07-18
 | `dashboard_open` | Открыть Audit Dashboard | `auditId`, `revision` | widget snapshot |
 | `finding_inspect` | Повторно проверить находку | `findingId`, `auditRevision` | evidence, policy, stale flag |
 | `finding_reveal` | Показать объект в Finder | `findingId`, `auditRevision` | outcome |
-| `schedule_intent_get` | Получить ожидающий host intent | `intentId` | безопасные day/time/action и capability requirement |
-| `schedule_intent_complete` | Записать результат host automation action | `intentId`, `requestId`, outcome, opaque automation ID | schedule state |
+| `schedule_intent_get` | Зарезервированный post-v0.1 host-intent skeleton | `intentId` | в v0.1 только безопасный unavailable outcome |
+| `schedule_intent_complete` | Зарезервированное завершение post-v0.1 host intent | `intentId`, `requestId`, outcome, opaque automation ID | в v0.1 lifecycle не активен |
 
 # App-visible tools
 
@@ -44,8 +44,8 @@ date: 2026-07-18
 | `exclusion_remove` | Вернуть одно исключение в будущую проверку | Нет |
 | `exclusion_reset_prepare` | Подготовить подтверждение сброса всех исключений | Нет |
 | `exclusion_reset` | Удалить все пользовательские исключения из local state | Нет |
-| `schedule_request` | Создать enable/update/pause/resume/delete intent | Нет |
-| `schedule_state` | Получить capability и безопасное состояние расписания | Нет |
+| `schedule_request` | Зарезервировать enable/update/pause/resume/delete intent для будущей совместимости; v0.1 fail closed | Нет |
+| `schedule_state` | Получить честное disabled/manual-run состояние v0.1 | Нет |
 
 # Аннотации tools
 
@@ -77,7 +77,7 @@ date: 2026-07-18
 | `schedule_request` | `false` | `false` | `true` |
 | `schedule_state` | `true` | `false` | `true` |
 
-`audit_start`, `audit_cancel` и `schedule_intent_complete` имеют `readOnlyHint: false`, потому что меняют локальный state, хотя не меняют сканируемые данные. Prepare-tools создают одноразовые tokens. `finding_reveal` меняет состояние Finder. Exclusion-tools меняют только plugin-owned local state. `schedule_request` создаёт intent, но не вызывает host-native automation. Все операции идемпотентны по `requestId`, `operationId` или точному входному snapshot.
+`audit_start`, `audit_cancel` и `schedule_intent_complete` имеют `readOnlyHint: false`, потому что меняют локальный state, хотя не меняют сканируемые данные. Prepare-tools создают одноразовые tokens. `finding_reveal` меняет состояние Finder. Exclusion-tools меняют только plugin-owned local state. Schedule tools сохраняют строгий compatibility skeleton, но в v0.1 не создают host-native automation и не являются release claim lifecycle. Все операции идемпотентны по `requestId`, `operationId` или точному входному snapshot.
 
 # Правила входов
 
@@ -85,7 +85,7 @@ date: 2026-07-18
 * Клиент не передаёт owner identity, correlation source, requirement profile или applicability. Эти значения разрешает и выбирает только сервер.
 * Exclusion-tools принимают только `findingId`/revision либо server-generated `exclusionId`; path, owner, bundle ID и signing identity вычисляет сервер.
 * `schedule_request` принимает закрытые day/time/action fields и не принимает raw RRULE, cron, LaunchAgent, shell command или arbitrary prompt.
-* `schedule_intent_complete` может завершить только существующий pending intent и только записывает host outcome; само создание/изменение automation остаётся обязанностью Skill/host layer.
+* В v0.1 `schedule_request` не активирует lifecycle, а `schedule_intent_complete` не может записать успешный host outcome; state остаётся disabled. Полный bridge включается только в post-v0.1 CMC-13 после owner decision.
 * `findingId`, `auditRevision`, `correlationRevisionId`, `operationId` и opaque action handle обязательны там, где применимы; preview token остаётся server-side.
 * `audit_cancel` не принимает profile, path, revision или mutation-параметры.
 * Preview token хранится server-side и привязан к действию, UI session, finding/quarantine entry, immutable audit/correlation revision, candidate/parent fingerprints, edge/coverage digests, policy/derivation versions, exclusion state и сроку пять минут.
@@ -103,7 +103,7 @@ date: 2026-07-18
 * Widget-only finding содержит safe `FindingFacts`, агрегированный `ownerBindingState`, server-owned `requirementProfileId`, `coverageSummary`, `staleDuringAudit` и `ReclaimEstimate`; model-visible форма получает более краткую безопасную сводку. Обе формы не содержат full path, app inventory, bundle/package/signing claims, historical bindings или correlation graph.
 * `artifactExistenceState` относится к cleanup-target, а `ownerApplicationState`/`ownerExecutableState` — к отдельно разрешённому owner. Legacy `targetExecutableState` не используется для выдачи mutation action.
 * `requirementApplicability=not_applicable` отображается как «не относится к этому профилю», а не как «не найдено». Positive evidence всегда остаётся blocking независимо от applicability других requirements.
-* Model-visible schedule output не содержит raw RRULE; automation ID считается opaque и возвращается только bridge flow, которому он нужен для update/pause/resume/delete.
+* Model-visible schedule output не содержит raw RRULE. В v0.1 automation ID отсутствует, а output сообщает disabled/manual-run fallback; opaque ID и lifecycle становятся допустимы только после CMC-13.
 * Model-visible audit summary показывает только `excludedCount`, а не identities исключённых объектов.
 * `absent` показывается только как server-owned fact с полным same-snapshot coverage; причины `unknown` представлены безопасными gap codes.
 * `unsupported_manual` не содержит mutation actions, готовую shell-команду или sudo-рекомендацию.
@@ -118,7 +118,7 @@ CSP не содержит `connectDomains`, `resourceDomains` или `frameDomai
 
 # Host automation boundary
 
-MCP App не объявляет host-native automation tool и не вызывает его через MCP. Widget создаёт `schedule_request`; Skill читает intent через `schedule_intent_get`, проверяет доступность Codex automation capability, получает отдельное подтверждение пользователя и вызывает host tool. Затем `schedule_intent_complete` сохраняет безопасный outcome. Если capability отсутствует, intent завершается `capability_unavailable`, а UI не создаёт замену через cron или LaunchAgent.
+В v0.1 host automation boundary не активен. MCP App не объявляет и не вызывает host-native automation tool; вкладка «Расписание» показывает disabled/manual-run fallback и использует обычный `audit_start`. Schedule-intent endpoints остаются инертной compatibility groundwork и не могут завершиться успешным lifecycle outcome. Создание/update/pause/resume/delete и scheduled prompt переходят в post-v0.1 CMC-13. Ни сейчас, ни после её запуска нельзя создавать замену через cron, LaunchAgent или скрытый scheduler.
 
 # Источники
 

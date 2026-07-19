@@ -1,6 +1,6 @@
 ```cto-issue
 schema: 1
-dependencies: #13
+dependencies: #41
 conflicts: none
 touched_paths: .github/workflows/; scripts/; tests/security/; tests/plugin/; docs/release/; README.md
 risk: high
@@ -12,15 +12,15 @@ execution_profile: deep
 
 ### Goal
 
-Complete universal-policy, privacy, exclusions/schedule, field-E2E and clean-room verification and produce deterministic release evidence without publishing.
+Complete universal-policy, privacy, exclusions, field-E2E and clean-room verification, prove the v0.1 schedule surface is inert and disabled, and produce deterministic release evidence without publishing.
 
 ### Scope
 
-Add CMC-10 security tests for universal protected scopes, SafeMetadata, FindingFacts, authoritative owner bindings, requirement profiles/applicability, public synthetic fixtures, exclusions/migrations/identity mismatch, official uninstaller, receipt lifecycle, protected metadata, schedule lifecycle/fallback/read-only prompt, cancellation races, quarantine metrics, purge failures and visibility; add no-terminal clean-room/new-task tests, non-publishing CI, deterministic packaging and an uncompleted real-Mac owner protocol.
+Add CMC-10 security tests for universal protected scopes, SafeMetadata, FindingFacts, authoritative owner bindings, requirement profiles/applicability, public synthetic fixtures, exclusions/migrations/identity mismatch, official uninstaller, receipt lifecycle, protected metadata, inert schedule schemas/state and the disabled/manual-run fallback, cancellation races, quarantine metrics, purge failures and visibility; add no-terminal clean-room/new-task tests, non-publishing CI, deterministic packaging and an uncompleted real-Mac owner protocol.
 
 ### Acceptance criteria
 
-Automated gates A–H pass on the final SHA. Forged findings for credential/browser-profile/personal/current-project/plugin/Codex/Git scopes cannot produce preview. Owner binding cannot be forged from path/name/bundle-only hints or user attestation; profile/applicability cannot be selected by the client; `not_applicable` never suppresses positive evidence. A production-adapter generated user-Library cache/log completes audit → prepare → move → restore, while Application Support/Containers/Preferences/WebKit/HTTPStorages/Saved State/database/sync/VPN/personal/autostart remain inspect-only. Excluded findings cannot mutate; identity mismatch is visible; migrations and corrupt-state fail-closed behavior pass. Official uninstaller, receipt lifecycle, protected metadata, active process and missing executable cases are proven. Schedule creates one automation, supports update/pause/resume/delete, runs read-only and has an honest no-capability fallback. Skip now calls no tool; Move to quarantine affects one object; no bulk exists. Public package contains no username, home paths, personal app names/decisions, real inventory, raw secrets, historical bindings or local identities. Clean-room completes button-only quarantine/exclude/skip/restore/purge without terminal. Manual smoke, tag and release remain incomplete owner gates.
+Automated gates A–H pass on the final SHA. Forged findings for credential/browser-profile/personal/current-project/plugin/Codex/Git scopes cannot produce preview. Owner binding cannot be forged from path/name/bundle-only hints or user attestation; profile/applicability cannot be selected by the client; `not_applicable` never suppresses positive evidence. A production-adapter generated user-Library cache/log completes audit → prepare → move → restore, while Application Support/Containers/Preferences/WebKit/HTTPStorages/Saved State/database/sync/VPN/personal/autostart remain inspect-only. Excluded findings cannot mutate; identity mismatch is visible; migrations and corrupt-state fail-closed behavior pass. Official uninstaller, receipt lifecycle, protected metadata, active process and missing executable cases are proven. The Schedule tab is an honest disabled/manual-run fallback: lifecycle controls and next/last scheduled run are absent, manual run uses the ordinary read-only audit, inert schemas/intents create no successful host outcome or automation ID, and no cron, LaunchAgent or hidden scheduler is created. Skip now calls no tool; Move to quarantine affects one object; no bulk exists. Public package contains no username, home paths, personal app names/decisions, real inventory, raw secrets, historical bindings or local identities. Clean-room completes button-only quarantine/exclude/skip/restore/purge without terminal. Manual smoke, tag and release remain incomplete owner gates.
 
 ### Verification
 
@@ -34,15 +34,15 @@ Do not create a tag, release, publication, deploy, credential change, real-Mac m
 
 ### Цель
 
-Завершить universal-policy, privacy, exclusions/schedule, field-E2E и clean-room verification и подготовить deterministic release evidence без публикации.
+Завершить universal-policy, privacy, exclusions, field-E2E и clean-room verification, доказать инертность и disabled-состояние schedule surface v0.1 и подготовить deterministic release evidence без публикации.
 
 ### Объём
 
-Добавить security tests CMC-10 для universal protected scopes, SafeMetadata, FindingFacts, authoritative owner bindings, requirement profiles/applicability, public synthetic fixtures, exclusions/migrations/identity mismatch, official uninstaller, receipt lifecycle, protected metadata, schedule lifecycle/fallback/read-only prompt, cancellation races, quarantine metrics, purge failures и visibility; no-terminal clean-room/new-task tests, CI без публикации, deterministic packaging и незаполненный real-Mac owner protocol.
+Добавить security tests CMC-10 для universal protected scopes, SafeMetadata, FindingFacts, authoritative owner bindings, requirement profiles/applicability, public synthetic fixtures, exclusions/migrations/identity mismatch, official uninstaller, receipt lifecycle, protected metadata, инертных schedule schemas/state и disabled/manual-run fallback, cancellation races, quarantine metrics, purge failures и visibility; no-terminal clean-room/new-task tests, CI без публикации, deterministic packaging и незаполненный real-Mac owner protocol.
 
 ### Критерии приёмки
 
-Автоматические части gates A–H проходят на финальном SHA. Forged findings для credential/browser-profile/personal/current-project/plugin/Codex/Git scopes не создают preview. Owner binding нельзя подделать path/name/bundle-only hint или user attestation; клиент не выбирает profile/applicability; `not_applicable` не подавляет positive evidence. Generated user-Library cache/log через production adapters проходит audit → prepare → move → restore, а Application Support/Containers/Preferences/WebKit/HTTPStorages/Saved State/database/sync/VPN/personal/autostart остаются inspect-only. Excluded finding не мутируется; identity mismatch видим; migrations и corrupt-state fail-closed behavior проходят. Official uninstaller, receipt lifecycle, protected metadata, active process и missing executable cases доказаны. Schedule создаёт одну automation, поддерживает update/pause/resume/delete, запускает только read-only audit и имеет честный no-capability fallback. «Пропустить сейчас» без tool; «Переместить в карантин» действует на один объект; bulk отсутствует. Public package не содержит username, home paths, personal app names/decisions, real inventory, raw secrets, historical bindings или local identities. Clean-room выполняет button-only quarantine/exclude/skip/restore/purge без terminal. Manual smoke, tag и release остаются незавершёнными owner gates.
+Автоматические части gates A–H проходят на финальном SHA. Forged findings для credential/browser-profile/personal/current-project/plugin/Codex/Git scopes не создают preview. Owner binding нельзя подделать path/name/bundle-only hint или user attestation; клиент не выбирает profile/applicability; `not_applicable` не подавляет positive evidence. Generated user-Library cache/log через production adapters проходит audit → prepare → move → restore, а Application Support/Containers/Preferences/WebKit/HTTPStorages/Saved State/database/sync/VPN/personal/autostart остаются inspect-only. Excluded finding не мутируется; identity mismatch видим; migrations и corrupt-state fail-closed behavior проходят. Official uninstaller, receipt lifecycle, protected metadata, active process и missing executable cases доказаны. Вкладка «Расписание» — честный disabled/manual-run fallback: lifecycle controls и next/last scheduled run отсутствуют, manual run использует обычный read-only audit, инертные schemas/intents не создают успешный host outcome или automation ID, cron, LaunchAgent и скрытый scheduler не создаются. «Пропустить сейчас» без tool; «Переместить в карантин» действует на один объект; bulk отсутствует. Public package не содержит username, home paths, personal app names/decisions, real inventory, raw secrets, historical bindings или local identities. Clean-room выполняет button-only quarantine/exclude/skip/restore/purge без terminal. Manual smoke, tag и release остаются незавершёнными owner gates.
 
 ### Проверка
 

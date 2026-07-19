@@ -5,7 +5,7 @@ description: Блокирующие условия готовности реал
 tags: [quality, acceptance, release, gates]
 status: approved
 owner: Architect
-date: 2026-07-18
+date: 2026-07-19
 ---
 
 # Gate A — документация и лицензия
@@ -92,8 +92,8 @@ date: 2026-07-18
 * «Пропустить сейчас» — session-local no-op без tool call; «Исключить» создаёт versioned local state, а «Переместить в карантин» означает подтверждённый quarantine одного объекта.
 * Вкладка «Исключения» поддерживает persistence, search/filter, «Снова проверять», поэлементное удаление и подтверждаемый reset all.
 * Exclusion store содержит installation-keyed domain-separated digests без plaintext identity; plain hash/public salt отклоняются, legacy migration atomic и fail closed.
-* Вкладка «Расписание» показывает capability, opt-in, day/time, next/last run и update/pause/resume/delete без raw RRULE.
-* Без host automation capability schedule disabled; cron, LaunchAgent и скрытый fallback отсутствуют.
+* Вкладка «Расписание» v0.1 показывает только честный disabled/manual-run fallback; opt-in, day/time, next/last scheduled run и lifecycle controls отсутствуют.
+* Инертный schedule skeleton не создаёт intent с host side effect или automation ID; cron, LaunchAgent и скрытый fallback отсутствуют.
 * `unsupported_manual` содержит только объяснение границы, без mutation, `sudo` и готовой shell-команды.
 * Вкладки, диалоги и действия доступны с клавиатуры и возвращают focus после закрытия.
 
@@ -104,8 +104,8 @@ date: 2026-07-18
 * GitHub Release содержит checksum, SBOM и provenance, связанные с tag и commit.
 * Clean-room запуск в новой задаче Codex открывает аудит и Dashboard без копирования команд в терминал.
 * Все решения пользователя выполняются отдельными кнопками для одного объекта; terminal confirmation flow отсутствует.
-* Scheduled run выполняет только read-only аудит, применяет exclusions, не создаёт mutation token и не запрашивает `sudo`.
-* Повторное включение расписания обновляет одну automation; duplicate, pause, resume и delete покрыты тестами.
+* Clean-room v0.1 не заявляет scheduled run или host automation lifecycle; manual fallback запускает обычный read-only audit без mutation token и `sudo`.
+* Duplicate, update, pause, resume, delete automation и scheduled-prompt behavior не являются Gate H v0.1 и проверяются только в post-v0.1 CMC-13 после owner decision.
 * Публичный package allowlist и privacy scan не находят username, home paths, персональные app names/decisions или real-Mac inventory.
 * После merge CMC-22 тот же CMC-21 PR #38 проходит deterministic synthetic fixtures, binding/profile/coverage/ambiguity/mismatch matrix и production `~/Library/Caches|Logs` audit → prepare → move → restore integration до возобновления CMC-09; затем тот же PR #34 проходит packaged stdio E2E до merge.
 * Real-Mac smoke на macOS 26 Apple Silicon подписан отдельным проверяющим или приложен как воспроизводимый протокол.

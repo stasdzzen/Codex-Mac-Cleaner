@@ -1,5 +1,11 @@
 # История архитектурного канона
 
+## 2026-07-19
+
+* **Граница v0.1**: ADR-0014 перенёс создание/update/pause/resume/delete host-native Codex automation и scheduled prompt в capability-релиз после v0.1.
+* **Честный fallback**: schedule schemas/intents и вкладка «Расписание» остаются только инертной compatibility groundwork; v0.1 предлагает ручной read-only audit и не создаёт automation, cron, LaunchAgent или скрытый scheduler.
+* **Очередь**: CMC-10 больше не зависит от CMC-13; CMC-13 зависит от CMC-10 и заблокирована до отдельного owner decision.
+
 ## 2026-07-18
 
 * **Actionable Library remnants**: CMC-22/ADR-0013 разделил Library artifact и owner application, ввёл authoritative `remnant_of`, receipt lifecycle и server-owned requirement profiles; в v0.1 actionable только приватные регенерируемые cache/log, остальные категории inspect-only.

@@ -17,6 +17,7 @@
 * [ADR-0011: публичный продукт, пользовательские исключения и Codex-расписание](ADR-0011-public-plugin-exclusions-scheduling.md)
 * [ADR-0012: server-owned correlation identity и доказуемое отсутствие](ADR-0012-server-owned-correlation-identity.md)
 * [ADR-0013: actionable correlation для остатков в user Library](ADR-0013-actionable-library-remnant-correlation.md)
+* [ADR-0014: host-native automation после v0.1](ADR-0014-defer-host-automation-post-v01.md)
 
 ## Правило изменения
 
