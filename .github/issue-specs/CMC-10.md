@@ -2,7 +2,7 @@
 schema: 1
 dependencies: #41
 conflicts: none
-touched_paths: .github/workflows/; scripts/; tests/security/; tests/plugin/; docs/release/; README.md
+touched_paths: packages/contracts/; packages/storage/; apps/mcp-server/; apps/widget/; skills/; .github/workflows/; scripts/; tests/security/; tests/plugin/; docs/release/; README.md
 risk: high
 parallel_safety: serial
 execution_profile: deep
@@ -16,7 +16,7 @@ Complete universal-policy, privacy, exclusions, field-E2E and clean-room verific
 
 ### Scope
 
-Add CMC-10 security tests for universal protected scopes, SafeMetadata, FindingFacts, authoritative owner bindings, requirement profiles/applicability, public synthetic fixtures, exclusions/migrations/identity mismatch, official uninstaller, receipt lifecycle, protected metadata, inert schedule schemas/state and the disabled/manual-run fallback, cancellation races, quarantine metrics, purge failures and visibility; add no-terminal clean-room/new-task tests, non-publishing CI, deterministic packaging and an uncompleted real-Mac owner protocol.
+Add CMC-10 security tests for universal protected scopes, SafeMetadata, FindingFacts, authoritative owner bindings, requirement profiles/applicability, public synthetic fixtures, exclusions/migrations/identity mismatch, official uninstaller, receipt lifecycle, protected metadata, inert schedule schemas/state and the disabled/manual-run fallback, cancellation races, quarantine metrics, purge failures and visibility; add no-terminal clean-room/new-task tests, non-publishing CI, deterministic packaging and an uncompleted real-Mac owner protocol. When a gate proves an existing defect, first add a failing regression test and then apply only the minimum security/release hardening fix within the declared touched paths that is required to pass the gate, including deactivation of any successful v0.1 schedule lifecycle outcome or automation ID. This does not authorize feature expansion.
 
 ### Acceptance criteria
 
@@ -28,7 +28,7 @@ Run the exact protected-scope, privacy, field-E2E, no-terminal, security, plugin
 
 ### Constraints
 
-Do not create a tag, release, publication, deploy, credential change, real-Mac mutation outside the owner protocol, false manual result, merge or self-review.
+Runtime changes are allowed only after a failing gate/regression test proves an existing defect and only as the minimum hardening needed to restore the approved v0.1 canon within the declared touched paths. Do not add features, broaden cleanup categories or perform unrelated refactors. Do not create a tag, release, publication, deploy, credential change, real-Mac mutation outside the owner protocol, false manual result, merge or self-review.
 
 ## Русский
 
@@ -38,7 +38,7 @@ Do not create a tag, release, publication, deploy, credential change, real-Mac m
 
 ### Объём
 
-Добавить security tests CMC-10 для universal protected scopes, SafeMetadata, FindingFacts, authoritative owner bindings, requirement profiles/applicability, public synthetic fixtures, exclusions/migrations/identity mismatch, official uninstaller, receipt lifecycle, protected metadata, инертных schedule schemas/state и disabled/manual-run fallback, cancellation races, quarantine metrics, purge failures и visibility; no-terminal clean-room/new-task tests, CI без публикации, deterministic packaging и незаполненный real-Mac owner protocol.
+Добавить security tests CMC-10 для universal protected scopes, SafeMetadata, FindingFacts, authoritative owner bindings, requirement profiles/applicability, public synthetic fixtures, exclusions/migrations/identity mismatch, official uninstaller, receipt lifecycle, protected metadata, инертных schedule schemas/state и disabled/manual-run fallback, cancellation races, quarantine metrics, purge failures и visibility; no-terminal clean-room/new-task tests, CI без публикации, deterministic packaging и незаполненный real-Mac owner protocol. Когда gate доказывает существующий дефект, сначала добавить падающий regression test, затем внести только минимальный security/release hardening fix в объявленных touched paths, необходимый для прохождения gate, включая деактивацию любого успешного schedule lifecycle outcome или automation ID в v0.1. Это не разрешает расширение функций.
 
 ### Критерии приёмки
 
@@ -50,4 +50,4 @@ Do not create a tag, release, publication, deploy, credential change, real-Mac m
 
 ### Ограничения
 
-Не создавать tag, release, publication, deploy, credential change, real-Mac mutation вне owner protocol, ложный manual result, merge или self-review.
+Runtime-изменения разрешены только после доказательства существующего дефекта падающим gate/regression test и только как минимальный hardening для восстановления утверждённого канона v0.1 в объявленных touched paths. Не добавлять функции, не расширять cleanup-категории и не выполнять несвязанные refactors. Не создавать tag, release, publication, deploy, credential change, real-Mac mutation вне owner protocol, ложный manual result, merge или self-review.
