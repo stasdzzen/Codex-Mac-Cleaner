@@ -4,12 +4,18 @@
   "type": "module",
   "exports": "./src/server.ts",
   "scripts": {
+    "build:plugin": "node scripts/build-plugin-runtime.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run test"
   },
   "dependencies": {
+    "@codex-mac-cleaner/adapters": "workspace:*",
+    "@codex-mac-cleaner/classifier": "workspace:*",
     "@codex-mac-cleaner/contracts": "workspace:*",
+    "@codex-mac-cleaner/evidence": "workspace:*",
     "@codex-mac-cleaner/platform": "workspace:*",
+    "@codex-mac-cleaner/policy": "workspace:*",
+    "@codex-mac-cleaner/quarantine": "workspace:*",
     "@codex-mac-cleaner/storage": "workspace:*",
     "@modelcontextprotocol/sdk": "1.29.0",
     "zod": "4.4.3"

@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "codexMacCleaner": {
+      "title": "Codex Mac Cleaner",
+      "description": "Локальный stdio MCP App без сетевого транспорта и телеметрии.",
+      "cwd": ".",
+      "command": "node",
+      "args": [
+        "${PLUGIN_ROOT}/.codex-plugin/runtime/server.js",
+        "--stdio"
+      ],
+      "env": {
+        "CODEX_MAC_CLEANER_PLUGIN_ROOT": "${PLUGIN_ROOT}",
+        "CODEX_MAC_CLEANER_PLUGIN_DATA": "${PLUGIN_DATA}"
+      }
+    }
+  }
+}
