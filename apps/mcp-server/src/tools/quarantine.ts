@@ -16,7 +16,7 @@ const AppToolAnnotations = {
   idempotentHint: true,
 } as const;
 const LegacyOpaqueActionHandleSchema = OpaqueIdSchema.describe(
-  "Legacy transport field previewToken содержит только opaque action handle; core token server-only.",
+  "Legacy transport field previewToken содержит opaque action handle; core token server-only, exact operationId replay идемпотентен.",
 );
 
 export const QuarantineEntryModelSchema = z
@@ -110,7 +110,7 @@ export const APP_VISIBLE_QUARANTINE_TOOL_DEFINITIONS = {
   quarantine_move: {
     title: "Переместить в карантин",
     description:
-      "Перемещает один подтверждённый объект по одноразовому opaque action handle.",
+      "Перемещает один объект по opaque action handle; exact operationId replay возвращает прежний результат.",
     inputSchema: QuarantineMoveInputSchema,
     outputSchema: QuarantineActionOutputSchema,
     annotations: {

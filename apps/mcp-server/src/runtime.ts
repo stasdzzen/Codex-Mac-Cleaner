@@ -1328,20 +1328,28 @@ type RuntimeActionHandleBinding =
       expiresAt: string;
     }>;
 
-type RuntimeActionHandleExpectation =
-  | Readonly<{ action: "move"; uiSessionId: string }>
-  | Readonly<{
-      action: "restore" | "purge";
-      uiSessionId: string;
-      operationId: string;
-    }>;
+type RuntimeActionHandleExpectation = Readonly<{
+  action: "move" | "restore" | "purge";
+  uiSessionId: string;
+  operationId: string;
+}>;
+
+type RuntimeActionHandleRecord = {
+  readonly binding: RuntimeActionHandleBinding;
+  operationId: string | undefined;
+  state: "issued" | "running" | "succeeded";
+  inFlight: Promise<unknown> | undefined;
+  result: unknown;
+};
 
 /**
  * Session-local bridge между legacy transport field `previewToken` и
- * server-only core preview secret. Ни handle, ни registry не персистятся.
+ * server-only core preview secret. Successful exact replay возвращает
+ * сохранённый safe result; ни handle, ни registry не персистятся.
  */
 export class RuntimeActionHandleRegistry {
-  private readonly records = new Map<string, RuntimeActionHandleBinding>();
+  private readonly records = new Map<string, RuntimeActionHandleRecord>();
+  private readonly operationClaims = new Map<string, string>();
   private readonly now: () => number;
   private readonly createHandle: () => string;
 
@@ -1370,34 +1378,113 @@ export class RuntimeActionHandleRegistry {
       ) {
         continue;
       }
-      this.records.set(handle, Object.freeze({ ...binding }));
+      this.records.set(handle, {
+        binding: Object.freeze({ ...binding }),
+        operationId:
+          binding.action === "move" ? undefined : binding.operationId,
+        state: "issued",
+        inFlight: undefined,
+        result: undefined,
+      });
       return handle;
     }
     throw new Error("ACTION_HANDLE_GENERATION_FAILED");
   }
 
-  consume(handle: string, expected: RuntimeActionHandleExpectation): string {
-    const binding = this.records.get(handle);
-    if (binding === undefined) throw new Error("ACTION_HANDLE_INVALID");
-    if (Date.parse(binding.expiresAt) <= this.now()) {
-      this.records.delete(handle);
-      throw new Error("ACTION_HANDLE_EXPIRED");
+  private claimKey(expected: RuntimeActionHandleExpectation): string {
+    return [expected.action, expected.uiSessionId, expected.operationId].join(
+      "\u0000",
+    );
+  }
+
+  private remove(handle: string, record: RuntimeActionHandleRecord): void {
+    this.records.delete(handle);
+    if (record.operationId === undefined) return;
+    const claimKey = this.claimKey({
+      action: record.binding.action,
+      uiSessionId: record.binding.uiSessionId,
+      operationId: record.operationId,
+    });
+    if (this.operationClaims.get(claimKey) === handle) {
+      this.operationClaims.delete(claimKey);
     }
-    const operationMatches =
-      binding.action === "move" && expected.action === "move"
-        ? true
-        : binding.action !== "move" &&
-          expected.action !== "move" &&
-          binding.operationId === expected.operationId;
+  }
+
+  private expired(record: RuntimeActionHandleRecord): boolean {
+    return Date.parse(record.binding.expiresAt) <= this.now();
+  }
+
+  private claimOperation(
+    handle: string,
+    record: RuntimeActionHandleRecord,
+    expected: RuntimeActionHandleExpectation,
+  ): void {
+    if (record.operationId === undefined) {
+      record.operationId = expected.operationId;
+    } else if (record.operationId !== expected.operationId) {
+      throw new Error("ACTION_HANDLE_BINDING_MISMATCH");
+    }
+    const claimKey = this.claimKey(expected);
+    const claimedHandle = this.operationClaims.get(claimKey);
+    if (claimedHandle !== undefined && claimedHandle !== handle) {
+      const claimedRecord = this.records.get(claimedHandle);
+      if (
+        claimedRecord !== undefined &&
+        claimedRecord.state !== "succeeded" &&
+        this.expired(claimedRecord)
+      ) {
+        this.remove(claimedHandle, claimedRecord);
+      } else {
+        throw new Error("ACTION_HANDLE_OPERATION_CONFLICT");
+      }
+    }
+    this.operationClaims.set(claimKey, handle);
+  }
+
+  async execute<Result>(
+    handle: string,
+    expected: RuntimeActionHandleExpectation,
+    executor: (secret: string) => Promise<Result>,
+  ): Promise<Result> {
+    const record = this.records.get(handle);
+    if (record === undefined) throw new Error("ACTION_HANDLE_INVALID");
+    const { binding } = record;
     if (
       binding.action !== expected.action ||
       binding.uiSessionId !== expected.uiSessionId ||
-      !operationMatches
+      (binding.action !== "move" &&
+        binding.operationId !== expected.operationId)
     ) {
       throw new Error("ACTION_HANDLE_BINDING_MISMATCH");
     }
-    this.records.delete(handle);
-    return binding.secret;
+    if (record.state !== "succeeded" && this.expired(record)) {
+      this.remove(handle, record);
+      throw new Error("ACTION_HANDLE_EXPIRED");
+    }
+    this.claimOperation(handle, record, expected);
+    if (record.state === "succeeded") return record.result as Result;
+    if (record.state === "running") {
+      return record.inFlight as Promise<Result>;
+    }
+
+    const execution = Promise.resolve()
+      .then(() => executor(binding.secret))
+      .then(
+        (result) => {
+          record.state = "succeeded";
+          record.inFlight = undefined;
+          record.result = result;
+          return result;
+        },
+        (error: unknown) => {
+          record.state = "issued";
+          record.inFlight = undefined;
+          throw error;
+        },
+      );
+    record.state = "running";
+    record.inFlight = execution;
+    return execution;
   }
 }
 
@@ -1472,16 +1559,21 @@ class RuntimeQuarantineService implements QuarantineToolService {
   }
 
   async move(input: { previewToken: string; operationId: string }) {
-    const secret = this.actionHandles.consume(input.previewToken, {
-      action: "move",
-      uiSessionId: this.uiSessionId,
-    });
-    return this.action(
-      await this.controller.moveToQuarantine({
-        token: secret,
-        operationId: input.operationId,
+    return this.actionHandles.execute(
+      input.previewToken,
+      {
+        action: "move",
         uiSessionId: this.uiSessionId,
-      }),
+        operationId: input.operationId,
+      },
+      async (secret) =>
+        this.action(
+          await this.controller.moveToQuarantine({
+            token: secret,
+            operationId: input.operationId,
+            uiSessionId: this.uiSessionId,
+          }),
+        ),
     );
   }
 
@@ -1521,17 +1613,21 @@ class RuntimeQuarantineService implements QuarantineToolService {
   }
 
   async restore(input: { operationId: string; previewToken: string }) {
-    const secret = this.actionHandles.consume(input.previewToken, {
-      action: "restore",
-      uiSessionId: this.uiSessionId,
-      operationId: input.operationId,
-    });
-    return this.action(
-      await this.controller.restoreFromQuarantine({
-        operationId: input.operationId,
-        token: secret,
+    return this.actionHandles.execute(
+      input.previewToken,
+      {
+        action: "restore",
         uiSessionId: this.uiSessionId,
-      }),
+        operationId: input.operationId,
+      },
+      async (secret) =>
+        this.action(
+          await this.controller.restoreFromQuarantine({
+            operationId: input.operationId,
+            token: secret,
+            uiSessionId: this.uiSessionId,
+          }),
+        ),
     );
   }
 
@@ -1557,17 +1653,21 @@ class RuntimeQuarantineService implements QuarantineToolService {
   }
 
   async purge(input: { operationId: string; previewToken: string }) {
-    const secret = this.actionHandles.consume(input.previewToken, {
-      action: "purge",
-      uiSessionId: this.uiSessionId,
-      operationId: input.operationId,
-    });
-    return this.action(
-      await this.controller.purgeQuarantineEntry({
-        operationId: input.operationId,
-        token: secret,
+    return this.actionHandles.execute(
+      input.previewToken,
+      {
+        action: "purge",
         uiSessionId: this.uiSessionId,
-      }),
+        operationId: input.operationId,
+      },
+      async (secret) =>
+        this.action(
+          await this.controller.purgeQuarantineEntry({
+            operationId: input.operationId,
+            token: secret,
+            uiSessionId: this.uiSessionId,
+          }),
+        ),
     );
   }
 }

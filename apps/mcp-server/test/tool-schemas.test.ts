@@ -156,6 +156,7 @@ describe("model-visible MCP skeleton", () => {
     expect(inputHandle.description).toMatch(/opaque action handle/u);
     expect(outputHandle.description).toMatch(/opaque action handle/u);
     expect(inputHandle.description).toMatch(/core token server-only/u);
+    expect(inputHandle.description).toMatch(/exact operationId replay идемпотентен/u);
   });
 
   it("проверяет platform guard до создания server", () => {

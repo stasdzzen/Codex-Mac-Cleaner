@@ -419,6 +419,14 @@ describe("production runtime services", () => {
       expect(preview.isError).not.toBe(true);
       const previewToken = (preview.structuredContent as { previewToken: string }).previewToken;
       expect(previewToken).toMatch(/^action-handle-/u);
+      const duplicatePreview = await client.callTool({
+        name: "quarantine_prepare_move",
+        arguments: { findingId: finding?.findingId, auditRevision: 1 },
+      });
+      const duplicatePreviewToken = (
+        duplicatePreview.structuredContent as { previewToken: string }
+      ).previewToken;
+      expect(duplicatePreviewToken).not.toBe(previewToken);
       const operationId = `synthetic-operation-${randomUUID()}`;
       const forgedMove = await client.callTool({
         name: "quarantine_move",
@@ -429,17 +437,40 @@ describe("production runtime services", () => {
       });
       expect(forgedMove.isError).toBe(true);
       await expect(stat(candidatePath)).resolves.toBeDefined();
-      const moved = await client.callTool({
-        name: "quarantine_move",
-        arguments: { previewToken, operationId },
-      });
+      const [moved, concurrentMoved] = await Promise.all([
+        client.callTool({
+          name: "quarantine_move",
+          arguments: { previewToken, operationId },
+        }),
+        client.callTool({
+          name: "quarantine_move",
+          arguments: { previewToken, operationId },
+        }),
+      ]);
       expect(moved.isError).not.toBe(true);
+      expect(concurrentMoved.isError).not.toBe(true);
+      expect(concurrentMoved.structuredContent).toEqual(moved.structuredContent);
       await expect(stat(candidatePath)).rejects.toMatchObject({ code: "ENOENT" });
       const replayedMove = await client.callTool({
         name: "quarantine_move",
         arguments: { previewToken, operationId },
       });
-      expect(replayedMove.isError).toBe(true);
+      expect(replayedMove.isError).not.toBe(true);
+      expect(replayedMove.structuredContent).toEqual(moved.structuredContent);
+      await expect(stat(candidatePath)).rejects.toMatchObject({ code: "ENOENT" });
+      const crossOperationMove = await client.callTool({
+        name: "quarantine_move",
+        arguments: {
+          previewToken,
+          operationId: `other-operation-${randomUUID()}`,
+        },
+      });
+      expect(crossOperationMove.isError).toBe(true);
+      const differentHandleMove = await client.callTool({
+        name: "quarantine_move",
+        arguments: { previewToken: duplicatePreviewToken, operationId },
+      });
+      expect(differentHandleMove.isError).toBe(true);
 
       const restorePreview = await client.callTool({
         name: "quarantine_prepare_restore",
@@ -471,7 +502,79 @@ describe("production runtime services", () => {
         name: "quarantine_restore",
         arguments: { operationId, previewToken: restoreToken },
       });
-      expect(replayedRestore.isError).toBe(true);
+      expect(replayedRestore.isError).not.toBe(true);
+      expect(replayedRestore.structuredContent).toEqual(
+        restored.structuredContent,
+      );
+      await expect(stat(candidatePath)).resolves.toBeDefined();
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it("возвращает exact purge replay без второй filesystem mutation", async () => {
+    const root = await mkdtemp(join(tmpdir(), "cmc-runtime-purge-replay-"));
+    roots.push(root);
+    const homeDirectory = join(root, "home");
+    const candidatePath = join(
+      homeDirectory,
+      "Library",
+      "Caches",
+      "Synthetic Purge Remnant",
+    );
+    await mkdir(candidatePath, { recursive: true });
+    await writeFile(join(candidatePath, "payload.bin"), "purge-payload", "utf8");
+    const harness = await productionCorrelationHarness(
+      homeDirectory,
+      candidatePath,
+    );
+    harness.removeOwner();
+    const { server, client } = await connectedRuntime(
+      homeDirectory,
+      join(root, "state"),
+      harness.correlation,
+      harness.fixedNow,
+    );
+    try {
+      const results = await completedAudit(client, "synthetic-purge-audit");
+      const finding = (results.structuredContent as {
+        findings: Array<{ findingId: string; allowedActions: string[] }>;
+      }).findings[0];
+      expect(finding?.allowedActions).toContain("prepare_move");
+      const movePreview = await client.callTool({
+        name: "quarantine_prepare_move",
+        arguments: { findingId: finding?.findingId, auditRevision: 1 },
+      });
+      const moveHandle = (
+        movePreview.structuredContent as { previewToken: string }
+      ).previewToken;
+      const operationId = `synthetic-purge-operation-${randomUUID()}`;
+      const moved = await client.callTool({
+        name: "quarantine_move",
+        arguments: { previewToken: moveHandle, operationId },
+      });
+      expect(moved.isError).not.toBe(true);
+      const purgePreview = await client.callTool({
+        name: "quarantine_prepare_purge",
+        arguments: { operationId },
+      });
+      const purgeHandle = (
+        purgePreview.structuredContent as { previewToken: string }
+      ).previewToken;
+      const purged = await client.callTool({
+        name: "quarantine_purge",
+        arguments: { operationId, previewToken: purgeHandle },
+      });
+      expect(purged.isError).not.toBe(true);
+      const replayedPurge = await client.callTool({
+        name: "quarantine_purge",
+        arguments: { operationId, previewToken: purgeHandle },
+      });
+
+      expect(replayedPurge.isError).not.toBe(true);
+      expect(replayedPurge.structuredContent).toEqual(purged.structuredContent);
+      await expect(stat(candidatePath)).rejects.toMatchObject({ code: "ENOENT" });
     } finally {
       await client.close();
       await server.close();

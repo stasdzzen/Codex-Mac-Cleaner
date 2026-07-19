@@ -667,6 +667,20 @@ describe("полная интеграция MCP App", () => {
         expect(moved.isError).not.toBe(true);
         await expect(stat(candidatePath)).rejects.toMatchObject({ code: "ENOENT" });
         await expect(stat(protectedSibling)).resolves.toBeDefined();
+        const replayedMove = await client.callTool({
+          name: "quarantine_move",
+          arguments: { previewToken, operationId },
+        });
+        expect(replayedMove.isError).not.toBe(true);
+        expect(replayedMove.structuredContent).toEqual(moved.structuredContent);
+        const crossOperationMove = await client.callTool({
+          name: "quarantine_move",
+          arguments: {
+            previewToken,
+            operationId: `other-operation-${randomUUID()}`,
+          },
+        });
+        expect(crossOperationMove.isError).toBe(true);
 
         const restorePreview = await client.callTool({
           name: "quarantine_prepare_restore",
@@ -683,13 +697,23 @@ describe("полная интеграция MCP App", () => {
         expect(restored.isError).not.toBe(true);
         await expect(stat(candidatePath)).resolves.toBeDefined();
         await expect(stat(protectedSibling)).resolves.toBeDefined();
+        const replayedRestore = await client.callTool({
+          name: "quarantine_restore",
+          arguments: { operationId, previewToken: restoreToken },
+        });
+        expect(replayedRestore.isError).not.toBe(true);
+        expect(replayedRestore.structuredContent).toEqual(
+          restored.structuredContent,
+        );
 
         const publicResult = JSON.stringify({
           revisionN1: revisionN1.results,
           dashboard,
           preview,
           moved,
+          replayedMove,
           restored,
+          replayedRestore,
         });
         expect(publicResult).not.toContain(syntheticRoot);
         expect(publicResult).not.toContain(seeded.bundleId);
