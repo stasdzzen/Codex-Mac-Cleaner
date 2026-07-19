@@ -58,27 +58,30 @@ Issue и PR не могут объявить требование выполне
 
 # GitHub-сопоставление
 
-| ID | GitHub Issue | Текущий operational label |
+| ID | GitHub Issue | Текущий operational status |
 |---|---|---|
-| `CMC-01` | [#1 — Apache-2.0](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/1) | `cto:ready`, ожидает закрытия `#17`; legal permission получено |
-| `CMC-02` | [#2 — workspace и platform guard](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/2) | `cto:ready`, ожидает `#1` |
-| `CMC-03` | [#3 — contracts, store и MCP](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/3) | `cto:ready`, ожидает `#2` |
-| `CMC-04` | [#4 — source adapters](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/4) | `cto:ready`, ожидает `#3` |
-| `CMC-05` | [#5 — classifier и policy](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/5) | `cto:ready`, ожидает `#4` |
-| `CMC-06` | [#6 — quarantine transaction](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/6) | `cto:ready`, ожидает `#5` |
-| `CMC-07` | [#7 — restore и purge](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/7) | `cto:ready`, ожидает `#6` |
-| `CMC-08` | [#8 — Audit Dashboard](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/8) | `cto:ready`, ожидает `#5` |
+| `CMC-01` | [#1 — Apache-2.0](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/1) | Закрыта |
+| `CMC-02` | [#2 — workspace и platform guard](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/2) | Закрыта |
+| `CMC-03` | [#3 — contracts, store и MCP](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/3) | Закрыта |
+| `CMC-04` | [#4 — source adapters](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/4) | Закрыта |
+| `CMC-05` | [#5 — classifier и policy](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/5) | Закрыта |
+| `CMC-06` | [#6 — quarantine transaction](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/6) | Закрыта |
+| `CMC-07` | [#7 — restore и purge](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/7) | Закрыта |
+| `CMC-08` | [#8 — Audit Dashboard](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/8) | Закрыта |
 | `CMC-09` | [#9 — MCP App и plugin](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/9) | Закрыта; schedule intent остаётся инертным skeleton v0.1 |
 | `CMC-10` | [#10 — security и release evidence](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/10) | `cto:ready`, ожидает merge `#41`, не зависит от `#13` |
-| `CMC-11` | [#11 — публичный продуктовый контракт](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/11) | Закрыта, PR `#16` merged |
-| `CMC-12` | [#12 — постоянные исключения](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/12) | `cto:ready`, ожидает `#7` и `#8` |
+| `CMC-11` | [#11 — публичный продуктовый контракт](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/11) | Закрыта |
+| `CMC-12` | [#12 — постоянные исключения](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/12) | Закрыта |
 | `CMC-13` | [#13 — ежемесячный read-only аудит](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/13) | `cto:blocked`, post-v0.1; ожидает `#10` и отдельное owner decision |
 | `CMC-14` | [#14 — Advanced Cleanup v0.2](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/14) | `cto:blocked`, вне v0.1 и ждёт owner approval/ADR |
 | `CMC-15` | [#15 — Browser и Developer Storage v0.2](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/15) | `cto:blocked`, вне v0.1 и ждёт owner approval/threat models |
-| `CMC-16` | [#17 — защита публичного репозитория](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/17) | `cto:in-progress`, текущий governance PR |
-| `CMC-20` | [#35 — server-owned correlation identity](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/35) | Закрыта; архитектурная база ADR-0012 merged |
-| `CMC-21` | [#36 — core correlation/evidence resolver](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/36) | Закрыта 18 июля 2026 года |
-| `CMC-22` | [#39 — actionable Library remnants](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/39) | Закрыта 18 июля 2026 года |
-| `CMC-23` | [#41 — перенос automation после v0.1](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/41) | `cto:in-progress`; текущая docs-first архитектурная задача |
+| `CMC-16` | [#17 — защита публичного репозитория](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/17) | Закрыта |
+| `CMC-17` | [#20 — generated artifacts workspace](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/20) | Закрыта |
+| `CMC-18` | [#23 — lockfile scope CMC-03](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/23) | Закрыта |
+| `CMC-19` | [#26 — lockfile scope очереди v0.1](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/26) | Закрыта |
+| `CMC-20` | [#35 — server-owned correlation identity](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/35) | Закрыта |
+| `CMC-21` | [#36 — core correlation/evidence resolver](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/36) | Закрыта |
+| `CMC-22` | [#39 — actionable Library remnants](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/39) | Закрыта |
+| `CMC-23` | [#41 — перенос automation после v0.1](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/41) | `cto:review`; ожидает повторного независимого review PR `#42` |
 
 Operational label не заменяет dependency validation. Источником текущего readiness остаётся GitHub и `issue_contract.py`.
