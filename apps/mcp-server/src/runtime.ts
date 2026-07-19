@@ -1,16 +1,23 @@
 import { createHash, randomUUID } from "node:crypto";
-import { lstat, readdir } from "node:fs/promises";
+import { lstat, readdir, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import {
   ALLOWLISTED_LIBRARY_ROOTS,
+  createMacOSCandidateRegistry,
+  createMacOSProductionCorrelationAdapter,
+  createNodeCommandRunner,
   createLibraryRootsAdapter,
   runAdapters,
   type AdapterFileEntry,
+  type CommandRunner,
   type FileSystemFacade,
   type LibraryRoot,
+  type MacOSCorrelationReadOnlyFileSystem,
+  type MacOSOwnerBindingHistory,
   type Observation,
+  type ProductionCorrelationAdapter,
 } from "@codex-mac-cleaner/adapters";
 import { classifyEvidence, type Classification } from "@codex-mac-cleaner/classifier";
 import {
@@ -28,9 +35,11 @@ import {
   type UserExclusionIdentity,
 } from "@codex-mac-cleaner/contracts";
 import {
+  buildCorrelationEvidenceSet,
   normalizeEvidence,
+  resolveCorrelation,
+  type CorrelationResolverResult,
   type EvidenceSet,
-  type ServerCorrelationSignal,
 } from "@codex-mac-cleaner/evidence";
 import {
   evaluatePolicy,
@@ -50,7 +59,12 @@ import {
   type QuarantineManifest,
   type RevalidationResult,
 } from "@codex-mac-cleaner/quarantine";
-import { ExclusionStateStore, JsonStore } from "@codex-mac-cleaner/storage";
+import {
+  ExclusionStateStore,
+  InstallationKeyStore,
+  JsonStore,
+  type InstallationKey,
+} from "@codex-mac-cleaner/storage";
 
 import type { AuditToolService } from "./server.js";
 import type { QuarantineToolService } from "./tools/quarantine.js";
@@ -426,31 +440,6 @@ class RuntimeFileSystemFacade implements FileSystemFacade {
   }
 }
 
-function signal(
-  observation: Observation,
-  ruleInputType: ServerCorrelationSignal["ruleInputType"],
-  state: string,
-): ServerCorrelationSignal {
-  return {
-    schemaVersion: 1,
-    targetRef: observation.targetRef,
-    ruleInputType,
-    state,
-    observedAt: observation.observedAt,
-    fingerprint: `correlation:v1:${sha256(
-      `${observation.targetRef}:${ruleInputType}:${state}:${observation.fingerprint}`,
-    )}`,
-  } as ServerCorrelationSignal;
-}
-
-function defaultCorrelations(observation: Observation): readonly ServerCorrelationSignal[] {
-  return [
-    signal(observation, "owner_identity", "confirmed"),
-    signal(observation, "temporal", "current"),
-    signal(observation, "capability", "available"),
-  ];
-}
-
 function sameIdentity(
   exclusion: UserExclusion,
   identity: UserExclusionIdentity,
@@ -472,6 +461,7 @@ interface FindingRecord {
   readonly evidence: EvidenceSet;
   readonly classification: Classification;
   readonly policy: PolicyDecision;
+  readonly correlation: CorrelationResolverResult | null;
   readonly candidate: RuntimeCandidate;
   readonly identity: UserExclusionIdentity;
 }
@@ -499,6 +489,7 @@ interface AuditRunRecord {
     warnings: string[];
   };
   findings: FindingRecord[];
+  excludedCount: number;
 }
 
 export interface RuntimeExclusionStore {
@@ -563,9 +554,17 @@ export interface RuntimeServiceOptions {
   readonly stateRoot?: string;
   readonly now?: () => Date;
   readonly createId?: (prefix: string) => string;
-  readonly correlationsForObservation?: (
-    observation: Observation,
-  ) => readonly ServerCorrelationSignal[];
+  /**
+   * Низкоуровневые production boundaries для in-process проверки composition.
+   * Они не доступны через MCP, env или plugin manifest; packaged runtime всегда
+   * использует concrete Node/macOS implementations и package-owned state.
+   */
+  readonly correlation?: Readonly<{
+    readonly commands?: CommandRunner;
+    readonly filesystem?: MacOSCorrelationReadOnlyFileSystem;
+    readonly ownerBindingHistory?: MacOSOwnerBindingHistory;
+    readonly installationKey?: InstallationKey;
+  }>;
 }
 
 function defaultStateRoot(homeDirectory: string): string {
@@ -584,11 +583,13 @@ class AuditRuntimeService implements AuditToolService {
     private readonly filesystem: RuntimeFileSystemFacade,
     private readonly exclusions: RuntimeExclusionStore,
     private readonly stateRoot: string,
+    private readonly homeDirectory: string,
+    private readonly installationKey: InstallationKey,
+    private readonly correlationCommands: CommandRunner,
+    private readonly correlationFilesystem: MacOSCorrelationReadOnlyFileSystem | undefined,
+    private readonly ownerBindingHistory: MacOSOwnerBindingHistory | undefined,
     private readonly now: () => Date,
     private readonly createId: (prefix: string) => string,
-    private readonly correlationsForObservation: (
-      observation: Observation,
-    ) => readonly ServerCorrelationSignal[],
   ) {}
 
   private runFor(auditId: string): AuditRunRecord {
@@ -611,42 +612,115 @@ class AuditRuntimeService implements AuditToolService {
   private async exclusionSnapshot(): Promise<{
     readonly invalid: boolean;
     readonly exclusions: readonly UserExclusion[];
+    readonly stateVersion: number;
   }> {
     const state = await this.exclusions.readForAudit();
-    return state.status === "invalid"
-      ? { invalid: true, exclusions: [] }
-      : { invalid: false, exclusions: state.exclusions };
+    if (state.status === "invalid") {
+      return { invalid: true, exclusions: [], stateVersion: 0 };
+    }
+    const listed = await this.exclusions.list();
+    return {
+      invalid: false,
+      exclusions: listed.exclusions,
+      stateVersion: listed.stateVersion,
+    };
+  }
+
+  private correlationAdapter(
+    candidates: ReadonlyMap<string, string>,
+  ): ProductionCorrelationAdapter {
+    return createMacOSProductionCorrelationAdapter({
+      commands: this.correlationCommands,
+      candidates: createMacOSCandidateRegistry({
+        candidates,
+        userHome: this.homeDirectory,
+      }),
+      stateRoot: this.stateRoot,
+      installationKey: this.installationKey,
+      ...(this.correlationFilesystem === undefined
+        ? {}
+        : { filesystem: this.correlationFilesystem }),
+      ...(this.ownerBindingHistory === undefined
+        ? {}
+        : { ownerBindingHistory: this.ownerBindingHistory }),
+      now: () => this.now().toISOString(),
+    });
+  }
+
+  private findingId(auditId: string, targetRef: string): string {
+    return `finding-${sha256(`${auditId}:${targetRef}`).slice(0, 24)}`;
+  }
+
+  private supportLevel(
+    observation: Observation,
+    category: FindingCategory,
+  ): EvidenceSet["supportLevel"] {
+    return category === "cache" || category === "log"
+      ? observation.supportLevel
+      : "analysis_only";
+  }
+
+  private async resolveCandidate(
+    adapter: ProductionCorrelationAdapter,
+    observation: Observation,
+    auditId: string,
+    auditRevision: number,
+    exclusionStateVersion: number,
+    signal: AbortSignal,
+    phase: "audit" | "revalidation",
+  ): Promise<CorrelationResolverResult> {
+    const rawInput = await adapter.buildInput({
+      candidateRef: observation.targetRef,
+      snapshotId: `${phase}-${sha256(`${auditId}:${observation.targetRef}`).slice(0, 32)}`,
+      signal,
+    });
+    return resolveCorrelation({
+      auditId,
+      auditRevision,
+      findingId: this.findingId(auditId, observation.targetRef),
+      exclusionStateVersion,
+      ruleSetVersion: 2,
+      policyVersion: 2,
+      now: this.now().toISOString(),
+      deriver: this.installationKey,
+      rawInput,
+    });
   }
 
   private buildFinding(
     observation: Observation,
-    evidence: EvidenceSet,
     candidate: RuntimeCandidate,
-    exclusionStateInvalid: boolean,
+    correlation: CorrelationResolverResult | null,
+    auditId: string,
+    exclusionState: Readonly<{
+      invalid: boolean;
+      exclusions: readonly UserExclusion[];
+    }>,
   ): FindingRecord {
+    const category = categoryFor(candidate.root);
+    const supportLevel = this.supportLevel(observation, category);
+    const evidence = correlation === null
+      ? normalizeEvidence([observation], [])[0]!
+      : buildCorrelationEvidenceSet(correlation, {
+          supportLevel,
+          sensitivityFlags: observation.sensitivityFlags,
+          dataKind:
+            (category === "cache" || category === "log") &&
+            observation.sensitivityFlags.length === 0
+              ? "known"
+              : observation.sensitivityFlags.length > 0
+                ? "unsafe"
+                : "unknown",
+        });
     const classification = classifyEvidence(evidence);
     const currentFingerprint = candidate.fingerprint;
-    const category = categoryFor(candidate.root);
-    const policy = evaluatePolicy({
-      classification,
-      evidenceSet: evidence,
-      supportLevel: evidence.supportLevel,
-      category,
-      sensitivityFlags: evidence.sensitivityFlags,
-      protectedScopeKinds: [],
-      exclusionMatch: exclusionStateInvalid
-        ? { status: "invalid", errorCode: "EXCLUSION_STATE_INVALID" }
-        : { status: "none" },
-      officialUninstallerApplicable: false,
-      snapshotFingerprint: candidate.fingerprint,
-      currentFingerprint,
-      pathValidation: candidate.pathValidation,
-    });
-    const findingId = `finding-${sha256(`${observation.targetRef}:${evidence.snapshotFingerprint}`).slice(0, 24)}`;
+    const findingId = this.findingId(auditId, observation.targetRef);
     const identity: UserExclusionIdentity = {
-      ruleId: classification.ruleIds[0] ?? "CLASSIFIER_V1_UNKNOWN_INCOMPLETE_EVIDENCE",
+      ruleId: classification.ruleIds[0] ?? "CLASSIFIER_V2_UNKNOWN_INCOMPLETE_EVIDENCE",
       artifactKind: candidate.kind,
-      normalizedTargetIdentity: evidence.targetIdentity,
+      normalizedTargetIdentity: `target:v1:${sha256(
+        correlation?.candidateSubjectId ?? evidence.targetIdentity,
+      )}`,
       bundleId: null,
       packageId: null,
       signingIdentity: null,
@@ -654,6 +728,30 @@ class AuditRuntimeService implements AuditToolService {
         `${candidate.fingerprint.uid}:${candidate.fingerprint.fileType}`,
       )}`,
     };
+    const matchedExclusion = exclusionState.exclusions.find((exclusion) =>
+      sameIdentity(exclusion, identity),
+    );
+    const policy = evaluatePolicy({
+      classification,
+      evidenceSet: evidence,
+      ...(correlation === null
+        ? {}
+        : { correlationRevision: correlation.revision }),
+      supportLevel: evidence.supportLevel,
+      category,
+      sensitivityFlags: evidence.sensitivityFlags,
+      protectedScopeKinds: [],
+      exclusionMatch: exclusionState.invalid
+        ? { status: "invalid", errorCode: "EXCLUSION_STATE_INVALID" }
+        : matchedExclusion === undefined
+          ? { status: "none" }
+          : { status: "matched", exclusionId: matchedExclusion.exclusionId },
+      officialUninstallerApplicable:
+        correlation?.safeView.facts.officialUninstaller.state === "present",
+      snapshotFingerprint: candidate.fingerprint,
+      currentFingerprint,
+      pathValidation: candidate.pathValidation,
+    });
     const blockingReasons =
       policy.blockingRuleIds.length === 0
         ? []
@@ -662,7 +760,7 @@ class AuditRuntimeService implements AuditToolService {
       findingId,
       displayName: observation.displayName,
       category,
-      supportLevel: evidence.supportLevel,
+      supportLevel,
       logicalSize: observation.logicalSize,
       physicalSize: observation.physicalSize,
       label: classification.label,
@@ -678,7 +776,16 @@ class AuditRuntimeService implements AuditToolService {
       },
       blockingReasons,
     };
-    return { model, observation, evidence, classification, policy, candidate, identity };
+    return {
+      model,
+      observation,
+      evidence,
+      classification,
+      policy,
+      correlation,
+      candidate,
+      identity,
+    };
   }
 
   private async execute(run: AuditRunRecord): Promise<void> {
@@ -695,37 +802,81 @@ class AuditRuntimeService implements AuditToolService {
         skippedSourceCount: result.coverage.skippedSourceCount,
         warnings: result.coverage.gaps.map((gap) => gap.safeMessage),
       };
-      const correlations = result.observations.flatMap((observation) =>
-        this.correlationsForObservation(observation),
-      );
-      const evidenceByTarget = new Map(
-        normalizeEvidence(result.observations, correlations).map((evidence) => [
-          evidence.targetIdentity,
-          evidence,
-        ]),
-      );
       const exclusionState = await this.exclusionSnapshot();
-      run.findings = result.observations
-        .map((observation) => {
+      const candidatePaths = new Map(
+        result.observations.flatMap((observation) => {
           const candidate = this.filesystem.candidate(observation.targetRef);
-          const evidence = evidenceByTarget.get(
-            `target:v1:${sha256(observation.targetRef)}`,
-          );
-          if (candidate === undefined || evidence === undefined) return null;
-          return this.buildFinding(
+          return candidate === undefined
+            ? []
+            : [[observation.targetRef, candidate.path] as const];
+        }),
+      );
+      const correlationAdapter = this.correlationAdapter(candidatePaths);
+      const findings: FindingRecord[] = [];
+      const correlationWarningCodes = new Set<string>();
+      for (const observation of result.observations) {
+        run.controller.signal.throwIfAborted();
+        const candidate = this.filesystem.candidate(observation.targetRef);
+        if (candidate === undefined) continue;
+        let correlation: CorrelationResolverResult | null = null;
+        try {
+          correlation = await this.resolveCandidate(
+            correlationAdapter,
             observation,
-            evidence,
-            candidate,
-            exclusionState.invalid,
+            run.auditId,
+            1,
+            exclusionState.stateVersion,
+            run.controller.signal,
+            "audit",
           );
-        })
-        .filter((finding): finding is FindingRecord => finding !== null)
-        .filter((finding) =>
+          if (correlation.safeView.coverageSummary.gapCount > 0) {
+            correlationWarningCodes.add("CORRELATION_COVERAGE_INCOMPLETE");
+          }
+          if (correlation.safeView.ownerBindingState === "ambiguous") {
+            correlationWarningCodes.add("CORRELATION_AMBIGUOUS");
+          } else if (correlation.safeView.ownerBindingState === "mismatch") {
+            correlationWarningCodes.add("CORRELATION_MISMATCH");
+          }
+          if (correlation.safeView.staleDuringAudit) {
+            correlationWarningCodes.add("CORRELATION_SNAPSHOT_STALE");
+          }
+        } catch {
+          correlationWarningCodes.add("CORRELATION_COVERAGE_INCOMPLETE");
+        }
+        const finding = this.buildFinding(
+          observation,
+          candidate,
+          correlation,
+          run.auditId,
+          exclusionState,
+        );
+        if (
           !exclusionState.exclusions.some((exclusion) =>
             sameIdentity(exclusion, finding.identity),
-          ),
-        );
-      run.state = result.state;
+          )
+        ) {
+          findings.push(finding);
+        } else {
+          run.excludedCount += 1;
+        }
+      }
+      run.findings = findings;
+      run.coverageWarningCodes = [
+        ...new Set([...run.coverageWarningCodes, ...correlationWarningCodes]),
+      ];
+      if (correlationWarningCodes.size > 0) {
+        run.coverage = {
+          ...run.coverage,
+          warnings: [
+            ...run.coverage.warnings,
+            "Некоторые correlation facts недоступны; изменяющие действия заблокированы.",
+          ],
+        };
+      }
+      run.state =
+        result.state === "completed" && run.coverageWarningCodes.length > 0
+          ? "completed_with_warnings"
+          : result.state;
       run.revision =
         result.state === "completed" || result.state === "completed_with_warnings" ? 1 : null;
       run.completedSteps = 1;
@@ -762,6 +913,7 @@ class AuditRuntimeService implements AuditToolService {
       coverageWarningCodes: [],
       coverage: { checkedSourceCount: 0, skippedSourceCount: 0, warnings: [] },
       findings: [],
+      excludedCount: 0,
     };
     this.runs.set(auditId, run);
     this.auditIdByRequest.set(input.requestId, auditId);
@@ -806,7 +958,7 @@ class AuditRuntimeService implements AuditToolService {
     return {
       storageSummary,
       diskObservation,
-      excludedCount: exclusionState.exclusions.length,
+      excludedCount: run.excludedCount,
       stateVersion: Math.max(run.stateVersion, storageSummary.stateVersion, exclusionState.stateVersion),
     };
   }
@@ -867,32 +1019,61 @@ class AuditRuntimeService implements AuditToolService {
       storageSummary: output.storageSummary,
       diskObservation: output.diskObservation,
       excludedCount: output.excludedCount,
-      findings: run.findings.map((finding) => ({
-        ...finding.model,
-        componentDisplayName: finding.model.displayName,
-        findingFacts: {
-          lastObservedAt: finding.observation.observedAt,
-          temporalKind: finding.evidence.stale ? "stale" : "current",
-          mainBundleState: "unknown",
-          activityState: "unknown",
-          openFileState: "unknown",
-          startupKinds: [],
-          targetExecutableState: "unknown",
-          receiptState: "unknown",
-          dependencyState: "unknown",
-          sensitivityFlags: finding.observation.sensitivityFlags,
-          recommendedRemovalMethod: finding.evidence.recommendedRemovalMethod,
-          blockingReasons: finding.model.blockingReasons,
-        },
-        reclaimEstimate: {
-          estimatedPhysicalBytes: finding.model.physicalSize,
-          confidence: "low",
-          basis: "observed_physical_size",
-          limitations: ["snapshot_estimate"],
-          observedAt: finding.observation.observedAt,
-        },
-        evidence: [],
-      })),
+      findings: run.findings.map((finding) => {
+        const safe = finding.correlation?.safeView;
+        const facts = safe?.facts;
+        const receiptState =
+          safe?.receiptLifecycle.lifecycle === "live" ||
+          safe?.receiptLifecycle.lifecycle === "stale"
+            ? "present"
+            : safe?.receiptLifecycle.lifecycle === "absent"
+              ? "absent"
+              : "unknown";
+        return {
+          ...finding.model,
+          componentDisplayName: finding.model.displayName,
+          correlationRevisionId: safe?.correlationRevisionId ?? null,
+          ownerBindingState: safe?.ownerBindingState ?? "missing",
+          ownerBindingSourceClass: safe?.ownerBindingSourceClass ?? "none",
+          requirementProfileId: safe?.requirementProfileId ?? "inspection_only_v1",
+          requirementApplicability: safe?.requirementApplicability ?? null,
+          receiptLifecycle: safe?.receiptLifecycle ?? {
+            lifecycle: "unknown",
+            reasonCode: "missing",
+          },
+          facts: facts ?? null,
+          coverageSummary: safe?.coverageSummary ?? {
+            completeSourceCount: 0,
+            gapCount: 1,
+            gapCodes: ["missing"],
+          },
+          staleDuringAudit: safe?.staleDuringAudit ?? true,
+          blockingReasonCodes: safe?.blockingReasonCodes ?? ["coverage_incomplete"],
+          findingFacts: {
+            lastObservedAt: finding.observation.observedAt,
+            temporalKind: finding.evidence.stale ? "stale" : "current",
+            mainBundleState: facts?.ownerApplication.state ?? "unknown",
+            activityState: facts?.activity.state ?? "unknown",
+            openFileState: facts?.openFile.state ?? "unknown",
+            startupKinds:
+              facts?.startupTarget.state === "present" ? ["unknown"] : [],
+            targetExecutableState: facts?.ownerExecutable.state ?? "unknown",
+            receiptState,
+            dependencyState: facts?.dependency.state ?? "unknown",
+            sensitivityFlags: finding.observation.sensitivityFlags,
+            recommendedRemovalMethod: finding.evidence.recommendedRemovalMethod,
+            blockingReasons: finding.model.blockingReasons,
+          },
+          reclaimEstimate: {
+            estimatedPhysicalBytes: finding.model.physicalSize,
+            confidence: "low",
+            basis: "observed_physical_size",
+            limitations: ["snapshot_estimate"],
+            observedAt: finding.observation.observedAt,
+          },
+          evidence: [],
+        };
+      }),
       quarantineEntries: manifests
         .filter((manifest) => manifest.state === "moved")
         .map((manifest) => ({
@@ -1008,35 +1189,124 @@ class AuditRuntimeService implements AuditToolService {
     subject: MoveSubject,
     observed: { sourceFingerprint: SnapshotFingerprint; sourceParentFingerprint: SnapshotFingerprint },
   ): Promise<RevalidationResult> {
-    const finding = this.finding(subject.findingId, subject.auditRevision);
+    const { finding, run } = this.findingWithRun(
+      subject.findingId,
+      subject.auditRevision,
+    );
     const currentPath = await this.filesystem.revalidateCandidate(finding.candidate);
-    const policyDecision = evaluatePolicy({
-      classification: finding.classification,
-      evidenceSet: finding.evidence,
-      supportLevel: finding.evidence.supportLevel,
-      category: finding.model.category,
-      sensitivityFlags: finding.evidence.sensitivityFlags,
-      protectedScopeKinds: [],
-      exclusionMatch: { status: "none" },
-      officialUninstallerApplicable: false,
-      snapshotFingerprint: finding.candidate.fingerprint,
-      currentFingerprint: observed.sourceFingerprint,
-      pathValidation: currentPath.pathValidation,
-    });
+    const exclusionState = await this.exclusionSnapshot();
+    let currentFinding: FindingRecord | null = null;
+    try {
+      const adapter = this.correlationAdapter(
+        new Map([[finding.observation.targetRef, finding.candidate.path]]),
+      );
+      const correlation = await this.resolveCandidate(
+        adapter,
+        finding.observation,
+        run.auditId,
+        subject.auditRevision,
+        exclusionState.stateVersion,
+        new AbortController().signal,
+        "revalidation",
+      );
+      currentFinding = this.buildFinding(
+        finding.observation,
+        finding.candidate,
+        correlation,
+        run.auditId,
+        exclusionState,
+      );
+    } catch {
+      currentFinding = null;
+    }
+    const currentCorrelation = currentFinding?.correlation ?? null;
+    const originalCorrelation = finding.correlation;
+    const authorityStable =
+      originalCorrelation !== null &&
+      currentCorrelation !== null &&
+      currentCorrelation.candidateSubjectId === originalCorrelation.candidateSubjectId &&
+      currentCorrelation.revision.ownerBindingFingerprint ===
+        originalCorrelation.revision.ownerBindingFingerprint &&
+      currentCorrelation.revision.requirementProfileFingerprint ===
+        originalCorrelation.revision.requirementProfileFingerprint &&
+      currentCorrelation.revision.exclusionStateVersion ===
+        originalCorrelation.revision.exclusionStateVersion &&
+      !currentCorrelation.revision.staleDuringAudit;
+    const evaluated =
+      currentFinding === null
+        ? finding.policy
+        : evaluatePolicy({
+            classification: currentFinding.classification,
+            evidenceSet: currentFinding.evidence,
+            ...(currentCorrelation === null
+              ? {}
+              : { correlationRevision: currentCorrelation.revision }),
+            supportLevel: currentFinding.evidence.supportLevel,
+            category: currentFinding.model.category,
+            sensitivityFlags: currentFinding.evidence.sensitivityFlags,
+            protectedScopeKinds: [],
+            exclusionMatch: exclusionState.invalid
+              ? { status: "invalid", errorCode: "EXCLUSION_STATE_INVALID" }
+              : exclusionState.exclusions.some((exclusion) =>
+                    sameIdentity(exclusion, currentFinding!.identity),
+                  )
+                ? {
+                    status: "matched",
+                    exclusionId:
+                      exclusionState.exclusions.find((exclusion) =>
+                        sameIdentity(exclusion, currentFinding!.identity),
+                      )!.exclusionId,
+                  }
+                : { status: "none" },
+            officialUninstallerApplicable:
+              currentCorrelation?.safeView.facts.officialUninstaller.state ===
+              "present",
+            snapshotFingerprint: finding.candidate.fingerprint,
+            currentFingerprint: observed.sourceFingerprint,
+            pathValidation: currentPath.pathValidation,
+          });
+    const policyDecision: PolicyDecision = authorityStable
+      ? evaluated
+      : {
+          ...evaluated,
+          allowedActions: evaluated.allowedActions.filter(
+            (action) => action !== "prepare_move",
+          ),
+          blockingRuleIds: [
+            ...new Set([
+              ...evaluated.blockingRuleIds,
+              "POLICY_CORRELATION_BINDING_MISMATCH",
+            ]),
+          ],
+        };
+    const activity = currentCorrelation?.safeView.facts.activity.state;
+    const openFile = currentCorrelation?.safeView.facts.openFile.state;
     return {
       policyDecision,
       ownerIdentity:
-        observed.sourceFingerprint.uid === (process.getuid?.() ?? observed.sourceFingerprint.uid)
+        authorityStable &&
+        currentCorrelation?.safeView.ownerBindingState === "resolved" &&
+        observed.sourceFingerprint.uid ===
+          (process.getuid?.() ?? observed.sourceFingerprint.uid)
           ? "matched"
-          : "mismatched",
-      activityState: policyDecision.blockingRuleIds.includes("POLICY_ACTIVITY_UNKNOWN")
-        ? "unknown"
-        : "inactive",
-      openFileState: policyDecision.blockingRuleIds.includes("POLICY_OPEN_FILE_UNKNOWN")
-        ? "unknown"
-        : "closed",
+          : currentCorrelation === null
+            ? "unknown"
+            : "mismatched",
+      activityState:
+        activity === "absent"
+          ? "inactive"
+          : activity === "present"
+            ? "active"
+            : "unknown",
+      openFileState:
+        openFile === "absent"
+          ? "closed"
+          : openFile === "present"
+            ? "open"
+            : "unknown",
       protectedScope: currentPath.protected,
-      sensitivityFlags: finding.evidence.sensitivityFlags,
+      sensitivityFlags:
+        currentFinding?.evidence.sensitivityFlags ?? finding.evidence.sensitivityFlags,
     };
   }
 }
@@ -1189,20 +1459,30 @@ export interface RuntimeCore {
 export async function createRuntimeCore(
   options: RuntimeServiceOptions = {},
 ): Promise<RuntimeCore> {
-  const homeDirectory = options.homeDirectory ?? homedir();
-  const stateRoot = resolve(options.stateRoot ?? defaultStateRoot(homeDirectory));
-  await new JsonStore(stateRoot).ensureDirectory(".");
+  const requestedHomeDirectory = resolve(options.homeDirectory ?? homedir());
+  const homeDirectory = await realpath(requestedHomeDirectory);
+  const requestedStateRoot = resolve(
+    options.stateRoot ?? defaultStateRoot(homeDirectory),
+  );
+  await new JsonStore(requestedStateRoot).ensureDirectory(".");
+  const stateRoot = await realpath(requestedStateRoot);
   const exclusionStore = new PersistentRuntimeExclusionStore(
     join(stateRoot, "exclusions"),
   );
+  const installationKey = await new InstallationKeyStore({ stateRoot })
+    .loadOrCreate();
   const filesystem = new RuntimeFileSystemFacade(homeDirectory, stateRoot);
   const auditService = new AuditRuntimeService(
     filesystem,
     exclusionStore,
     stateRoot,
+    homeDirectory,
+    options.correlation?.installationKey ?? installationKey,
+    options.correlation?.commands ?? createNodeCommandRunner(),
+    options.correlation?.filesystem,
+    options.correlation?.ownerBindingHistory,
     options.now ?? (() => new Date()),
     options.createId ?? ((prefix) => `${prefix}-${randomUUID()}`),
-    options.correlationsForObservation ?? defaultCorrelations,
   );
   return {
     auditService,

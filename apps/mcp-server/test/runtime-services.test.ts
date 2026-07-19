@@ -1,10 +1,23 @@
-import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
+import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { Observation } from "@codex-mac-cleaner/adapters";
-import type { ServerCorrelationSignal } from "@codex-mac-cleaner/evidence";
+import {
+  createCommandRunner,
+  consumeEphemeralCorrelationInput,
+  createMacOSCandidateRegistry,
+  createMacOSProductionCorrelationAdapter,
+  createNodeMacOSCorrelationReadOnlyFileSystem,
+  type ArgvExecutor,
+  type MacOSCorrelationReadOnlyFileSystem,
+  type MacOSOwnerBindingHistory,
+} from "@codex-mac-cleaner/adapters";
+import { resolveCorrelation } from "@codex-mac-cleaner/evidence";
+import {
+  InstallationKey,
+  type KeyedOwnerBindingHistoryRecord,
+} from "@codex-mac-cleaner/storage";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { afterEach, describe, expect, it } from "vitest";
@@ -18,37 +31,197 @@ const platform = { platform: "darwin", arch: "arm64", release: "26.0.0" } as con
 const roots: string[] = [];
 type GitMarkerKind = "directory" | "file";
 
-function correlation(
-  observation: Observation,
-  ruleInputType: ServerCorrelationSignal["ruleInputType"],
-  state: string,
-): ServerCorrelationSignal {
-  const digest = createHash("sha256")
-    .update(`${observation.targetRef}:${ruleInputType}:${state}`)
-    .digest("hex");
-  return {
-    schemaVersion: 1,
-    targetRef: observation.targetRef,
-    ruleInputType,
-    state,
-    observedAt: observation.observedAt,
-    fingerprint: `correlation:v1:${digest}`,
-  } as ServerCorrelationSignal;
+class MemoryOwnerBindingHistory implements MacOSOwnerBindingHistory {
+  records: readonly KeyedOwnerBindingHistoryRecord[] = [];
+
+  async list() {
+    return this.records;
+  }
+
+  async replace(records: readonly KeyedOwnerBindingHistoryRecord[]) {
+    this.records = records;
+  }
 }
 
-function actionableCorrelations(observation: Observation): readonly ServerCorrelationSignal[] {
-  return [
-    correlation(observation, "owner_identity", "confirmed"),
-    correlation(observation, "installed_state", "absent"),
-    correlation(observation, "activity", "absent"),
-    correlation(observation, "open_file_state", "absent"),
-    correlation(observation, "target_existence", "present"),
-    correlation(observation, "receipt", "absent"),
-    correlation(observation, "dependency", "absent"),
-    correlation(observation, "temporal", "current"),
-    correlation(observation, "data_kind", "known"),
-    correlation(observation, "capability", "available"),
-  ];
+function inode(path: string): string {
+  return createHash("sha256").update(path).digest("hex").slice(0, 16);
+}
+
+async function productionCorrelationHarness(
+  homeDirectory: string,
+  candidatePath: string,
+) {
+  const suffix = randomUUID().replaceAll("-", "");
+  const ownerApp = join("/Applications", `Owner-${suffix}.app`);
+  const ownerExecutable = join(ownerApp, "Contents", "MacOS", "Owner");
+  const bundleId = `org.example.cmc.${suffix}`;
+  const fixedNow = new Date().toISOString();
+  const nodeFilesystem = createNodeMacOSCorrelationReadOnlyFileSystem();
+  const history = new MemoryOwnerBindingHistory();
+  const installationKey = new InstallationKey(new Uint8Array(32).fill(19));
+  let ownerPresent = true;
+  let packageInventoryDenied = false;
+
+  const executor: ArgvExecutor = async (executable, argv) => {
+    if (executable === "/usr/sbin/pkgutil" && argv[0] === "--pkgs") {
+      if (packageInventoryDenied) {
+        throw Object.assign(new Error("denied"), { code: "EACCES" });
+      }
+      return { stdout: "", stderr: "", exitCode: 0 };
+    }
+    if (executable === "/usr/sbin/pkgutil") {
+      return { stdout: "", stderr: "", exitCode: 0 };
+    }
+    if (executable === "/usr/bin/plutil") {
+      return {
+        stdout: JSON.stringify({
+          CFBundleIdentifier: bundleId,
+          CFBundleExecutable: "Owner",
+        }),
+        stderr: "",
+        exitCode: 0,
+      };
+    }
+    if (executable === "/usr/bin/codesign") {
+      return {
+        stdout: "",
+        stderr: [
+          `designated => identifier ${bundleId} and anchor apple generic`,
+          `TeamIdentifier=TEAM${suffix.slice(0, 12).toUpperCase()}`,
+        ].join("\n"),
+        exitCode: 0,
+      };
+    }
+    if (executable === "/bin/ps") {
+      return {
+        stdout: ownerPresent
+          ? `42 Sat Jul 18 00:00:00 2026 ${ownerExecutable}\n`
+          : "",
+        stderr: "",
+        exitCode: 0,
+      };
+    }
+    if (executable === "/usr/sbin/lsof") {
+      return {
+        stdout: ownerPresent ? `p42\ncOwner\nn${candidatePath}\n` : "",
+        stderr: "",
+        exitCode: 0,
+      };
+    }
+    return { stdout: "", stderr: "", exitCode: 0 };
+  };
+  const filesystem: MacOSCorrelationReadOnlyFileSystem = {
+    async canonicalize(path, signal) {
+      signal.throwIfAborted();
+      if (path === ownerApp || path === ownerExecutable) return path;
+      return nodeFilesystem.canonicalize(path, signal);
+    },
+    async stat(path, signal) {
+      signal.throwIfAborted();
+      if (path === ownerApp || path === ownerExecutable) {
+        return {
+          device: "virtual-owner-device",
+          inode: inode(path),
+          fileType: path === ownerApp ? "bundle" : "file",
+          uid: process.getuid?.() ?? 501,
+          gid: process.getgid?.() ?? 20,
+          size: 1,
+          modifiedAtMs: 1,
+        };
+      }
+      return nodeFilesystem.stat(path, signal);
+    },
+    async readDirectory(path, signal) {
+      signal.throwIfAborted();
+      if (path === "/Applications") {
+        return ownerPresent ? [{ path: ownerApp, fileType: "bundle" }] : [];
+      }
+      if (
+        path === "/System/Applications" ||
+        path === join(homeDirectory, "Applications") ||
+        path === "/Library/LaunchAgents" ||
+        path === "/Library/LaunchDaemons" ||
+        path === join(homeDirectory, "Library", "LaunchAgents")
+      ) {
+        return [];
+      }
+      return nodeFilesystem.readDirectory(path, signal);
+    },
+  };
+  const commands = createCommandRunner(executor);
+  const adapter = createMacOSProductionCorrelationAdapter({
+    commands,
+    candidates: createMacOSCandidateRegistry({
+      candidates: new Map([["candidate-history-n", candidatePath]]),
+      userHome: homeDirectory,
+    }),
+    filesystem,
+    installationKey,
+    ownerBindingHistory: history,
+    now: () => fixedNow,
+  });
+  const diagnosticInput = await adapter.buildInput({
+    candidateRef: "candidate-history-n",
+    snapshotId: `snapshot-history-diagnostic-${suffix}`,
+    signal: new AbortController().signal,
+  });
+  const diagnostic = consumeEphemeralCorrelationInput(
+    diagnosticInput,
+    (payload) => ({
+      queryStates: Object.fromEntries(
+        payload.queries.map(({ queryScope, state }) => [queryScope, state]),
+      ),
+      querySubjectCounts: Object.fromEntries(
+        payload.queries.map(({ queryScope, subjects }) => [queryScope, subjects.length]),
+      ),
+    }),
+  );
+  expect(diagnostic.queryStates).toMatchObject({
+    owner_bindings: "complete",
+    installed_apps: "complete",
+    processes: "complete",
+    open_files: "complete",
+  });
+  expect(diagnostic.querySubjectCounts).toMatchObject({
+    owner_bindings: 0,
+    installed_apps: 1,
+    processes: 1,
+    open_files: 1,
+  });
+  const rawInput = await adapter.buildInput({
+    candidateRef: "candidate-history-n",
+    snapshotId: `snapshot-history-n-${suffix}`,
+    signal: new AbortController().signal,
+  });
+  const revisionN = resolveCorrelation({
+    auditId: `audit-history-n-${suffix}`,
+    auditRevision: 1,
+    findingId: `finding-history-n-${suffix}`,
+    exclusionStateVersion: 0,
+    ruleSetVersion: 2,
+    policyVersion: 2,
+    now: fixedNow,
+    deriver: installationKey,
+    rawInput,
+  });
+  expect(revisionN.safeView.facts.ownerApplication.state).toBe("present");
+  expect(revisionN.safeView.facts.activity.state).toBe("present");
+  expect(revisionN.safeView.facts.openFile.state).toBe("present");
+  expect(revisionN.safeView.allowedActions).not.toContain("prepare_move");
+  expect(history.records).toHaveLength(1);
+  expect(JSON.stringify(history.records)).not.toContain(candidatePath);
+  expect(JSON.stringify(history.records)).not.toContain(bundleId);
+
+  return {
+    fixedNow,
+    correlation: { commands, filesystem, ownerBindingHistory: history, installationKey },
+    removeOwner() {
+      ownerPresent = false;
+    },
+    denyPackageInventory() {
+      packageInventoryDenied = true;
+    },
+  };
 }
 
 async function createNestedGitMarker(
@@ -69,8 +242,9 @@ async function completedAudit(client: Client, requestId: string) {
     name: "audit_start",
     arguments: { requestId, profile: "application_remnants" },
   });
+  expect(started.isError).not.toBe(true);
   const auditId = (started.structuredContent as { auditId: string }).auditId;
-  for (let attempt = 0; attempt < 100; attempt += 1) {
+  for (let attempt = 0; attempt < 500; attempt += 1) {
     const status = await client.callTool({ name: "audit_status", arguments: { auditId } });
     const state = (status.structuredContent as { state: string }).state;
     if (state === "completed" || state === "completed_with_warnings") {
@@ -79,9 +253,31 @@ async function completedAudit(client: Client, requestId: string) {
         arguments: { auditId, revision: 1, cursor: null, filters: {} },
       });
     }
+    if (state === "failed" || state === "cancelled") {
+      throw new Error(`Synthetic audit ended in ${state}`);
+    }
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
   throw new Error("Synthetic audit did not complete");
+}
+
+async function connectedRuntime(
+  homeDirectory: string,
+  stateRoot: string,
+  correlation: Awaited<ReturnType<typeof productionCorrelationHarness>>["correlation"],
+  fixedNow: string,
+) {
+  const services = await createDefaultRuntimeServices({
+    homeDirectory,
+    stateRoot,
+    correlation,
+    now: () => new Date(fixedNow),
+  });
+  const server = createMcpServer(platform, services);
+  const client = new Client({ name: "runtime-production-correlation", version: "1.0.0" });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  return { server, client };
 }
 
 afterEach(async () => {
@@ -101,7 +297,6 @@ describe("production runtime services", () => {
       const services = await createDefaultRuntimeServices({
         homeDirectory,
         stateRoot: join(root, "state"),
-        correlationsForObservation: actionableCorrelations,
       });
       const server = createMcpServer(platform, services);
       const client = new Client({ name: `runtime-git-${markerKind}`, version: "1.0.0" });
@@ -130,22 +325,20 @@ describe("production runtime services", () => {
       const homeDirectory = join(root, "home");
       const candidatePath = join(homeDirectory, "Library", "Caches", "Parent Candidate");
       await mkdir(join(candidatePath, "Nested Project"), { recursive: true });
-
-      const services = await createDefaultRuntimeServices({
+      const harness = await productionCorrelationHarness(homeDirectory, candidatePath);
+      harness.removeOwner();
+      const { server, client } = await connectedRuntime(
         homeDirectory,
-        stateRoot: join(root, "state"),
-        correlationsForObservation: actionableCorrelations,
-      });
-      const server = createMcpServer(platform, services);
-      const client = new Client({ name: `runtime-git-token-${markerKind}`, version: "1.0.0" });
-      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-      await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+        join(root, "state"),
+        harness.correlation,
+        harness.fixedNow,
+      );
       try {
         const results = await completedAudit(client, `nested-git-${markerKind}-token-audit`);
         const finding = (results.structuredContent as {
-          findings: Array<{ findingId: string; displayName: string }>;
+          findings: Array<{ findingId: string; displayName: string; allowedActions: string[] }>;
         }).findings.find((item) => item.displayName === "Parent Candidate");
-        expect(finding).toBeDefined();
+        expect(finding?.allowedActions).toContain("prepare_move");
 
         await createNestedGitMarker(candidatePath, markerKind);
         const preview = await client.callTool({
@@ -161,41 +354,62 @@ describe("production runtime services", () => {
     },
   );
 
-  it("проводит single-object prepare/move/restore через core quarantine на synthetic root", async () => {
+  it("проводит safe N→N+1 single-object prepare/move/restore без запуска executable", async () => {
     const root = await mkdtemp(join(tmpdir(), "cmc-runtime-core-"));
     roots.push(root);
     const homeDirectory = join(root, "home");
-    const allowedRoot = join(homeDirectory, "Library", "Caches");
-    await mkdir(join(allowedRoot, "Synthetic Remnant"), { recursive: true });
-
-    const services = await createDefaultRuntimeServices({
+    const candidatePath = join(homeDirectory, "Library", "Caches", "Synthetic Remnant");
+    await mkdir(candidatePath, { recursive: true });
+    await writeFile(join(candidatePath, "payload.bin"), "runtime-core-payload", "utf8");
+    const harness = await productionCorrelationHarness(homeDirectory, candidatePath);
+    harness.removeOwner();
+    const { server, client } = await connectedRuntime(
       homeDirectory,
-      stateRoot: join(root, "state"),
-      correlationsForObservation: actionableCorrelations,
-    });
-    const server = createMcpServer(platform, services);
-    const client = new Client({ name: "runtime-core-flow", version: "1.0.0" });
-    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+      join(root, "state"),
+      harness.correlation,
+      harness.fixedNow,
+    );
     try {
-      const started = await client.callTool({
-        name: "audit_start",
-        arguments: { requestId: "synthetic-audit-1", profile: "application_remnants" },
-      });
-      const auditId = (started.structuredContent as { auditId: string }).auditId;
-      for (let attempt = 0; attempt < 100; attempt += 1) {
-        const status = await client.callTool({ name: "audit_status", arguments: { auditId } });
-        const state = (status.structuredContent as { state: string }).state;
-        if (state === "completed" || state === "completed_with_warnings") break;
-        await new Promise((resolve) => setTimeout(resolve, 5));
-      }
-      const results = await client.callTool({
-        name: "audit_results",
-        arguments: { auditId, revision: 1, cursor: null, filters: {} },
-      });
-      const finding = (results.structuredContent as {
+      const results = await completedAudit(client, "synthetic-audit-n1");
+      const resultContent = results.structuredContent as {
+        auditId: string;
         findings: Array<{ findingId: string; allowedActions: string[] }>;
-      }).findings[0];
+      };
+      const finding = resultContent.findings[0];
+      const dashboard = await client.callTool({
+        name: "dashboard_open",
+        arguments: { auditId: resultContent.auditId, revision: 1 },
+      });
+      const dashboardFinding = (
+        (dashboard._meta as { dashboard?: { findings?: unknown[] } } | undefined)
+          ?.dashboard?.findings ?? []
+      )[0];
+      const correlationSummary = dashboardFinding as Record<string, unknown>;
+      expect({
+        requirementProfileId: correlationSummary.requirementProfileId,
+        requirementApplicability: correlationSummary.requirementApplicability,
+        receiptLifecycle: correlationSummary.receiptLifecycle,
+        coverageSummary: correlationSummary.coverageSummary,
+        blockingReasonCodes: correlationSummary.blockingReasonCodes,
+      }).toMatchObject({
+        requirementProfileId: "private_regenerable_remnant_v1",
+        requirementApplicability: expect.any(Object),
+        receiptLifecycle: { lifecycle: "absent", reasonCode: "complete_empty" },
+        coverageSummary: { completeSourceCount: 9, gapCount: 0, gapCodes: [] },
+        blockingReasonCodes: [],
+      });
+      expect(dashboardFinding).toMatchObject({
+        ownerBindingState: "resolved",
+        requirementProfileId: "private_regenerable_remnant_v1",
+        staleDuringAudit: false,
+        coverageSummary: { gapCount: 0 },
+        facts: {
+          artifactExistence: { state: "present" },
+          ownerApplication: { state: "absent" },
+          activity: { state: "absent" },
+          openFile: { state: "absent" },
+        },
+      });
       expect(finding?.allowedActions).toContain("prepare_move");
 
       const preview = await client.callTool({
@@ -204,29 +418,88 @@ describe("production runtime services", () => {
       });
       expect(preview.isError).not.toBe(true);
       const previewToken = (preview.structuredContent as { previewToken: string }).previewToken;
+      const operationId = `synthetic-operation-${randomUUID()}`;
       const moved = await client.callTool({
         name: "quarantine_move",
-        arguments: { previewToken, operationId: "synthetic-operation-1" },
+        arguments: { previewToken, operationId },
       });
       expect(moved.isError).not.toBe(true);
-      expect(moved.structuredContent).toMatchObject({
-        quarantineEntry: { quarantineEntryId: "synthetic-operation-1", state: "moved" },
-      });
+      await expect(stat(candidatePath)).rejects.toMatchObject({ code: "ENOENT" });
 
       const restorePreview = await client.callTool({
         name: "quarantine_prepare_restore",
-        arguments: { operationId: "synthetic-operation-1" },
+        arguments: { operationId },
       });
-      expect(restorePreview.isError).not.toBe(true);
-      const restoreToken = (restorePreview.structuredContent as { previewToken: string }).previewToken;
+      const restoreToken = (restorePreview.structuredContent as { previewToken: string })
+        .previewToken;
       const restored = await client.callTool({
         name: "quarantine_restore",
-        arguments: { operationId: "synthetic-operation-1", previewToken: restoreToken },
+        arguments: { operationId, previewToken: restoreToken },
       });
       expect(restored.isError).not.toBe(true);
-      expect(restored.structuredContent).toMatchObject({
-        quarantineEntry: { quarantineEntryId: "synthetic-operation-1", state: "restored" },
-      });
+      await expect(stat(candidatePath)).resolves.toBeDefined();
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it("не разрешает mutation для active/open/installed owner", async () => {
+    const root = await mkdtemp(join(tmpdir(), "cmc-runtime-active-"));
+    roots.push(root);
+    const homeDirectory = join(root, "home");
+    const candidatePath = join(homeDirectory, "Library", "Caches", "Active Remnant");
+    await mkdir(candidatePath, { recursive: true });
+    const harness = await productionCorrelationHarness(homeDirectory, candidatePath);
+    const { server, client } = await connectedRuntime(
+      homeDirectory,
+      join(root, "state"),
+      harness.correlation,
+      harness.fixedNow,
+    );
+    try {
+      const results = await completedAudit(client, "active-owner-audit");
+      const finding = (results.structuredContent as {
+        findings: Array<{ allowedActions: string[] }>;
+      }).findings[0];
+      expect(finding?.allowedActions).not.toContain("prepare_move");
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it("fail-closed блокирует incomplete coverage и inspect-only category", async () => {
+    const root = await mkdtemp(join(tmpdir(), "cmc-runtime-fail-closed-"));
+    roots.push(root);
+    const homeDirectory = join(root, "home");
+    const cachePath = join(homeDirectory, "Library", "Caches", "Incomplete Remnant");
+    const supportPath = join(
+      homeDirectory,
+      "Library",
+      "Application Support",
+      "Inspection Only Remnant",
+    );
+    await mkdir(cachePath, { recursive: true });
+    await mkdir(supportPath, { recursive: true });
+    const cacheHarness = await productionCorrelationHarness(homeDirectory, cachePath);
+    cacheHarness.removeOwner();
+    cacheHarness.denyPackageInventory();
+    const { server, client } = await connectedRuntime(
+      homeDirectory,
+      join(root, "state"),
+      cacheHarness.correlation,
+      cacheHarness.fixedNow,
+    );
+    try {
+      const results = await completedAudit(client, "fail-closed-audit");
+      const findings = (results.structuredContent as {
+        findings: Array<{ displayName: string; allowedActions: string[] }>;
+      }).findings;
+      expect(findings.find(({ displayName }) => displayName === "Incomplete Remnant")
+        ?.allowedActions).not.toContain("prepare_move");
+      expect(findings.find(({ displayName }) => displayName === "Inspection Only Remnant")
+        ?.allowedActions).not.toContain("prepare_move");
     } finally {
       await client.close();
       await server.close();
