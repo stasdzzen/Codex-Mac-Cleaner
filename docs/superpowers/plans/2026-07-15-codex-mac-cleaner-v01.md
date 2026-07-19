@@ -5,7 +5,7 @@ description: Базовый пошаговый TDD-план v0.1; дополне
 tags: [implementation, plan, tdd, workers]
 status: approved
 owner: Architect
-date: 2026-07-15
+date: 2026-07-19
 updated: 2026-07-17
 ---
 
@@ -36,7 +36,7 @@ updated: 2026-07-17
 * Dashboard имеет пять вкладок: «Обзор», «Находки», «Карантин», «Исключения», «Расписание».
 * Сервер вычисляет `candidateLogicalBytes`, `candidatePhysicalBytes`, `quarantinePhysicalBytes`, `purgedPhysicalBytes` и `DiskObservation`; UI не пересчитывает их и не показывает причинный APFS delta.
 * «Пропустить сейчас» — session-local UI no-op; «Переместить в карантин» означает quarantine одного объекта; persistent «Исключить» реализуется в CMC-12.
-* Ежемесячный read-only audit реализуется в CMC-13 через capability-aware Codex automation bridge без cron или LaunchAgent.
+* В v0.1 вкладка «Расписание» остаётся disabled/manual-run fallback; host automation lifecycle перенесён в post-v0.1 CMC-13 по ADR-0014, cron и LaunchAgent запрещены.
 * Публичный bundle не содержит username, home paths, app inventory и персональные решения разработчика.
 * После установки аудит и все решения выполняются внутри Codex кнопками; продукт не требует копировать команды в терминал.
 * Полные пути не попадают в model-visible ответы или обычные логи.
@@ -872,7 +872,7 @@ git commit -m "feat: добавить восстановление и ручну
 **Интерфейсы:**
 
 * Использует: model/widget schemas и fixtures после `CMC-05`.
-* Создаёт: autonomous `dashboard-v1.html`, `WidgetBridge`, UI states `running`/`cancelling`/`cancelled`, `skippedFindingIds`, пяти-вкладочный shell, FindingFacts, support levels и Quarantine Center. Exclusions и schedule behavior добавляют CMC-12/13.
+* Создаёт: autonomous `dashboard-v1.html`, `WidgetBridge`, UI states `running`/`cancelling`/`cancelled`, `skippedFindingIds`, пяти-вкладочный shell, FindingFacts, support levels и Quarantine Center. Exclusions добавляет CMC-12; schedule tab остаётся disabled/manual-run до post-v0.1 CMC-13.
 
 - [ ] **Шаг 1: написать UI contract test**
 
@@ -962,7 +962,7 @@ Widget state не содержит path, preview token или policy decision. `
 
 - [ ] **Шаг 4: собрать автономный bundle и проверить UX**
 
-Dashboard использует `Card`, `Progress`, `Table`, `Badge`, `Sheet`, `Alert`, `AlertDialog`, `Skeleton`, `Tabs`, `Button`, `Tooltip`, `sonner`; semantic tokens; тёмную тему. Вкладки имеют названия «Обзор», «Находки», «Карантин», «Исключения», «Расписание». До CMC-12/13 две последние имеют честные dependency states. Actionable finding показывает «Переместить в карантин», «Исключить» и «Пропустить сейчас»; skip — no-op, exclusion делегируется CMC-12, quarantine открывает preview одного объекта. `FindingFacts`, `ReclaimEstimate`, `supportLevel` и blocking reason показаны текстом. `unsupported_manual` не содержит mutation control, shell-команды или sudo advice.
+Dashboard использует `Card`, `Progress`, `Table`, `Badge`, `Sheet`, `Alert`, `AlertDialog`, `Skeleton`, `Tabs`, `Button`, `Tooltip`, `sonner`; semantic tokens; тёмную тему. Вкладки имеют названия «Обзор», «Находки», «Карантин», «Исключения», «Расписание». До CMC-12 «Исключения» имеет честный dependency state; «Расписание» во всём v0.1 disabled и предлагает только ручной аудит. Actionable finding показывает «Переместить в карантин», «Исключить» и «Пропустить сейчас»; skip — no-op, exclusion делегируется CMC-12, quarantine открывает preview одного объекта. `FindingFacts`, `ReclaimEstimate`, `supportLevel` и blocking reason показаны текстом. `unsupported_manual` не содержит mutation control, shell-команды или sudo advice.
 
 Quarantine Center даёт отдельные «Восстановить» и «Удалить навсегда» для каждой записи; bulk controls и auto-purge отсутствуют. Summary показывает «Логический размер находок», «Физический размер находок», «В карантине», «Удалено навсегда» и «Свободно на диске» из server-owned `StorageSummary`/`DiskObservation`, включая `observedAt`; copy не вычисляет APFS free-space delta. Для `cancelled` точный `Alert`: «Аудит отменён. Результаты неполные, поэтому перемещение в карантин недоступно. Начните новый аудит». Coverage, risk и action state различимы текстом и icon, не только цветом. Keyboard navigation, focus return после dialog и disabled state проверяются tests. CSP не объявляет network domains.
 
@@ -1155,7 +1155,7 @@ node scripts/package-release.mjs --verify-only
 git diff --check
 ```
 
-Ожидаемый результат: все автоматические gates проходят. Clean-room harness устанавливает package в repository/personal marketplace, запускает новую задачу Codex, открывает Dashboard и выполняет button-only сценарий без shell copy. `docs/release/real-mac-smoke.md` содержит шаги проверки universal protected classes, secret-like fixture, отмены активного аудита, read-only partial report, logical/physical/disk metrics, «Переместить в карантин»/«Исключить»/«Пропустить сейчас», persistent exclusions, schedule capability/fallback, single-entry move/restore/purge и ошибки purge, а также поля `commit SHA`, `macOS`, `hardware`, `FDA mode`, `result`, `evidence`; ни одно поле результата не помечено выполненным заранее.
+Ожидаемый результат: все автоматические gates проходят. Clean-room harness устанавливает package в repository/personal marketplace, запускает новую задачу Codex, открывает Dashboard и выполняет button-only сценарий без shell copy. `docs/release/real-mac-smoke.md` содержит шаги проверки universal protected classes, secret-like fixture, отмены активного аудита, read-only partial report, logical/physical/disk metrics, «Переместить в карантин»/«Исключить»/«Пропустить сейчас», persistent exclusions, честного disabled/manual-run schedule fallback без host/system scheduler, single-entry move/restore/purge и ошибки purge, а также поля `commit SHA`, `macOS`, `hardware`, `FDA mode`, `result`, `evidence`; ни одно поле результата не помечено выполненным заранее.
 
 - [ ] **Шаг 5: commit и передача Controller**
 
@@ -1175,7 +1175,7 @@ Worker передаёт PR с текущим head SHA. Controller требует
 * `candidateLogicalBytes` и `DiskObservation` покрыты в CMC-03/07/08/09/10 без причинного APFS delta.
 * Protected scopes, SafeMetadata, `supportLevel` и synthetic field fixtures покрыты в CMC-03/04/05/08/09/10.
 * Universal protected classes, `~/.codex`, current project root и synthetic Git project не перечисляются как candidates и доказанно отклоняются forged mutation tests.
-* «Пропустить сейчас» не вызывает tool; exclusions и schedule покрыты CMC-12/13; clean-room/new-task сценарий не требует терминала.
+* «Пропустить сейчас» не вызывает tool; exclusions покрыты CMC-12, disabled/manual-run schedule fallback — CMC-10; clean-room/new-task сценарий не требует терминала.
 * Path, destination, overwrite, alternate restore, bulk purge, «Очистить всё» и automatic purge отсутствуют в публичных inputs/UI.
 * UI не выдаёт `purgedPhysicalBytes` за точное изменение свободного места APFS.
 * Ручные gates описаны как будущие и не отмечены выполненными.

@@ -5,7 +5,7 @@ description: Последовательности аудита, карантин
 tags: [architecture, flows, audit, quarantine]
 status: approved
 owner: Architect
-date: 2026-07-18
+date: 2026-07-19
 ---
 
 # Аудит
@@ -95,15 +95,13 @@ date: 2026-07-18
 
 «Пропустить сейчас» не вызывает MCP tool. Widget помечает `findingId` просмотренным только для текущей ревизии и UI-сеанса. Новый аудит начинает список заново.
 
-# Ежемесячный read-only аудит
+# Disabled/manual-run fallback v0.1
 
-1. После завершения review или во вкладке «Расписание» пользователь выбирает opt-in, день и локальное время.
-2. Widget создаёт app-visible `schedule_request` intent; raw RRULE и shell input отсутствуют.
-3. Skill/host layer проверяет Codex automation capability и показывает отдельное подтверждение.
-4. При наличии capability host создаёт либо обновляет одну automation; opaque automation ID и безопасные timestamps сохраняются локально.
-5. Pause, resume, update и delete используют существующий ID. Повторное включение не создаёт дубликат.
-6. При отсутствии capability intent завершается `capability_unavailable`; UI показывает disabled fallback без cron или LaunchAgent.
-7. Automation запускает только read-only `application_remnants`, применяет exclusions, сообщает count/estimate и предлагает открыть Dashboard. Mutation, `sudo` и автоматическая очистка запрещены.
+1. Вкладка «Расписание» показывает, что автоматический аудит недоступен в v0.1, и не предлагает opt-in, day/time, next/last run или lifecycle actions.
+2. Действие «Запустить вручную» использует обычный `audit_start` с профилем `application_remnants`; новый schedule intent и host action не создаются.
+3. `ScheduleIntent`/`ScheduleState` и schedule tools остаются инертной compatibility groundwork. Любая lifecycle-команда завершается fail closed; `enabled=false`, `automationId=null`.
+4. В v0.1 отсутствуют scheduled prompt, create/update/pause/resume/delete automation, cron, LaunchAgent и скрытый scheduler.
+5. Полный host-native lifecycle описан только как post-v0.1 CMC-13 и требует отдельного owner decision по ADR-0014.
 
 # Unsupported/manual finding
 

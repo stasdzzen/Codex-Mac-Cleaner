@@ -1,22 +1,24 @@
 ---
 type: Implementation Plan
 title: План дополнений публичного Codex Mac Cleaner
-description: TDD-план persistent exclusions, Codex scheduling и заблокированных исследований после v0.1.
+description: TDD-план persistent exclusions, post-v0.1 Codex scheduling и заблокированных исследований.
 tags: [implementation, public-plugin, exclusions, scheduling, research]
 status: approved
 owner: Architect
-date: 2026-07-17
+date: 2026-07-19
 ---
 
 # Назначение
 
 Этот план продолжает [базовый план v0.1](2026-07-15-codex-mac-cleaner-v01.md). Он не разрешает запуск Issues автоматически. Каждый Worker выполняет только свою GitHub Issue в отдельном worktree/branch/PR и использует `superpowers:test-driven-development`.
 
+ADR-0014 переносит весь раздел CMC-13 после v0.1. Детальный lifecycle ниже сохраняется как будущий plan, но не является release claim или gate v0.1 и не исполняется без отдельного owner decision после закрытия CMC-10.
+
 # Общие ограничения
 
 * Публичный runtime не содержит персональных app/path rules, username и real-Mac inventory.
 * Exclusion не ослабляет `ProtectedScopeRule` и не разрешает mutation.
-* Schedule выключен по умолчанию и никогда не создаёт cron, LaunchAgent или automatic cleanup.
+* В v0.1 schedule lifecycle отсутствует, вкладка disabled и предлагает manual run; cron, LaunchAgent и automatic cleanup запрещены.
 * MCP App не вызывает host-native automation напрямую.
 * Все fixtures используют synthetic identity, signing data, paths и timestamps.
 * Release, tag, merge, publication и real-Mac mutation не входят в эти задачи.
@@ -98,9 +100,11 @@ PR evidence содержит final head SHA, migration matrix, permission assert
 
 ---
 
-## `CMC-13` — capability-aware ежемесячный аудит
+## `CMC-13` — post-v0.1 capability-aware ежемесячный аудит
 
-**Зависимость:** закрытая `CMC-09`.
+**Статус:** `cto:blocked` до отдельного owner decision.
+
+**Зависимость:** закрытая `CMC-10`.
 
 **Создать или изменить:**
 
@@ -186,7 +190,7 @@ git diff --check
 
 # Финальная самопроверка
 
-* `CMC-12` и `CMC-13` входят в release-blocking v0.1 chain.
+* Только `CMC-12` входит в release-blocking v0.1 chain; `CMC-13` перенесена после v0.1.
 * `CMC-14` и `CMC-15` остаются future research и `cto:blocked`.
-* `CMC-10` зависит от `CMC-13` и проверяет все новые contracts.
+* `CMC-10` не зависит от `CMC-13` и проверяет только инертный schedule skeleton и disabled/manual-run fallback v0.1.
 * Ни одна Issue не получает release, merge или publication authority.

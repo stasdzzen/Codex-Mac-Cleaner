@@ -5,7 +5,7 @@ description: Стабильные error codes, уровни серьёзност
 tags: [contracts, errors, fail-closed]
 status: approved
 owner: Architect
-date: 2026-07-18
+date: 2026-07-19
 ---
 
 # Формат
@@ -58,7 +58,7 @@ date: 2026-07-18
 | `PREVIEW_EXPIRED` | blocking | Создать новый preview |
 | `OPERATION_CONFLICT` | blocking | Открыть журнал и проверить состояние |
 | `MANIFEST_INCONSISTENT` | fatal | Заблокировать все destructive-tools |
-| `AUTOMATION_CAPABILITY_UNAVAILABLE` | warning | Отключить schedule controls и предложить ручной аудит |
+| `AUTOMATION_CAPABILITY_UNAVAILABLE` | warning | В v0.1 всегда оставить schedule controls disabled и предложить ручной аудит; post-v0.1 capability требует отдельного owner decision |
 | `SCHEDULE_INTENT_STALE` | blocking | Обновить состояние расписания и повторить явное действие |
 | `SCHEDULE_CONFLICT` | blocking | Не создавать дубликат; показать существующее расписание |
 | `INTERNAL_ERROR` | fatal | Показать correlation ID; не повторять мутацию автоматически |
