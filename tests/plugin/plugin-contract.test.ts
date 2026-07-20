@@ -17,10 +17,24 @@ describe("repository marketplace plugin", () => {
     const manifest = await readJson(".codex-plugin/plugin.json");
     expect(manifest).toMatchObject({
       name: "codex-mac-cleaner",
-      version: "0.1.0",
+      version: "0.1.0-beta.1",
       license: "Apache-2.0",
       skills: "./skills/",
       mcpServers: "./.mcp.json",
+    });
+
+    const marketplace = await readJson(".agents/plugins/marketplace.json");
+    expect(marketplace).toMatchObject({
+      name: "codex-mac-cleaner",
+      interface: { displayName: "Codex Mac Cleaner" },
+      plugins: [
+        {
+          name: "codex-mac-cleaner",
+          source: { source: "local", path: "./" },
+          policy: { installation: "AVAILABLE", authentication: "ON_INSTALL" },
+          category: "Productivity",
+        },
+      ],
     });
 
     const mcp = await readJson(".mcp.json");

@@ -1,0 +1,20 @@
+{
+  "name": "codex-mac-cleaner",
+  "interface": {
+    "displayName": "Codex Mac Cleaner"
+  },
+  "plugins": [
+    {
+      "name": "codex-mac-cleaner",
+      "source": {
+        "source": "local",
+        "path": "./"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

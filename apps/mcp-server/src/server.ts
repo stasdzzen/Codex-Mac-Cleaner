@@ -864,7 +864,10 @@ export function createMcpServer(
 ): McpServer {
   assertSupportedPlatform(platformInput);
 
-  const server = new McpServer({ name: "codex-mac-cleaner", version: "0.1.0" });
+  const server = new McpServer({
+    name: "codex-mac-cleaner",
+    version: "0.1.0-beta.1",
+  });
   const scheduleService =
     options.scheduleService ?? new ScheduleIntentCoordinator(options.scheduleOptions);
   registerDashboardResource(server, options.dashboardHtml);

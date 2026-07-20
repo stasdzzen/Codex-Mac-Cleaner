@@ -32,7 +32,8 @@ if (outputDirectoryIndex >= 0 && outputDirectoryArgument === undefined) {
   throw new Error("OUTPUT_DIRECTORY_REQUIRED");
 }
 
-const artifactName = "codex-mac-cleaner-v0.1.0.tar";
+const releaseVersion = "0.1.0-beta.1";
+const artifactName = `codex-mac-cleaner-v${releaseVersion}.tar`;
 const builtEntries = new Set([
   ".codex-plugin/assets/dashboard-v1.html",
   ".codex-plugin/package-allowlist.json",
@@ -98,9 +99,9 @@ function createSbom(components) {
       },
       component: {
         type: "application",
-        "bom-ref": "pkg:generic/codex-mac-cleaner@0.1.0",
+        "bom-ref": `pkg:generic/codex-mac-cleaner@${releaseVersion}`,
         name: "codex-mac-cleaner",
-        version: "0.1.0",
+        version: releaseVersion,
         licenses: [{ license: { id: "Apache-2.0" } }],
       },
     },
