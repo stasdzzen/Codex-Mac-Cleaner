@@ -42,10 +42,12 @@ import {
   type EvidenceSet,
 } from "@codex-mac-cleaner/evidence";
 import {
+  PROTECTED_SCOPE_REGISTRY,
   evaluatePolicy,
   type FindingCategory,
   type PathValidationResult,
   type PolicyDecision,
+  type ProtectedScopeKind,
   type SnapshotFingerprint,
   validateMutationPath,
 } from "@codex-mac-cleaner/policy";
@@ -77,10 +79,106 @@ const TERMINAL_STATES = new Set([
   "completed_with_warnings",
   "failed",
 ]);
-const PROTECTED_NAME =
-  /(?:^|[._ -])(?:credential|keychain|password|secret|token|wallet|safari|chrome|firefox|browser|mail|message|photo|contact|calendar|codex)(?:$|[._ -])/iu;
 const MAX_GIT_SCAN_DEPTH = 128;
 const MAX_GIT_SCAN_ENTRIES = 100_000;
+const MAX_EMPTY_ARTIFACT_ENTRIES = 4_096;
+const EMPTY_CACHE_LOG_RULE_ID = "EMPTY_CACHE_LOG_ARTIFACT_V1" as const;
+const EMPTY_CACHE_LOG_RULE_VERSION = 1 as const;
+
+type RuntimeProtectedScopeKind = ProtectedScopeKind;
+
+const PROTECTED_SCOPE_ORDER: readonly RuntimeProtectedScopeKind[] =
+  PROTECTED_SCOPE_REGISTRY.map((rule) => rule.kind);
+
+const PROTECTED_SCOPE_NAME_PATTERNS: Readonly<
+  Partial<Record<RuntimeProtectedScopeKind, RegExp>>
+> = Object.freeze({
+  system_scope:
+    /(?:^|[._ -])(?:system|launchagent|launchdaemon|autostart)(?:$|[._ -])/iu,
+  credential_store:
+    /(?:^|[._ -])(?:credential|keychain|password|secret|token|wallet|private[_-]?key|authorization)(?:$|[._ -])/iu,
+  browser_profile:
+    /(?:^|[._ -])(?:safari|chrome|firefox|browser)(?:$|[._ -])/iu,
+  personal_data:
+    /(?:^|[._ -])(?:personal|mail|message|photo|contact|calendar|database)(?:$|[._ -])/iu,
+});
+
+function isWithinBoundary(boundary: string, path: string): boolean {
+  const fromBoundary = relative(resolve(boundary), resolve(path));
+  return (
+    fromBoundary === "" ||
+    (!isAbsolute(fromBoundary) &&
+      fromBoundary !== ".." &&
+      !fromBoundary.startsWith(`..${sep}`))
+  );
+}
+
+export interface ProtectedScopeEvaluation {
+  readonly complete: boolean;
+  readonly kinds: readonly RuntimeProtectedScopeKind[];
+}
+
+function boundariesOverlap(left: string, right: string): boolean {
+  return isWithinBoundary(left, right) || isWithinBoundary(right, left);
+}
+
+export function evaluateRuntimeProtectedScopes(input: Readonly<{
+  path: string;
+  name: string;
+  homeDirectory: string;
+  stateRoot: string;
+  currentProjectRoot: string;
+  gitMarker: boolean;
+  sensitivityFlags: readonly Observation["sensitivityFlags"][number][];
+  metadataProtectionKinds: readonly RuntimeProtectedScopeKind[];
+  structuralChecksComplete: boolean;
+  gitTraversalComplete: boolean;
+  contentSemanticChecksComplete: boolean;
+}>): ProtectedScopeEvaluation {
+  const kinds = new Set<RuntimeProtectedScopeKind>();
+  for (const kind of input.metadataProtectionKinds) kinds.add(kind);
+  const trustedContextComplete = [
+    input.path,
+    input.homeDirectory,
+    input.stateRoot,
+    input.currentProjectRoot,
+  ].every((value) => value.length > 0 && isAbsolute(value));
+  if (!isWithinBoundary(input.homeDirectory, input.path)) kinds.add("system_scope");
+  if (boundariesOverlap(input.stateRoot, input.path)) kinds.add("plugin_owned_state");
+  if (boundariesOverlap(join(input.homeDirectory, ".codex"), input.path)) {
+    kinds.add("codex_state");
+  }
+  if (boundariesOverlap(input.currentProjectRoot, input.path)) {
+    kinds.add("current_project_root");
+  }
+  if (input.gitMarker) kinds.add("local_git_repository");
+  for (const [kind, pattern] of Object.entries(PROTECTED_SCOPE_NAME_PATTERNS) as Array<
+    [RuntimeProtectedScopeKind, RegExp]
+  >) {
+    if (pattern.test(input.name)) kinds.add(kind);
+  }
+  if (
+    input.sensitivityFlags.some((flag) =>
+      ["credentials", "tokens", "subscription_url"].includes(flag),
+    )
+  ) {
+    kinds.add("credential_store");
+  }
+  if (input.sensitivityFlags.some((flag) => ["personal_data", "database"].includes(flag))) {
+    kinds.add("personal_data");
+  }
+  if (input.sensitivityFlags.includes("local_project")) {
+    kinds.add("current_project_root");
+  }
+  return Object.freeze({
+    complete:
+      trustedContextComplete &&
+      input.structuralChecksComplete &&
+      input.gitTraversalComplete &&
+      input.contentSemanticChecksComplete,
+    kinds: Object.freeze(PROTECTED_SCOPE_ORDER.filter((kind) => kinds.has(kind))),
+  });
+}
 
 interface GitProtectionScan {
   readonly marker: "directory" | "file" | null;
@@ -89,6 +187,25 @@ interface GitProtectionScan {
 
 function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
+}
+
+function fingerprintDigest(fingerprint: SnapshotFingerprint): string {
+  return `sha256:v1:${sha256(
+    [
+      fingerprint.device,
+      fingerprint.inode,
+      fingerprint.mode,
+      fingerprint.uid,
+      fingerprint.gid,
+      fingerprint.size,
+      fingerprint.mtimeNs,
+      fingerprint.ctimeNs,
+      fingerprint.fileType,
+      fingerprint.mountId,
+      fingerprint.symbolicLink,
+      fingerprint.linkCount,
+    ].join(":"),
+  )}`;
 }
 
 function safeInteger(value: bigint): number {
@@ -125,6 +242,114 @@ function categoryFor(root: LibraryRoot): FindingCategory {
   return categories[root];
 }
 
+const PUBLIC_LIBRARY_LABELS: Readonly<Record<LibraryRoot, string>> = Object.freeze({
+  Caches: "Объект кэша",
+  "Application Support": "Объект поддержки приложения",
+  Containers: "Объект контейнера",
+  "Group Containers": "Объект группового контейнера",
+  Preferences: "Объект настроек",
+  Logs: "Объект журнала",
+  HTTPStorages: "Объект HTTP-хранилища",
+  WebKit: "Объект WebKit",
+  "Saved Application State": "Объект сохранённого состояния",
+});
+
+function publicLibraryDisplayName(root: LibraryRoot, candidateRef: string): string {
+  return `${PUBLIC_LIBRARY_LABELS[root]} ${candidateRef.slice(-8)}`;
+}
+
+interface RuntimeCorrelationProfileProof {
+  readonly ownerBindingState:
+    | "resolved"
+    | "ambiguous"
+    | "missing"
+    | "mismatch"
+    | "stale";
+  readonly requirementProfileId:
+    | "private_regenerable_remnant_v1"
+    | "inspection_only_v1";
+  readonly requirementProfileVersion: number;
+  readonly requirementProfileFingerprint: string;
+  readonly staleDuringAudit: boolean;
+  readonly correlationRevisionId: string;
+}
+
+export interface RuntimeRegenerabilityProof {
+  readonly schemaVersion: 1;
+  readonly ruleId: typeof EMPTY_CACHE_LOG_RULE_ID;
+  readonly ruleVersion: typeof EMPTY_CACHE_LOG_RULE_VERSION;
+  readonly targetFingerprint: string;
+  readonly correlationRevisionId: string;
+}
+
+interface RuntimeRegenerabilityProbe {
+  readonly schemaVersion: 1;
+  readonly ruleId: typeof EMPTY_CACHE_LOG_RULE_ID;
+  readonly ruleVersion: typeof EMPTY_CACHE_LOG_RULE_VERSION;
+  readonly complete: boolean;
+  readonly empty: boolean;
+  readonly targetFingerprint: string;
+}
+
+export function deriveRuntimeDataKind(input: Readonly<{
+  category: FindingCategory;
+  sensitivityFlags: readonly Observation["sensitivityFlags"][number][];
+  correlation: RuntimeCorrelationProfileProof | null;
+  proof?: RuntimeRegenerabilityProof | null;
+  targetFingerprint?: string;
+}>): "known" | "unsafe" | "unknown" {
+  if (input.sensitivityFlags.length > 0) return "unsafe";
+  const correlation = input.correlation;
+  const proof = input.proof ?? null;
+  const profileIsComplete =
+    correlation !== null &&
+    (input.category === "cache" || input.category === "log") &&
+    correlation.ownerBindingState === "resolved" &&
+    correlation.requirementProfileId === "private_regenerable_remnant_v1" &&
+    Number.isSafeInteger(correlation.requirementProfileVersion) &&
+    correlation.requirementProfileVersion > 0 &&
+    /^sha256:v1:[a-f0-9]{64}$/u.test(correlation.requirementProfileFingerprint) &&
+    !correlation.staleDuringAudit;
+  const proofIsCurrent =
+    proof !== null &&
+    proof.schemaVersion === 1 &&
+    proof.ruleId === EMPTY_CACHE_LOG_RULE_ID &&
+    proof.ruleVersion === EMPTY_CACHE_LOG_RULE_VERSION &&
+    proof.targetFingerprint === input.targetFingerprint &&
+    proof.correlationRevisionId === correlation?.correlationRevisionId;
+  return profileIsComplete && proofIsCurrent ? "known" : "unknown";
+}
+
+function createRuntimeRegenerabilityProof(
+  probe: RuntimeRegenerabilityProbe,
+  correlation: CorrelationResolverResult | null,
+): RuntimeRegenerabilityProof | null {
+  if (!probe.complete || !probe.empty || correlation === null) return null;
+  return Object.freeze({
+    schemaVersion: 1,
+    ruleId: probe.ruleId,
+    ruleVersion: probe.ruleVersion,
+    targetFingerprint: probe.targetFingerprint,
+    correlationRevisionId: correlation.revision.correlationRevisionId,
+  });
+}
+
+function enforceProtectedScopeCompleteness(
+  decision: PolicyDecision,
+  evaluation: ProtectedScopeEvaluation,
+): PolicyDecision {
+  if (evaluation.complete) return decision;
+  return {
+    ...decision,
+    allowedActions: decision.allowedActions.filter(
+      (action) => action !== "prepare_move",
+    ),
+    blockingRuleIds: [
+      ...new Set([...decision.blockingRuleIds, "PROTECTED_SCOPE"]),
+    ],
+  };
+}
+
 interface RuntimeCandidate {
   readonly ref: string;
   readonly path: string;
@@ -134,6 +359,8 @@ interface RuntimeCandidate {
   readonly fingerprint: SnapshotFingerprint;
   readonly parentFingerprint: SnapshotFingerprint;
   readonly protected: boolean;
+  readonly protectedScopeEvaluation: ProtectedScopeEvaluation;
+  readonly regenerabilityProbe: RuntimeRegenerabilityProbe;
   readonly pathValidation: PathValidationResult;
 }
 
@@ -144,6 +371,7 @@ class RuntimeFileSystemFacade implements FileSystemFacade {
   constructor(
     private readonly homeDirectory: string,
     private readonly stateRoot: string,
+    private readonly currentProjectRoot: string,
   ) {}
 
   candidate(ref: string): RuntimeCandidate | undefined {
@@ -154,25 +382,8 @@ class RuntimeFileSystemFacade implements FileSystemFacade {
     this.candidates.clear();
   }
 
-  private isProtected(path: string, name: string): boolean {
-    const normalizedStateRoot = resolve(this.stateRoot);
-    const fromState = relative(normalizedStateRoot, resolve(path));
-    return (
-      fromState === "" ||
-      (!fromState.startsWith(`..${sep}`) && fromState !== "..") ||
-      PROTECTED_NAME.test(name) ||
-      name === ".git"
-    );
-  }
-
   private isWithinBoundary(boundary: string, path: string): boolean {
-    const fromBoundary = relative(resolve(boundary), resolve(path));
-    return (
-      fromBoundary === "" ||
-      (!isAbsolute(fromBoundary) &&
-        fromBoundary !== ".." &&
-        !fromBoundary.startsWith(`..${sep}`))
-    );
+    return isWithinBoundary(boundary, path);
   }
 
   private async directGitMarker(path: string): Promise<GitProtectionScan> {
@@ -282,12 +493,97 @@ class RuntimeFileSystemFacade implements FileSystemFacade {
     return { marker: null, blocked: false };
   }
 
-  async revalidateCandidate(candidate: RuntimeCandidate): Promise<{
-    readonly pathValidation: PathValidationResult;
-    readonly protected: boolean;
-  }> {
+  private incompleteRegenerabilityProbe(
+    fingerprint: SnapshotFingerprint,
+  ): RuntimeRegenerabilityProbe {
+    return Object.freeze({
+      schemaVersion: 1,
+      ruleId: EMPTY_CACHE_LOG_RULE_ID,
+      ruleVersion: EMPTY_CACHE_LOG_RULE_VERSION,
+      complete: false,
+      empty: false,
+      targetFingerprint: fingerprintDigest(fingerprint),
+    });
+  }
+
+  private async probeEmptyCacheLogArtifact(input: Readonly<{
+    path: string;
+    allowedRoot: string;
+    root: LibraryRoot;
+    fingerprint: SnapshotFingerprint;
+    pathValidation: PathValidationResult;
+    structurallyProtected: boolean;
+    gitProtection: GitProtectionScan;
+    signal?: AbortSignal;
+  }>): Promise<RuntimeRegenerabilityProbe> {
+    const incomplete = this.incompleteRegenerabilityProbe(input.fingerprint);
+    if (
+      (input.root !== "Caches" && input.root !== "Logs") ||
+      dirname(resolve(input.path)) !== resolve(input.allowedRoot) ||
+      !input.pathValidation.ok ||
+      input.structurallyProtected ||
+      input.gitProtection.blocked ||
+      input.gitProtection.marker !== null
+    ) {
+      return incomplete;
+    }
+    try {
+      input.signal?.throwIfAborted();
+      const before = await captureFingerprint(input.path);
+      if (fingerprintDigest(before) !== fingerprintDigest(input.fingerprint)) {
+        return incomplete;
+      }
+      let empty = false;
+      if (before.fileType === "file") {
+        empty = before.size === 0 && before.linkCount === 1;
+      } else if (before.fileType === "directory") {
+        const entries = await readdir(input.path, { withFileTypes: true });
+        if (entries.length > MAX_EMPTY_ARTIFACT_ENTRIES) return incomplete;
+        for (const entry of entries) {
+          input.signal?.throwIfAborted();
+          if (
+            entry.name === "" ||
+            entry.name === "." ||
+            entry.name === ".." ||
+            entry.name.includes(sep) ||
+            entry.name.includes("\0")
+          ) {
+            return incomplete;
+          }
+          const childPath = join(input.path, entry.name);
+          if (!this.isWithinBoundary(input.path, childPath)) return incomplete;
+          const child = await lstat(childPath, { bigint: true });
+          if (
+            child.isSymbolicLink() ||
+            child.dev.toString() !== before.device ||
+            (this.expectedUid >= 0 && Number(child.uid) !== this.expectedUid)
+          ) {
+            return incomplete;
+          }
+        }
+        empty = entries.length === 0;
+      } else {
+        return incomplete;
+      }
+      const after = await captureFingerprint(input.path);
+      if (fingerprintDigest(after) !== fingerprintDigest(before)) return incomplete;
+      return Object.freeze({
+        schemaVersion: 1,
+        ruleId: EMPTY_CACHE_LOG_RULE_ID,
+        ruleVersion: EMPTY_CACHE_LOG_RULE_VERSION,
+        complete: true,
+        empty,
+        targetFingerprint: fingerprintDigest(after),
+      });
+    } catch {
+      return incomplete;
+    }
+  }
+
+  async revalidateCandidate(candidate: RuntimeCandidate): Promise<RuntimeCandidate> {
     const root = await captureFingerprint(candidate.allowedRoot);
     const current = await captureFingerprint(candidate.path);
+    const currentParent = await captureFingerprint(dirname(candidate.path));
     const gitProtection = await this.gitProtection(candidate.path, candidate.kind);
     const pathValidation = validateMutationPath({
       root: candidate.allowedRoot,
@@ -322,12 +618,46 @@ class RuntimeFileSystemFacade implements FileSystemFacade {
         },
       ],
     });
+    const structurallyProtected =
+      current.symbolicLink ||
+      current.fileType === "unknown" ||
+      current.device !== root.device ||
+      (this.expectedUid >= 0 && current.uid !== this.expectedUid);
+    const regenerabilityProbe = await this.probeEmptyCacheLogArtifact({
+      path: candidate.path,
+      allowedRoot: candidate.allowedRoot,
+      root: candidate.root,
+      fingerprint: current,
+      pathValidation,
+      structurallyProtected,
+      gitProtection,
+    });
+    const protectedScopeEvaluation = evaluateRuntimeProtectedScopes({
+      path: candidate.path,
+      name: basename(candidate.path),
+      homeDirectory: this.homeDirectory,
+      stateRoot: this.stateRoot,
+      currentProjectRoot: this.currentProjectRoot,
+      gitMarker: gitProtection.marker !== null,
+      sensitivityFlags: [],
+      metadataProtectionKinds: [],
+      structuralChecksComplete: !structurallyProtected && pathValidation.ok,
+      gitTraversalComplete: !gitProtection.blocked,
+      contentSemanticChecksComplete:
+        regenerabilityProbe.complete && regenerabilityProbe.empty,
+    });
     return {
+      ...candidate,
+      fingerprint: current,
+      parentFingerprint: currentParent,
       pathValidation,
       protected:
-        this.isProtected(candidate.path, basename(candidate.path)) ||
+        !protectedScopeEvaluation.complete ||
+        protectedScopeEvaluation.kinds.length > 0 ||
         gitProtection.blocked ||
         !pathValidation.ok,
+      protectedScopeEvaluation,
+      regenerabilityProbe,
     };
   }
 
@@ -353,12 +683,11 @@ class RuntimeFileSystemFacade implements FileSystemFacade {
       const path = join(allowedRoot, entry.name);
       const stats = await lstat(path, { bigint: true });
       const kind = fileType(stats);
-      const protectedEntry =
+      const structurallyProtected =
         stats.isSymbolicLink() ||
         kind === "unknown" ||
         stats.dev !== rootStats.dev ||
-        (this.expectedUid >= 0 && Number(stats.uid) !== this.expectedUid) ||
-        this.isProtected(path, entry.name);
+        (this.expectedUid >= 0 && Number(stats.uid) !== this.expectedUid);
       const ref = `candidate-${sha256(path).slice(0, 24)}`;
       const snapshot = await captureFingerprint(path);
       const parentFingerprint = await captureFingerprint(dirname(path));
@@ -397,8 +726,35 @@ class RuntimeFileSystemFacade implements FileSystemFacade {
           },
         ],
       });
-      const failClosedProtected =
-        protectedEntry || gitProtection.blocked || !pathValidation.ok;
+      const regenerabilityProbe = await this.probeEmptyCacheLogArtifact({
+        path,
+        allowedRoot,
+        root,
+        fingerprint: snapshot,
+        pathValidation,
+        structurallyProtected,
+        gitProtection,
+        signal,
+      });
+      const protectedScopeEvaluation = evaluateRuntimeProtectedScopes({
+        path,
+        name: entry.name,
+        homeDirectory: this.homeDirectory,
+        stateRoot: this.stateRoot,
+        currentProjectRoot: this.currentProjectRoot,
+        gitMarker: gitProtection.marker !== null,
+        sensitivityFlags: [],
+        metadataProtectionKinds: [],
+        structuralChecksComplete: !structurallyProtected && pathValidation.ok,
+        gitTraversalComplete: !gitProtection.blocked,
+        contentSemanticChecksComplete:
+          regenerabilityProbe.complete && regenerabilityProbe.empty,
+      });
+      const excludeFromCandidates =
+        structurallyProtected ||
+        protectedScopeEvaluation.kinds.length > 0 ||
+        gitProtection.blocked ||
+        !pathValidation.ok;
       this.candidates.set(ref, {
         ref,
         path,
@@ -407,12 +763,18 @@ class RuntimeFileSystemFacade implements FileSystemFacade {
         kind,
         fingerprint: snapshot,
         parentFingerprint,
-        protected: failClosedProtected,
+        protected:
+          !protectedScopeEvaluation.complete ||
+          protectedScopeEvaluation.kinds.length > 0 ||
+          gitProtection.blocked ||
+          !pathValidation.ok,
+        protectedScopeEvaluation,
+        regenerabilityProbe,
         pathValidation,
       });
       output.push({
         ref,
-        displayName: basename(entry.name),
+        displayName: publicLibraryDisplayName(root, ref),
         kind,
         logicalSize: safeInteger(stats.size),
         physicalSize: safeInteger(stats.blocks * 512n),
@@ -429,7 +791,7 @@ class RuntimeFileSystemFacade implements FileSystemFacade {
           stats.nlink,
         ].join(":"),
         volumeKind: stats.dev === rootStats.dev ? "internal_apfs" : "external",
-        protection: failClosedProtected ? ["personal_data"] : [],
+        protection: excludeFromCandidates ? ["personal_data"] : [],
       });
     }
     return output;
@@ -462,6 +824,7 @@ interface FindingRecord {
   readonly classification: Classification;
   readonly policy: PolicyDecision;
   readonly correlation: CorrelationResolverResult | null;
+  readonly regenerabilityProof: RuntimeRegenerabilityProof | null;
   readonly candidate: RuntimeCandidate;
   readonly identity: UserExclusionIdentity;
 }
@@ -552,6 +915,7 @@ class PersistentRuntimeExclusionStore implements RuntimeExclusionStore {
 export interface RuntimeServiceOptions {
   readonly homeDirectory?: string;
   readonly stateRoot?: string;
+  readonly currentProjectRoot?: string;
   readonly now?: () => Date;
   readonly createId?: (prefix: string) => string;
   /**
@@ -699,18 +1063,31 @@ class AuditRuntimeService implements AuditToolService {
   ): FindingRecord {
     const category = categoryFor(candidate.root);
     const supportLevel = this.supportLevel(observation, category);
+    const regenerabilityProof = createRuntimeRegenerabilityProof(
+      candidate.regenerabilityProbe,
+      correlation,
+    );
     const evidence = correlation === null
       ? normalizeEvidence([observation], [])[0]!
       : buildCorrelationEvidenceSet(correlation, {
           supportLevel,
           sensitivityFlags: observation.sensitivityFlags,
-          dataKind:
-            (category === "cache" || category === "log") &&
-            observation.sensitivityFlags.length === 0
-              ? "known"
-              : observation.sensitivityFlags.length > 0
-                ? "unsafe"
-                : "unknown",
+          dataKind: deriveRuntimeDataKind({
+            category,
+            sensitivityFlags: observation.sensitivityFlags,
+            correlation: {
+              ownerBindingState: correlation.safeView.ownerBindingState,
+              requirementProfileId: correlation.revision.requirementProfileId,
+              requirementProfileVersion:
+                correlation.revision.requirementProfileVersion,
+              requirementProfileFingerprint:
+                correlation.revision.requirementProfileFingerprint,
+              staleDuringAudit: correlation.revision.staleDuringAudit,
+              correlationRevisionId: correlation.revision.correlationRevisionId,
+            },
+            proof: regenerabilityProof,
+            targetFingerprint: fingerprintDigest(candidate.fingerprint),
+          }),
         });
     const classification = classifyEvidence(evidence);
     const currentFingerprint = candidate.fingerprint;
@@ -731,31 +1108,34 @@ class AuditRuntimeService implements AuditToolService {
     const matchedExclusion = exclusionState.exclusions.find((exclusion) =>
       sameIdentity(exclusion, identity),
     );
-    const policy = evaluatePolicy({
-      classification,
-      evidenceSet: evidence,
-      ...(correlation === null
-        ? {}
-        : { correlationRevision: correlation.revision }),
-      supportLevel: evidence.supportLevel,
-      category,
-      sensitivityFlags: evidence.sensitivityFlags,
-      protectedScopeKinds: [],
-      exclusionMatch: exclusionState.invalid
-        ? { status: "invalid", errorCode: "EXCLUSION_STATE_INVALID" }
-        : matchedExclusion === undefined
-          ? { status: "none" }
-          : { status: "matched", exclusionId: matchedExclusion.exclusionId },
-      officialUninstallerApplicable:
-        correlation?.safeView.facts.officialUninstaller.state === "present",
-      snapshotFingerprint: candidate.fingerprint,
-      currentFingerprint,
-      pathValidation: candidate.pathValidation,
-    });
+    const policy = enforceProtectedScopeCompleteness(
+      evaluatePolicy({
+        classification,
+        evidenceSet: evidence,
+        ...(correlation === null
+          ? {}
+          : { correlationRevision: correlation.revision }),
+        supportLevel: evidence.supportLevel,
+        category,
+        sensitivityFlags: evidence.sensitivityFlags,
+        protectedScopeKinds: candidate.protectedScopeEvaluation.kinds,
+        exclusionMatch: exclusionState.invalid
+          ? { status: "invalid", errorCode: "EXCLUSION_STATE_INVALID" }
+          : matchedExclusion === undefined
+            ? { status: "none" }
+            : { status: "matched", exclusionId: matchedExclusion.exclusionId },
+        officialUninstallerApplicable:
+          correlation?.safeView.facts.officialUninstaller.state === "present",
+        snapshotFingerprint: candidate.fingerprint,
+        currentFingerprint,
+        pathValidation: candidate.pathValidation,
+      }),
+      candidate.protectedScopeEvaluation,
+    );
     const blockingReasons =
       policy.blockingRuleIds.length === 0
         ? []
-        : ["Изменяющее действие заблокировано fail-closed policy"];
+        : [...policy.blockingRuleIds];
     const model: FindingModelView = {
       findingId,
       displayName: observation.displayName,
@@ -783,6 +1163,7 @@ class AuditRuntimeService implements AuditToolService {
       classification,
       policy,
       correlation,
+      regenerabilityProof,
       candidate,
       identity,
     };
@@ -1211,7 +1592,7 @@ class AuditRuntimeService implements AuditToolService {
       );
       currentFinding = this.buildFinding(
         finding.observation,
-        finding.candidate,
+        currentPath,
         correlation,
         run.auditId,
         exclusionState,
@@ -1231,40 +1612,50 @@ class AuditRuntimeService implements AuditToolService {
         originalCorrelation.revision.requirementProfileFingerprint &&
       currentCorrelation.revision.exclusionStateVersion ===
         originalCorrelation.revision.exclusionStateVersion &&
+      finding.regenerabilityProof !== null &&
+      currentFinding !== null &&
+      currentFinding.regenerabilityProof !== null &&
+      finding.regenerabilityProof.ruleId ===
+        currentFinding.regenerabilityProof.ruleId &&
+      finding.regenerabilityProof.ruleVersion ===
+        currentFinding.regenerabilityProof.ruleVersion &&
       !currentCorrelation.revision.staleDuringAudit;
     const evaluated =
       currentFinding === null
         ? finding.policy
-        : evaluatePolicy({
-            classification: currentFinding.classification,
-            evidenceSet: currentFinding.evidence,
-            ...(currentCorrelation === null
-              ? {}
-              : { correlationRevision: currentCorrelation.revision }),
-            supportLevel: currentFinding.evidence.supportLevel,
-            category: currentFinding.model.category,
-            sensitivityFlags: currentFinding.evidence.sensitivityFlags,
-            protectedScopeKinds: [],
-            exclusionMatch: exclusionState.invalid
-              ? { status: "invalid", errorCode: "EXCLUSION_STATE_INVALID" }
-              : exclusionState.exclusions.some((exclusion) =>
-                    sameIdentity(exclusion, currentFinding!.identity),
-                  )
-                ? {
-                    status: "matched",
-                    exclusionId:
-                      exclusionState.exclusions.find((exclusion) =>
-                        sameIdentity(exclusion, currentFinding!.identity),
-                      )!.exclusionId,
-                  }
-                : { status: "none" },
-            officialUninstallerApplicable:
-              currentCorrelation?.safeView.facts.officialUninstaller.state ===
-              "present",
-            snapshotFingerprint: finding.candidate.fingerprint,
-            currentFingerprint: observed.sourceFingerprint,
-            pathValidation: currentPath.pathValidation,
-          });
+        : enforceProtectedScopeCompleteness(
+            evaluatePolicy({
+              classification: currentFinding.classification,
+              evidenceSet: currentFinding.evidence,
+              ...(currentCorrelation === null
+                ? {}
+                : { correlationRevision: currentCorrelation.revision }),
+              supportLevel: currentFinding.evidence.supportLevel,
+              category: currentFinding.model.category,
+              sensitivityFlags: currentFinding.evidence.sensitivityFlags,
+              protectedScopeKinds: currentPath.protectedScopeEvaluation.kinds,
+              exclusionMatch: exclusionState.invalid
+                ? { status: "invalid", errorCode: "EXCLUSION_STATE_INVALID" }
+                : exclusionState.exclusions.some((exclusion) =>
+                      sameIdentity(exclusion, currentFinding!.identity),
+                    )
+                  ? {
+                      status: "matched",
+                      exclusionId:
+                        exclusionState.exclusions.find((exclusion) =>
+                          sameIdentity(exclusion, currentFinding!.identity),
+                        )!.exclusionId,
+                    }
+                  : { status: "none" },
+              officialUninstallerApplicable:
+                currentCorrelation?.safeView.facts.officialUninstaller.state ===
+                "present",
+              snapshotFingerprint: finding.candidate.fingerprint,
+              currentFingerprint: observed.sourceFingerprint,
+              pathValidation: currentPath.pathValidation,
+            }),
+            currentPath.protectedScopeEvaluation,
+          );
     const policyDecision: PolicyDecision = authorityStable
       ? evaluated
       : {
@@ -1698,7 +2089,15 @@ export async function createRuntimeCore(
   );
   const installationKey = await new InstallationKeyStore({ stateRoot })
     .loadOrCreate();
-  const filesystem = new RuntimeFileSystemFacade(homeDirectory, stateRoot);
+  const requestedCurrentProjectRoot = resolve(
+    options.currentProjectRoot ?? process.cwd(),
+  );
+  const currentProjectRoot = await realpath(requestedCurrentProjectRoot);
+  const filesystem = new RuntimeFileSystemFacade(
+    homeDirectory,
+    stateRoot,
+    currentProjectRoot,
+  );
   const auditService = new AuditRuntimeService(
     filesystem,
     exclusionStore,

@@ -4,6 +4,7 @@
   "type": "module",
   "exports": "./src/server.ts",
   "scripts": {
+    "build": "node scripts/build-plugin-runtime.mjs",
     "build:plugin": "node scripts/build-plugin-runtime.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run test"

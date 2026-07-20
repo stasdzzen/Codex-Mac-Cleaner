@@ -2,7 +2,6 @@ import { z } from "zod";
 
 import {
   IsoDateTimeSchema,
-  NullableIsoDateTimeSchema,
   OpaqueIdSchema,
 } from "./common.js";
 
@@ -13,7 +12,6 @@ const ScheduleIntentBaseShape = {
   state: z.enum([
     "requested",
     "awaiting_confirmation",
-    "completed",
     "capability_unavailable",
     "failed",
   ]),
@@ -44,41 +42,19 @@ export const ScheduleIntentSchema = z.discriminatedUnion("action", [
   z.object({ ...ScheduleIntentBaseShape, action: z.literal("delete") }).strict(),
 ]);
 
-const OpaqueAutomationIdSchema = z
-  .string()
-  .regex(/^automation:v1:[A-Za-z0-9_-]{16,128}$/u);
-
 export const ScheduleStateSchema = z
   .object({
     schemaVersion: z.literal(1),
-    enabled: z.boolean(),
-    automationId: OpaqueAutomationIdSchema.nullable(),
-    dayOfMonth: DayOfMonthSchema.nullable(),
-    localTime: LocalTimeSchema.nullable(),
-    nextRunAt: NullableIsoDateTimeSchema,
-    lastRunAt: NullableIsoDateTimeSchema,
+    enabled: z.literal(false),
+    automationId: z.null(),
+    dayOfMonth: z.null(),
+    localTime: z.null(),
+    nextRunAt: z.null(),
+    lastRunAt: z.null(),
     updatedAt: IsoDateTimeSchema,
-    capabilityState: z.enum(["available", "unavailable", "unknown"]),
+    capabilityState: z.enum(["unavailable", "unknown"]),
   })
-  .strict()
-  .superRefine((state, context) => {
-    const configured = [state.automationId, state.dayOfMonth, state.localTime].every(
-      (value) => value !== null,
-    );
-    const empty = [state.automationId, state.dayOfMonth, state.localTime].every(
-      (value) => value === null,
-    );
-    if (!configured && !empty) {
-      context.addIssue({ code: "custom", message: "Состояние расписания неполно" });
-    }
-    if (state.enabled && (!configured || state.capabilityState !== "available")) {
-      context.addIssue({
-        code: "custom",
-        message: "Активное расписание требует capability и полной конфигурации",
-        path: ["enabled"],
-      });
-    }
-  });
+  .strict();
 
 export type ScheduleIntent = z.infer<typeof ScheduleIntentSchema>;
 export type ScheduleState = z.infer<typeof ScheduleStateSchema>;

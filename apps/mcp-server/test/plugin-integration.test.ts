@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { execFile } from "node:child_process";
 import {
   mkdir,
   mkdtemp,
@@ -9,6 +10,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 
 import {
   createCommandRunner,
@@ -30,7 +32,7 @@ import {
   getDefaultEnvironment,
 } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
   APP_VISIBLE_TOOL_DEFINITIONS,
@@ -42,6 +44,36 @@ import {
 } from "../src/server.js";
 
 const platform = { platform: "darwin", arch: "arm64", release: "26.0.0" } as const;
+const execFileAsync = promisify(execFile);
+const repositoryRoot = new URL("../../../", import.meta.url).pathname;
+let packagedRoot = "";
+
+beforeAll(async () => {
+  packagedRoot = await mkdtemp(join(tmpdir(), "cmc-plugin-integration-build-"));
+  await execFileAsync(
+    process.execPath,
+    [
+      join(repositoryRoot, "apps/mcp-server/scripts/build-plugin-runtime.mjs"),
+      "--output-root",
+      packagedRoot,
+    ],
+    {
+      cwd: repositoryRoot,
+      env: { ...process.env, NODE_ENV: "production" },
+      maxBuffer: 32 * 1024 * 1024,
+    },
+  );
+}, 120_000);
+
+afterAll(async () => {
+  if (packagedRoot !== "") {
+    await rm(packagedRoot, { recursive: true, force: true });
+  }
+});
+
+function packagedPath(...segments: string[]): string {
+  return join(packagedRoot, ...segments);
+}
 
 const modelToolNames = [
   "audit_start",
@@ -321,7 +353,7 @@ describe("полная интеграция MCP App", () => {
     }
   });
 
-  it("schedule coordinator создаёт только intent и не вызывает host automation", async () => {
+  it("schedule coordinator остаётся inert/unavailable и не вызывает host automation", async () => {
     let hostCalls = 0;
     const coordinator = new ScheduleIntentCoordinator({
       now: () => new Date("2026-07-18T02:00:00.000Z"),
@@ -339,21 +371,49 @@ describe("полная интеграция MCP App", () => {
     });
     expect(requested).toMatchObject({
       intentId: "intent-synthetic-1",
-      state: "awaiting_confirmation",
+      state: "capability_unavailable",
       requiresHostCapability: true,
     });
     expect(await coordinator.get({ intentId: requested.intentId })).toMatchObject({
       intentId: requested.intentId,
       action: "enable",
+      state: "capability_unavailable",
     });
     expect(hostCalls).toBe(0);
 
-    await coordinator.complete({
-      intentId: requested.intentId,
-      requestId: "request-complete-1",
-      outcome: "capability_unavailable",
-      automationId: null,
+    await expect(
+      coordinator.complete({
+        intentId: requested.intentId,
+        requestId: "request-complete-1",
+        outcome: "capability_unavailable",
+        automationId: null,
+      }),
+    ).rejects.toThrow("SCHEDULE_INTENT_NOT_PENDING");
+    expect(await coordinator.state({})).toMatchObject({
+      enabled: false,
+      capabilityState: "unavailable",
+      pendingIntentId: null,
     });
+    const server = createMcpServer(platform, { scheduleService: coordinator });
+    const client = new Client({ name: "schedule-unavailable", version: "1.0.0" });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    try {
+      const unavailable = await client.callTool({
+        name: "schedule_request",
+        arguments: {
+          requestId: "request-schedule-unavailable",
+          action: "pause",
+        },
+      });
+      expect(JSON.stringify(unavailable.content)).toContain("недоступно");
+      expect(JSON.stringify(unavailable.content)).not.toMatch(
+        /требуется отдельная host capability|подтверждени/iu,
+      );
+    } finally {
+      await client.close();
+      await server.close();
+    }
     expect(hostCalls).toBe(0);
     await expect(
       coordinator.request({
@@ -411,7 +471,7 @@ describe("полная интеграция MCP App", () => {
 
   it("скомпилированный Dashboard package автономен", async () => {
     const html = await readFile(
-      new URL("../../../.codex-plugin/assets/dashboard-v1.html", import.meta.url),
+      packagedPath(".codex-plugin", "assets", "dashboard-v1.html"),
       "utf8",
     );
     expect(html).toContain("Audit Dashboard");
@@ -440,7 +500,7 @@ describe("полная интеграция MCP App", () => {
     const [source, runtime] = await Promise.all([
       readFile(new URL("../src/runtime.ts", import.meta.url), "utf8"),
       readFile(
-        new URL("../../../.codex-plugin/runtime/server.js", import.meta.url),
+        packagedPath(".codex-plugin", "runtime", "server.js"),
         "utf8",
       ),
     ]);
@@ -454,11 +514,7 @@ describe("полная интеграция MCP App", () => {
   });
 
   it("скомпилированный stdio runtime выполняет безопасный audit/dashboard flow", async () => {
-    const repositoryRoot = new URL("../../../", import.meta.url).pathname;
-    const runtimePath = new URL(
-      "../../../.codex-plugin/runtime/server.js",
-      import.meta.url,
-    ).pathname;
+    const runtimePath = packagedPath(".codex-plugin", "runtime", "server.js");
     const syntheticRoot = await mkdtemp(join(tmpdir(), "cmc-compiled-runtime-"));
     const syntheticHome = join(syntheticRoot, "home");
     const syntheticData = join(
@@ -491,7 +547,7 @@ describe("полная интеграция MCP App", () => {
       env: {
         ...getDefaultEnvironment(),
         HOME: syntheticHome,
-        CODEX_MAC_CLEANER_PLUGIN_ROOT: repositoryRoot,
+        CODEX_MAC_CLEANER_PLUGIN_ROOT: packagedRoot,
         CODEX_MAC_CLEANER_PLUGIN_DATA: syntheticData,
       },
       stderr: "pipe",
@@ -571,11 +627,7 @@ describe("полная интеграция MCP App", () => {
   it(
     "скомпилированный stdio runtime использует package-owned history N и проводит N+1 prepare/move/restore",
     async () => {
-      const repositoryRoot = new URL("../../../", import.meta.url).pathname;
-      const runtimePath = new URL(
-        "../../../.codex-plugin/runtime/server.js",
-        import.meta.url,
-      ).pathname;
+      const runtimePath = packagedPath(".codex-plugin", "runtime", "server.js");
       const boundaryPath = new URL(
         "./compiled-runtime-boundary.mjs",
         import.meta.url,
@@ -592,8 +644,8 @@ describe("полная интеграция MCP App", () => {
       const candidateName = `Generated Remnant ${randomUUID()}`;
       const candidatePath = join(syntheticHome, "Library", "Caches", candidateName);
       const protectedSibling = join(syntheticHome, "Library", "Caches", "Credentials");
-      await mkdir(candidatePath, { recursive: true });
-      await writeFile(join(candidatePath, "payload.bin"), "generated-runtime-payload", "utf8");
+      await mkdir(join(syntheticHome, "Library", "Caches"), { recursive: true });
+      await writeFile(candidatePath, "", "utf8");
       await mkdir(protectedSibling, { recursive: true });
       const seeded = await seedGeneratedOwnerHistory(
         syntheticHome,
@@ -607,7 +659,7 @@ describe("полная интеграция MCP App", () => {
         env: {
           ...getDefaultEnvironment(),
           HOME: syntheticHome,
-          CODEX_MAC_CLEANER_PLUGIN_ROOT: repositoryRoot,
+          CODEX_MAC_CLEANER_PLUGIN_ROOT: packagedRoot,
           CODEX_MAC_CLEANER_PLUGIN_DATA: stateRoot,
         },
         stderr: "ignore",
@@ -625,8 +677,12 @@ describe("полная интеграция MCP App", () => {
             displayName: string;
             allowedActions: string[];
           }>;
-        }).findings.find(({ displayName }) => displayName === candidateName);
+        }).findings.find(({ allowedActions }) =>
+          allowedActions.includes("prepare_move"),
+        );
         expect(finding).toBeDefined();
+        expect(finding?.displayName).toMatch(/^Объект кэша [a-f0-9]{8}$/u);
+        expect(finding?.displayName).not.toContain(candidateName);
 
         const dashboard = await client.callTool({
           name: "dashboard_open",
@@ -654,7 +710,7 @@ describe("полная интеграция MCP App", () => {
         expect(preview.isError).not.toBe(true);
         expect(preview.structuredContent).toMatchObject({
           findingId: finding?.findingId,
-          displayName: candidateName,
+          displayName: finding?.displayName,
         });
         const previewToken = (preview.structuredContent as { previewToken: string })
           .previewToken;
@@ -717,6 +773,7 @@ describe("полная интеграция MCP App", () => {
         });
         expect(publicResult).not.toContain(syntheticRoot);
         expect(publicResult).not.toContain(seeded.bundleId);
+        expect(publicResult).not.toContain(candidateName);
         expect(publicResult).not.toMatch(
           /canonicalPath|bundleIdentifier|packageIdentifier|designatedRequirement|correlation graph/i,
         );

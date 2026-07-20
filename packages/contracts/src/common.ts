@@ -5,9 +5,9 @@ const FILE_URI_PATTERN = /\bfile:\/{3}[^\s"'<>]+/iu;
 const WINDOWS_PATH_PATTERN =
   /(?:^|[\s:="'(])[A-Za-z]:\\(?:[^\\\s"'<>]+\\)*[^\\\s"'<>]+/u;
 const SECRET_ASSIGNMENT_PATTERN =
-  /["']?(?:token|password|secret|api[_-]?key|subscription[_-]?url)["']?\s*[:=]\s*(?:["'][^"']*["']|\S+)/iu;
-const AUTHORIZATION_BEARER_PATTERN =
-  /["']?authorization["']?\s*:\s*["']?bearer\s+[^\s"']+/iu;
+  /["']?(?:token|password|secret|cookie|session|authorization|(?:api|private|client|access|session)[_-]?(?:key|secret|token)|subscription[_-]?url)["']?\s*[:=]\s*(?:["'][^"']*["']|\S+)/iu;
+const AUTHORIZATION_VALUE_PATTERN =
+  /["']?(?:proxy[_-]?)?authorization["']?\s*:\s*["']?[A-Za-z][A-Za-z0-9._-]*\s+[^\s"']+/iu;
 
 export function containsFullPath(value: string): boolean {
   return (
@@ -20,7 +20,7 @@ export function containsFullPath(value: string): boolean {
 export function containsSecretLikeValue(value: string): boolean {
   return (
     SECRET_ASSIGNMENT_PATTERN.test(value) ||
-    AUTHORIZATION_BEARER_PATTERN.test(value)
+    AUTHORIZATION_VALUE_PATTERN.test(value)
   );
 }
 

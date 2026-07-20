@@ -6,6 +6,14 @@ import { pathToFileURL } from "node:url";
 
 const scriptDirectory = dirname(new URL(import.meta.url).pathname);
 const repositoryRoot = resolve(scriptDirectory, "../../..");
+const outputRootIndex = process.argv.indexOf("--output-root");
+if (outputRootIndex >= 0 && process.argv[outputRootIndex + 1] === undefined) {
+  throw new Error("OUTPUT_ROOT_REQUIRED");
+}
+const outputRoot =
+  outputRootIndex >= 0
+    ? resolve(process.argv[outputRootIndex + 1])
+    : repositoryRoot;
 const widgetRoot = join(repositoryRoot, "apps/widget");
 const require = createRequire(import.meta.url);
 const reactEntry = require.resolve("react", { paths: [widgetRoot] });
@@ -32,10 +40,10 @@ const [{ build: buildWidget }, { default: react }, { default: tailwindcss }] =
 const temporaryRoot = await mkdtemp(join(tmpdir(), "cmc-dashboard-build-"));
 const widgetOutput = join(temporaryRoot, "widget");
 const dashboardTarget = join(
-  repositoryRoot,
+  outputRoot,
   ".codex-plugin/assets/dashboard-v1.html",
 );
-const runtimeTarget = join(repositoryRoot, ".codex-plugin/runtime/server.js");
+const runtimeTarget = join(outputRoot, ".codex-plugin/runtime/server.js");
 
 try {
   await buildWidget({

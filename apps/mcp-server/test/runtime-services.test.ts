@@ -307,9 +307,7 @@ describe("production runtime services", () => {
         const findings = (results.structuredContent as {
           findings: Array<{ displayName: string }>;
         }).findings;
-        expect(findings).not.toContainEqual(
-          expect.objectContaining({ displayName: "Parent Candidate" }),
-        );
+        expect(findings).toHaveLength(0);
       } finally {
         await client.close();
         await server.close();
@@ -324,7 +322,7 @@ describe("production runtime services", () => {
       roots.push(root);
       const homeDirectory = join(root, "home");
       const candidatePath = join(homeDirectory, "Library", "Caches", "Parent Candidate");
-      await mkdir(join(candidatePath, "Nested Project"), { recursive: true });
+      await mkdir(candidatePath, { recursive: true });
       const harness = await productionCorrelationHarness(homeDirectory, candidatePath);
       harness.removeOwner();
       const { server, client } = await connectedRuntime(
@@ -337,7 +335,7 @@ describe("production runtime services", () => {
         const results = await completedAudit(client, `nested-git-${markerKind}-token-audit`);
         const finding = (results.structuredContent as {
           findings: Array<{ findingId: string; displayName: string; allowedActions: string[] }>;
-        }).findings.find((item) => item.displayName === "Parent Candidate");
+        }).findings[0];
         expect(finding?.allowedActions).toContain("prepare_move");
 
         await createNestedGitMarker(candidatePath, markerKind);
@@ -354,22 +352,33 @@ describe("production runtime services", () => {
     },
   );
 
-  it("проводит safe N→N+1 single-object prepare/move/restore без запуска executable", async () => {
-    const root = await mkdtemp(join(tmpdir(), "cmc-runtime-core-"));
-    roots.push(root);
-    const homeDirectory = join(root, "home");
-    const candidatePath = join(homeDirectory, "Library", "Caches", "Synthetic Remnant");
-    await mkdir(candidatePath, { recursive: true });
-    await writeFile(join(candidatePath, "payload.bin"), "runtime-core-payload", "utf8");
-    const harness = await productionCorrelationHarness(homeDirectory, candidatePath);
-    harness.removeOwner();
-    const { server, client } = await connectedRuntime(
-      homeDirectory,
-      join(root, "state"),
-      harness.correlation,
-      harness.fixedNow,
-    );
-    try {
+  it.each(["Caches", "Logs"] as const)(
+    "проводит empty %s N→N+1 audit/prepare/move/restore без запуска executable",
+    async (libraryRoot) => {
+      const root = await mkdtemp(
+        join(tmpdir(), `cmc-runtime-core-${libraryRoot}-`),
+      );
+      roots.push(root);
+      const homeDirectory = join(root, "home");
+      const candidatePath = join(
+        homeDirectory,
+        "Library",
+        libraryRoot,
+        "Synthetic Remnant",
+      );
+      await mkdir(candidatePath, { recursive: true });
+      const harness = await productionCorrelationHarness(
+        homeDirectory,
+        candidatePath,
+      );
+      harness.removeOwner();
+      const { server, client } = await connectedRuntime(
+        homeDirectory,
+        join(root, "state"),
+        harness.correlation,
+        harness.fixedNow,
+      );
+      try {
       const results = await completedAudit(client, "synthetic-audit-n1");
       const resultContent = results.structuredContent as {
         auditId: string;
@@ -507,6 +516,85 @@ describe("production runtime services", () => {
         restored.structuredContent,
       );
       await expect(stat(candidatePath)).resolves.toBeDefined();
+      } finally {
+        await client.close();
+        await server.close();
+      }
+    },
+  );
+
+  it.each(["Caches", "Logs"] as const)(
+    "оставляет непустой %s artifact inspect-only с POLICY_DATA_KIND_UNKNOWN",
+    async (libraryRoot) => {
+      const root = await mkdtemp(join(tmpdir(), `cmc-runtime-nonempty-${libraryRoot}-`));
+      roots.push(root);
+      const homeDirectory = join(root, "home");
+      const candidatePath = join(
+        homeDirectory,
+        "Library",
+        libraryRoot,
+        "Arbitrary Payload",
+      );
+      await mkdir(candidatePath, { recursive: true });
+      await writeFile(join(candidatePath, "payload.bin"), "arbitrary-payload", "utf8");
+      const harness = await productionCorrelationHarness(homeDirectory, candidatePath);
+      harness.removeOwner();
+      const { server, client } = await connectedRuntime(
+        homeDirectory,
+        join(root, "state"),
+        harness.correlation,
+        harness.fixedNow,
+      );
+      try {
+        const results = await completedAudit(
+          client,
+          `nonempty-${libraryRoot.toLowerCase()}-audit`,
+        );
+        const finding = (results.structuredContent as {
+          findings: Array<{ allowedActions: string[]; blockingReasons: string[] }>;
+        }).findings[0];
+        expect(finding?.allowedActions).not.toContain("prepare_move");
+        expect(finding?.blockingReasons).toContain("POLICY_DATA_KIND_UNKNOWN");
+      } finally {
+        await client.close();
+        await server.close();
+      }
+    },
+  );
+
+  it("пересчитывает empty proof перед preview и блокирует появившийся payload", async () => {
+    const root = await mkdtemp(join(tmpdir(), "cmc-runtime-proof-race-"));
+    roots.push(root);
+    const homeDirectory = join(root, "home");
+    const candidatePath = join(
+      homeDirectory,
+      "Library",
+      "Caches",
+      "Proof Race",
+    );
+    await mkdir(candidatePath, { recursive: true });
+    const harness = await productionCorrelationHarness(homeDirectory, candidatePath);
+    harness.removeOwner();
+    const { server, client } = await connectedRuntime(
+      homeDirectory,
+      join(root, "state"),
+      harness.correlation,
+      harness.fixedNow,
+    );
+    try {
+      const results = await completedAudit(client, "proof-race-audit");
+      const finding = (results.structuredContent as {
+        findings: Array<{ findingId: string; allowedActions: string[] }>;
+      }).findings[0];
+      expect(finding?.allowedActions).toContain("prepare_move");
+
+      await writeFile(join(candidatePath, "payload.bin"), "late-payload", "utf8");
+      const preview = await client.callTool({
+        name: "quarantine_prepare_move",
+        arguments: { findingId: finding?.findingId, auditRevision: 1 },
+      });
+      expect(preview.isError).toBe(true);
+      expect(preview.structuredContent ?? {}).not.toHaveProperty("previewToken");
     } finally {
       await client.close();
       await server.close();
@@ -524,7 +612,6 @@ describe("production runtime services", () => {
       "Synthetic Purge Remnant",
     );
     await mkdir(candidatePath, { recursive: true });
-    await writeFile(join(candidatePath, "payload.bin"), "purge-payload", "utf8");
     const harness = await productionCorrelationHarness(
       homeDirectory,
       candidatePath,
@@ -631,11 +718,11 @@ describe("production runtime services", () => {
     try {
       const results = await completedAudit(client, "fail-closed-audit");
       const findings = (results.structuredContent as {
-        findings: Array<{ displayName: string; allowedActions: string[] }>;
+        findings: Array<{ category: string; allowedActions: string[] }>;
       }).findings;
-      expect(findings.find(({ displayName }) => displayName === "Incomplete Remnant")
+      expect(findings.find(({ category }) => category === "cache")
         ?.allowedActions).not.toContain("prepare_move");
-      expect(findings.find(({ displayName }) => displayName === "Inspection Only Remnant")
+      expect(findings.find(({ category }) => category === "application_support")
         ?.allowedActions).not.toContain("prepare_move");
     } finally {
       await client.close();
