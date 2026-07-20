@@ -71,7 +71,7 @@ async function buildPlugin(outputRoot) {
 }
 
 function packageUrl(name, version) {
-  const encodedName = encodeURIComponent(name).replace("%2F", "/");
+  const encodedName = encodeURIComponent(name).replaceAll("%2F", "/");
   return `pkg:npm/${encodedName}@${encodeURIComponent(version)}`;
 }
 

@@ -9,6 +9,15 @@ const execFileAsync = promisify(execFile);
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 
 describe("CMC-10: supply-chain and public package boundary", () => {
+  it("полностью декодирует package path separators в CycloneDX purl", async () => {
+    const source = await readFile(
+      resolve(repositoryRoot, "scripts/package-release.mjs"),
+      "utf8",
+    );
+    expect(source).toContain('.replaceAll("%2F", "/")');
+    expect(source).not.toContain('.replace("%2F", "/")');
+  });
+
   it("workflows используют read-only permissions и pinned GitHub-owned actions", async () => {
     const { stdout } = await execFileAsync(
       "git",
