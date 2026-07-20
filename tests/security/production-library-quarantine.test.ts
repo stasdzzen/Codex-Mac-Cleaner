@@ -5,6 +5,8 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { deriveRuntimeDataKind } from "../../apps/mcp-server/src/runtime.js";
+
 import {
   createCommandRunner,
   createMacOSCandidateRegistry,
@@ -43,17 +45,23 @@ async function exists(path: string): Promise<boolean> {
 }
 
 describe("security: production Library audit → quarantine → restore", () => {
-  it("generated ~/Library/Caches artifact проходит полный reversible flow", async () => {
+  it.each([
+    { rootName: "Caches", category: "cache" },
+    { rootName: "Logs", category: "log" },
+  ] as const)("generated ~/Library/$rootName artifact проходит полный reversible flow", async ({
+    rootName,
+    category,
+  }) => {
     const temporaryRoot = await mkdtemp(join(tmpdir(), "cmc-production-quarantine-"));
     const userHome = join(temporaryRoot, "synthetic-home");
-    const allowedRoot = join(userHome, "Library", "Caches");
+    const allowedRoot = join(userHome, "Library", rootName);
     const artifactParent = join(allowedRoot, "Owner");
-    const artifact = join(artifactParent, "private-cache");
+    const artifact = join(artifactParent, privacyCanary);
     const storeRoot = join(temporaryRoot, "state");
     const ownerApp = "/Applications/Owner.app";
     const ownerExecutable = `${ownerApp}/Contents/MacOS/Owner`;
     await mkdir(artifactParent, { recursive: true });
-    await writeFile(artifact, privacyCanary, { mode: 0o600 });
+    await writeFile(artifact, "", { mode: 0o600 });
 
     let installed = true;
     let running = true;
@@ -157,12 +165,35 @@ describe("security: production Library audit → quarantine → restore", () => 
       rawInput: second,
     });
     const observed = await inspectMoveSource({ allowedRoot, sourcePath: artifact });
+    const targetFingerprint = `sha256:v1:${"c".repeat(64)}`;
+    const dataKind = deriveRuntimeDataKind({
+      category,
+      sensitivityFlags: [],
+      correlation: {
+        ownerBindingState: resolverResult.safeView.ownerBindingState,
+        requirementProfileId: resolverResult.revision.requirementProfileId,
+        requirementProfileVersion: resolverResult.revision.requirementProfileVersion,
+        requirementProfileFingerprint:
+          resolverResult.revision.requirementProfileFingerprint,
+        staleDuringAudit: resolverResult.revision.staleDuringAudit,
+        correlationRevisionId: resolverResult.revision.correlationRevisionId,
+      },
+      proof: {
+        schemaVersion: 1,
+        ruleId: "EMPTY_CACHE_LOG_ARTIFACT_V1",
+        ruleVersion: 1,
+        targetFingerprint,
+        correlationRevisionId: resolverResult.revision.correlationRevisionId,
+      },
+      targetFingerprint,
+    });
+    expect(dataKind).toBe("known");
     const core = runSafeCoreIntegrationHarness({
       resolverResult,
-      evidenceOptions: { supportLevel: "candidate", sensitivityFlags: [], dataKind: "known" },
+      evidenceOptions: { supportLevel: "candidate", sensitivityFlags: [], dataKind },
       policyContext: {
         supportLevel: "candidate",
-        category: "cache",
+        category,
         sensitivityFlags: [],
         protectedScopeKinds: [],
         exclusionMatch: { status: "none" },
@@ -184,7 +215,7 @@ describe("security: production Library audit → quarantine → restore", () => 
       sourceFingerprint: observed.sourceFingerprint,
       sourceParentFingerprint: observed.sourceParentFingerprint,
       artifactKind: "file",
-      category: "cache",
+      category,
       physicalSize: observed.sourceFingerprint.size,
       classificationRuleIds: [...core.classification.ruleIds],
       policyRuleIds: ["POLICY_V2_PRIVATE_REGENERABLE_REMNANT"],
@@ -217,7 +248,7 @@ describe("security: production Library audit → quarantine → restore", () => 
     const restoreSession = "ui-cache-restore";
     const restorePreview = await controller.prepareRestore({ operationId, uiSessionId: restoreSession });
     await controller.restoreFromQuarantine({ token: restorePreview.secret, operationId, uiSessionId: restoreSession });
-    expect(await readFile(artifact, "utf8")).toBe(privacyCanary);
+    expect(await readFile(artifact, "utf8")).toBe("");
     expect(JSON.stringify({ safe: core.safeInput, evidence: core.evidenceSet, decision: core.decision })).not.toContain(privacyCanary);
 
     await rm(temporaryRoot, { recursive: true, force: true });

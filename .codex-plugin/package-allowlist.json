@@ -7,6 +7,7 @@
     ".codex-plugin/assets/dashboard-v1.html",
     ".mcp.json",
     "skills/codex-mac-cleaner/SKILL.md",
-    "LICENSE"
+    "LICENSE",
+    "docs/release/third-party-notices.json"
   ]
 }

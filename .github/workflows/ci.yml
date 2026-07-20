@@ -1,0 +1,54 @@
+name: CMC-10 — автоматические проверки
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cmc-10-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  security-and-runtime:
+    name: Security, runtime и plugin на Apple Silicon
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - name: Получить исходники
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Установить Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24.18.0
+      - name: Установить зависимости
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
+      - name: Проверить workspace
+        run: pnpm check
+      - name: Проверить CMC-10 security и plugin gates
+        run: pnpm exec vitest run tests/security tests/plugin
+      - name: Собрать widget и MCP plugin
+        run: |
+          pnpm --filter @codex-mac-cleaner/widget build
+          pnpm --filter @codex-mac-cleaner/mcp-server build
+      - name: Проверить deterministic package без публикации
+        run: node scripts/package-release.mjs --verify-only
+      - name: Проверить repository contracts и diff
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          python3 .github/scripts/validate_repository.py
+          python3 -m unittest discover -s tests -p 'test_repository_policy.py' -v
+          git show --check --format= --no-renames HEAD
+          if [[ -n "$BASE_REF" ]]; then
+            git diff --check "origin/$BASE_REF"...HEAD
+          fi

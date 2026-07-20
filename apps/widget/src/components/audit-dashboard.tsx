@@ -168,6 +168,18 @@ export function AuditDashboard({ snapshot, bridge }: AuditDashboardProps) {
     }
   }
 
+  async function startManualAudit(): Promise<void> {
+    try {
+      await bridge.callTool("audit_start", {
+        requestId: createRequestId("manual-audit"),
+        profile: "application_remnants",
+      });
+      toast.success("Ручной read-only аудит запущен.");
+    } catch {
+      toast.error("Не удалось запустить ручной read-only аудит.");
+    }
+  }
+
   async function excludeFinding(finding: DashboardFinding): Promise<void> {
     if (acceptedSnapshot.revision === null) return;
     await bridge.callTool("exclusion_create", {
@@ -305,11 +317,7 @@ export function AuditDashboard({ snapshot, bridge }: AuditDashboardProps) {
         </TabsContent>
 
         <TabsContent value="schedule">
-          <DependencyCard
-            icon={CalendarClockIcon}
-            title="Расписание пока недоступно"
-            description="Расписание read-only аудита появится в CMC-13."
-          />
+          <ScheduleFallbackCard onManualRun={startManualAudit} />
         </TabsContent>
       </Tabs>
 
@@ -503,24 +511,41 @@ function ExclusionAction({
   );
 }
 
-interface DependencyCardProps {
-  readonly icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
-  readonly title: string;
-  readonly description: string;
+interface ScheduleFallbackCardProps {
+  readonly onManualRun: () => Promise<void>;
 }
 
-function DependencyCard({ icon: Icon, title, description }: DependencyCardProps) {
+function ScheduleFallbackCard({ onManualRun }: ScheduleFallbackCardProps) {
+  const [pending, setPending] = useState(false);
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{title}</CardTitle>
-        <CardDescription>{description}</CardDescription>
+        <CardTitle>Автоматическое расписание недоступно</CardTitle>
+        <CardDescription>
+          Автоматическое расписание недоступно в v0.1. Запустите обычный read-only
+          аудит вручную.
+        </CardDescription>
         <CardAction>
-          <Icon aria-hidden="true" />
+          <CalendarClockIcon aria-hidden="true" />
         </CardAction>
       </CardHeader>
-      <CardContent>
-        <Badge variant="outline">dependency-gated</Badge>
+      <CardContent className="flex flex-wrap items-center gap-3">
+        <Badge variant="outline">disabled v0.1</Badge>
+        <Button
+          type="button"
+          disabled={pending}
+          onClick={() => {
+            setPending(true);
+            void onManualRun().finally(() => setPending(false));
+          }}
+        >
+          {pending ? (
+            <LoaderCircleIcon className="animate-spin" data-icon="inline-start" />
+          ) : (
+            <CalendarClockIcon data-icon="inline-start" />
+          )}
+          Запустить аудит вручную
+        </Button>
       </CardContent>
     </Card>
   );

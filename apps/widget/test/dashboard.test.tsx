@@ -39,8 +39,8 @@ afterEach(() => {
 });
 
 describe("Audit Dashboard contract", () => {
-  it("показывает пять вкладок, рабочие Исключения и dependency state CMC-13", async () => {
-    const { bridge } = createBridge();
+  it("показывает пять вкладок, рабочие Исключения и ручной fallback CMC-13", async () => {
+    const { bridge, callTool } = createBridge();
     render(<AuditDashboard snapshot={dashboardFixture} bridge={bridge} />);
 
     for (const name of ["Обзор", "Находки", "Карантин", "Исключения", "Расписание"]) {
@@ -51,7 +51,18 @@ describe("Audit Dashboard contract", () => {
     expect(await screen.findByText("Пользовательских исключений нет.")).toBeVisible();
 
     fireEvent.click(screen.getByRole("tab", { name: "Расписание" }));
-    expect(screen.getByText("Расписание read-only аудита появится в CMC-13.")).toBeVisible();
+    expect(
+      screen.getByText(
+        "Автоматическое расписание недоступно в v0.1. Запустите обычный read-only аудит вручную.",
+      ),
+    ).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Запустить аудит вручную" }));
+    await waitFor(() =>
+      expect(callTool).toHaveBeenCalledWith("audit_start", {
+        requestId: expect.any(String),
+        profile: "application_remnants",
+      }),
+    );
   });
 
   it("поддерживает клавиатурную навигацию по вкладкам", () => {

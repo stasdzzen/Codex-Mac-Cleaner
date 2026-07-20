@@ -1,6 +1,5 @@
 import {
   IsoDateTimeSchema,
-  NullableIsoDateTimeSchema,
   OpaqueIdSchema,
   SafeIntegerSchema,
 } from "@codex-mac-cleaner/contracts";
@@ -18,18 +17,13 @@ const ScheduleActionSchema = z.enum([
 ]);
 const ScheduleIntentStateSchema = z.enum([
   "awaiting_confirmation",
-  "completed",
   "capability_unavailable",
   "failed",
 ]);
 const ScheduleOutcomeSchema = z.enum([
-  "completed",
   "capability_unavailable",
   "failed",
 ]);
-const OpaqueAutomationIdSchema = z
-  .string()
-  .regex(/^automation:v1:[A-Za-z0-9_-]{16,128}$/u);
 
 export const ScheduleRequestInputSchema = z
   .object({
@@ -67,17 +61,9 @@ export const ScheduleIntentCompleteInputSchema = z
     intentId: OpaqueIdSchema,
     requestId: OpaqueIdSchema,
     outcome: ScheduleOutcomeSchema,
-    automationId: OpaqueAutomationIdSchema.nullable(),
+    automationId: z.null(),
   })
-  .strict()
-  .superRefine((value, context) => {
-    if (value.outcome === "completed" && value.automationId === null) {
-      context.addIssue({ code: "custom", message: "Host outcome требует opaque automationId" });
-    }
-    if (value.outcome !== "completed" && value.automationId !== null) {
-      context.addIssue({ code: "custom", message: "Неуспешный outcome не принимает automationId" });
-    }
-  });
+  .strict();
 
 export const ScheduleStateInputSchema = z.object({}).strict();
 
@@ -99,13 +85,13 @@ export const ScheduleIntentGetOutputSchema = ScheduleRequestOutputSchema;
 
 export const ScheduleStateOutputSchema = z
   .object({
-    enabled: z.boolean(),
-    dayOfMonth: DayOfMonthSchema.nullable(),
-    localTime: LocalTimeSchema.nullable(),
-    nextRunAt: NullableIsoDateTimeSchema,
-    lastRunAt: NullableIsoDateTimeSchema,
-    capabilityState: z.enum(["available", "unavailable", "unknown"]),
-    pendingIntentId: OpaqueIdSchema.nullable(),
+    enabled: z.literal(false),
+    dayOfMonth: z.null(),
+    localTime: z.null(),
+    nextRunAt: z.null(),
+    lastRunAt: z.null(),
+    capabilityState: z.literal("unavailable"),
+    pendingIntentId: z.null(),
     stateVersion: SafeIntegerSchema,
   })
   .strict();
@@ -131,7 +117,7 @@ export const MODEL_VISIBLE_SCHEDULE_TOOL_DEFINITIONS = {
   schedule_intent_get: {
     title: "Получить intent расписания",
     description:
-      "Возвращает безопасный pending intent для отдельного host capability flow.",
+      "Возвращает только fail-closed unavailable intent v0.1.",
     inputSchema: ScheduleIntentGetInputSchema,
     outputSchema: ScheduleIntentGetOutputSchema,
     annotations: { ...BaseAnnotations, readOnlyHint: true },
@@ -139,7 +125,7 @@ export const MODEL_VISIBLE_SCHEDULE_TOOL_DEFINITIONS = {
   schedule_intent_complete: {
     title: "Завершить intent расписания",
     description:
-      "Записывает outcome уже выполненного host action и не вызывает automation.",
+      "Инертный endpoint v0.1: успешный host outcome и automation ID запрещены.",
     inputSchema: ScheduleIntentCompleteInputSchema,
     outputSchema: ScheduleIntentCompleteOutputSchema,
     annotations: { ...BaseAnnotations, readOnlyHint: false },
@@ -150,7 +136,7 @@ export const APP_VISIBLE_SCHEDULE_TOOL_DEFINITIONS = {
   schedule_request: {
     title: "Запросить изменение расписания",
     description:
-      "Создаёт закрытый intent без cron, RRULE, shell и вызова host automation.",
+      "Возвращает unavailable intent без host action, cron, RRULE или shell.",
     inputSchema: ScheduleRequestInputSchema,
     outputSchema: ScheduleRequestOutputSchema,
     annotations: { ...BaseAnnotations, readOnlyHint: false },
@@ -158,7 +144,7 @@ export const APP_VISIBLE_SCHEDULE_TOOL_DEFINITIONS = {
   },
   schedule_state: {
     title: "Состояние расписания",
-    description: "Возвращает capability и безопасное состояние расписания.",
+    description: "Возвращает disabled/manual-run состояние v0.1.",
     inputSchema: ScheduleStateInputSchema,
     outputSchema: ScheduleStateOutputSchema,
     annotations: { ...BaseAnnotations, readOnlyHint: true },
@@ -185,11 +171,6 @@ export class ScheduleIntentCoordinator {
   private readonly createId: () => string;
   private stateVersion = 0;
   private intent: StoredIntent | null = null;
-  private automationId: string | null = null;
-  private enabled = false;
-  private dayOfMonth: number | null = null;
-  private localTime: string | null = null;
-  private capabilityState: "available" | "unavailable" | "unknown" = "unknown";
   private readonly requestResults = new Map<string, unknown>();
 
   constructor(options: ScheduleIntentCoordinatorOptions = {}) {
@@ -223,10 +204,10 @@ export class ScheduleIntentCoordinator {
       intentId: this.createId(),
       requestId: input.requestId,
       action: input.action,
-      state: "awaiting_confirmation",
+      state: "capability_unavailable",
       createdAt: this.now().toISOString(),
-      dayOfMonth: input.dayOfMonth ?? null,
-      localTime: input.localTime ?? null,
+      dayOfMonth: null,
+      localTime: null,
       requiresHostCapability: true,
       stateVersion: this.stateVersion,
     };
@@ -258,29 +239,6 @@ export class ScheduleIntentCoordinator {
     }
 
     this.stateVersion += 1;
-    this.capabilityState =
-      input.outcome === "completed"
-        ? "available"
-        : input.outcome === "capability_unavailable"
-          ? "unavailable"
-          : "unknown";
-    if (input.outcome === "completed") {
-      this.automationId = input.automationId;
-      if (this.intent.action === "enable" || this.intent.action === "update") {
-        this.dayOfMonth = this.intent.dayOfMonth;
-        this.localTime = this.intent.localTime;
-        this.enabled = true;
-      } else if (this.intent.action === "resume") {
-        this.enabled = true;
-      } else if (this.intent.action === "pause") {
-        this.enabled = false;
-      } else {
-        this.enabled = false;
-        this.automationId = null;
-        this.dayOfMonth = null;
-        this.localTime = null;
-      }
-    }
     this.intent = {
       ...this.intent,
       state: input.outcome,
@@ -301,14 +259,13 @@ export class ScheduleIntentCoordinator {
   async state(rawInput: z.infer<typeof ScheduleStateInputSchema>) {
     ScheduleStateInputSchema.parse(rawInput);
     return ScheduleStateOutputSchema.parse({
-      enabled: this.enabled,
-      dayOfMonth: this.dayOfMonth,
-      localTime: this.localTime,
+      enabled: false,
+      dayOfMonth: null,
+      localTime: null,
       nextRunAt: null,
       lastRunAt: null,
-      capabilityState: this.capabilityState,
-      pendingIntentId:
-        this.intent?.state === "awaiting_confirmation" ? this.intent.intentId : null,
+      capabilityState: "unavailable",
+      pendingIntentId: null,
       stateVersion: this.stateVersion,
     });
   }

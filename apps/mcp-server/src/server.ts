@@ -813,13 +813,13 @@ async function callScheduleModelTool(
       return buildToolResult(
         toolName,
         await service.get(rawInput as never),
-        "Intent расписания получен. Host action ещё не выполнялся.",
+        "Автоматическое расписание недоступно в v0.1.",
       );
     }
     return buildToolResult(
       toolName,
       await service.complete(rawInput as never),
-      "Outcome host action сохранён локально.",
+      "Инертный schedule endpoint не выполняет host action в v0.1.",
     );
   } catch {
     return safeServiceError("Schedule intent недоступен или уже завершён.");
@@ -836,13 +836,13 @@ async function callScheduleAppTool(
       return buildAppToolResult(
         toolName,
         await service.request(rawInput as never),
-        "Создан intent. Требуется отдельная host capability и подтверждение.",
+        "Автоматическое расписание недоступно в v0.1; используйте ручной read-only аудит.",
       );
     }
     return buildAppToolResult(
       toolName,
       await service.state(rawInput as never),
-      "Безопасное состояние расписания обновлено.",
+      "Расписание отключено в v0.1; host/system scheduler отсутствует.",
     );
   } catch {
     return safeServiceError("Schedule intent безопасно остановлен.");
@@ -864,7 +864,10 @@ export function createMcpServer(
 ): McpServer {
   assertSupportedPlatform(platformInput);
 
-  const server = new McpServer({ name: "codex-mac-cleaner", version: "0.1.0" });
+  const server = new McpServer({
+    name: "codex-mac-cleaner",
+    version: "0.1.0-beta.1",
+  });
   const scheduleService =
     options.scheduleService ?? new ScheduleIntentCoordinator(options.scheduleOptions);
   registerDashboardResource(server, options.dashboardHtml);
