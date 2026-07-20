@@ -2,7 +2,7 @@
 schema: 1
 dependencies: #41
 conflicts: none
-touched_paths: packages/contracts/; packages/storage/; apps/mcp-server/; apps/widget/; skills/; .github/workflows/; scripts/; tests/security/; tests/plugin/; docs/release/; README.md
+touched_paths: .codex-plugin/; .github/issue-specs/CMC-10.md; packages/contracts/; packages/storage/; apps/mcp-server/; apps/widget/; skills/; .github/workflows/; scripts/; tests/security/; tests/plugin/; docs/release/; README.md
 risk: high
 parallel_safety: serial
 execution_profile: deep
