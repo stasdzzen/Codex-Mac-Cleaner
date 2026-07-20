@@ -4,6 +4,11 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
+import {
+  createReleaseLicenseMetadata,
+  writeReleaseLicenseMetadata,
+} from "../../../scripts/release-license-metadata.mjs";
+
 const scriptDirectory = dirname(new URL(import.meta.url).pathname);
 const repositoryRoot = resolve(scriptDirectory, "../../..");
 const outputRootIndex = process.argv.indexOf("--output-root");
@@ -14,6 +19,7 @@ const outputRoot =
   outputRootIndex >= 0
     ? resolve(process.argv[outputRootIndex + 1])
     : repositoryRoot;
+const skipReleaseMetadata = process.argv.includes("--skip-release-metadata");
 const widgetRoot = join(repositoryRoot, "apps/widget");
 const require = createRequire(import.meta.url);
 const reactEntry = require.resolve("react", { paths: [widgetRoot] });
@@ -131,6 +137,10 @@ try {
   });
   const runtime = await readFile(runtimeTarget, "utf8");
   await writeFile(runtimeTarget, stripTrailingWhitespace(runtime), "utf8");
+  if (!skipReleaseMetadata) {
+    const releaseMetadata = await createReleaseLicenseMetadata(repositoryRoot);
+    await writeReleaseLicenseMetadata(outputRoot, releaseMetadata);
+  }
 } finally {
   await rm(temporaryRoot, { recursive: true, force: true });
 }

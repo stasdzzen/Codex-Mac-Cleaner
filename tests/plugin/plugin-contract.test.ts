@@ -67,26 +67,30 @@ describe("repository marketplace plugin", () => {
       ".mcp.json",
       "skills/codex-mac-cleaner/SKILL.md",
       "LICENSE",
+      "docs/release/third-party-notices.json",
     ]);
     expect(JSON.stringify(contract)).not.toMatch(
       /node_modules|local.state|inventory|evidence|fixture|\.codex\/|application.support/i,
     );
 
-    const payload = (
-      await Promise.all(
-        files.map(async (file) => {
-          const absolute = resolve(repositoryRoot, file);
-          await access(absolute);
-          return readFile(absolute, "utf8");
-        }),
-      )
-    ).join("\n");
+    const fileContents = await Promise.all(
+      files.map(async (file) => {
+        const absolute = resolve(repositoryRoot, file);
+        await access(absolute);
+        return { file, text: await readFile(absolute, "utf8") };
+      }),
+    );
+    const payload = fileContents.map(({ text }) => text).join("\n");
+    const codePayload = fileContents
+      .filter(({ file }) => file !== "docs/release/third-party-notices.json")
+      .map(({ text }) => text)
+      .join("\n");
     expect(payload).not.toMatch(/\/Users\/[A-Za-z0-9._-]+|[A-Za-z]:\\Users\\/i);
     expect(payload).not.toMatch(
       /\b(?:sk-[A-Za-z0-9_-]{20,}|Bearer\s+[A-Za-z0-9._-]{20,})\b/i,
     );
     expect(payload).not.toContain("/Users/admin");
-    expect(payload).not.toMatch(
+    expect(codePayload).not.toMatch(
       /\b(?:XMLHttpRequest|WebSocket|EventSource|StreamableHTTP|SSEServerTransport|telemetry)\b/i,
     );
   });

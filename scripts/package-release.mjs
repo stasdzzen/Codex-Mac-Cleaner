@@ -12,6 +12,12 @@ import { homedir, tmpdir, userInfo } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 
+import {
+  createReleaseLicenseMetadata,
+  thirdPartyNoticesPath,
+  writeReleaseLicenseMetadata,
+} from "./release-license-metadata.mjs";
+
 const execFileAsync = promisify(execFile);
 const repositoryRoot = resolve(import.meta.dirname, "..");
 const verifyOnly = process.argv.includes("--verify-only");
@@ -29,7 +35,9 @@ if (outputDirectoryIndex >= 0 && outputDirectoryArgument === undefined) {
 const artifactName = "codex-mac-cleaner-v0.1.0.tar";
 const builtEntries = new Set([
   ".codex-plugin/assets/dashboard-v1.html",
+  ".codex-plugin/package-allowlist.json",
   ".codex-plugin/runtime/server.js",
+  thirdPartyNoticesPath,
 ]);
 const productionEntries = [
   ".codex-plugin/assets/dashboard-v1.html",
@@ -40,6 +48,7 @@ const productionEntries = [
   "LICENSE",
   "README.md",
   "skills/codex-mac-cleaner/SKILL.md",
+  thirdPartyNoticesPath,
 ].sort();
 
 function sha256(value) {
@@ -58,52 +67,21 @@ async function git(...arguments_) {
   return stdout.trim();
 }
 
-async function buildPlugin(outputRoot) {
+async function buildPlugin(outputRoot, releaseMetadata) {
   await execFileAsync(
     process.execPath,
     [
       join(repositoryRoot, "apps/mcp-server/scripts/build-plugin-runtime.mjs"),
       "--output-root",
       outputRoot,
+      "--skip-release-metadata",
     ],
     { cwd: repositoryRoot, encoding: "utf8", maxBuffer: 32 * 1024 * 1024 },
   );
+  await writeReleaseLicenseMetadata(outputRoot, releaseMetadata);
 }
 
-function packageUrl(name, version) {
-  const encodedName = encodeURIComponent(name).replaceAll("%2F", "/");
-  return `pkg:npm/${encodedName}@${encodeURIComponent(version)}`;
-}
-
-async function createSbom() {
-  const { stdout } = await execFileAsync(
-    "pnpm",
-    ["list", "--prod", "--recursive", "--depth", "Infinity", "--json"],
-    { cwd: repositoryRoot, encoding: "utf8", maxBuffer: 32 * 1024 * 1024 },
-  );
-  const roots = JSON.parse(stdout);
-  const components = new Map();
-
-  function visitDependencies(dependencies) {
-    if (dependencies === undefined || dependencies === null) return;
-    for (const [name, dependency] of Object.entries(dependencies)) {
-      if (typeof dependency !== "object" || dependency === null) continue;
-      const version = dependency.version;
-      if (typeof version === "string" && !version.startsWith("link:")) {
-        const key = `${name}\u0000${version}`;
-        components.set(key, {
-          type: "library",
-          "bom-ref": packageUrl(name, version),
-          name,
-          version,
-          purl: packageUrl(name, version),
-        });
-      }
-      visitDependencies(dependency.dependencies);
-    }
-  }
-
-  for (const root of roots) visitDependencies(root.dependencies);
+function createSbom(components) {
   return {
     bomFormat: "CycloneDX",
     specVersion: "1.6",
@@ -126,9 +104,14 @@ async function createSbom() {
         licenses: [{ license: { id: "Apache-2.0" } }],
       },
     },
-    components: [...components.values()].sort((left, right) =>
-      left["bom-ref"].localeCompare(right["bom-ref"]),
-    ),
+    components: components.map((component) => ({
+      type: "library",
+      "bom-ref": component.bomRef,
+      name: component.name,
+      version: component.version,
+      purl: component.bomRef,
+      licenses: [{ license: { id: component.license } }],
+    })),
   };
 }
 
@@ -226,7 +209,7 @@ function createTar(entries, epoch) {
 async function assembleOnce(root, context) {
   const buildRoot = join(root, "build");
   const stagingRoot = join(root, "staging");
-  await buildPlugin(buildRoot);
+  await buildPlugin(buildRoot, context.releaseMetadata);
   await writeProductionFiles(buildRoot, stagingRoot);
 
   const sbomName = "release-evidence/sbom.cdx.json";
@@ -285,11 +268,13 @@ try {
     process.env.SOURCE_DATE_EPOCH ?? (await git("show", "-s", "--format=%ct", "HEAD"));
   const epoch = Number(epochText);
   if (!Number.isSafeInteger(epoch) || epoch < 0) throw new Error("INVALID_SOURCE_DATE_EPOCH");
+  const releaseMetadata = await createReleaseLicenseMetadata(repositoryRoot);
   const context = {
     commit,
     epoch,
     timestamp: new Date(epoch * 1000).toISOString(),
-    sbom: await createSbom(),
+    releaseMetadata,
+    sbom: createSbom(releaseMetadata.components),
   };
   const first = await assembleOnce(join(temporaryRoot, "first"), context);
   const second = await assembleOnce(join(temporaryRoot, "second"), context);

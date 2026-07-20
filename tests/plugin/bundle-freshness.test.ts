@@ -12,6 +12,8 @@ const repositoryRoot = resolve(import.meta.dirname, "../..");
 const shippedArtifacts = [
   ".codex-plugin/runtime/server.js",
   ".codex-plugin/assets/dashboard-v1.html",
+  ".codex-plugin/package-allowlist.json",
+  "docs/release/third-party-notices.json",
 ] as const;
 
 function sha256(content: Buffer): string {
