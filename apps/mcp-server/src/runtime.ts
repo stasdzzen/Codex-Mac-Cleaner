@@ -1447,6 +1447,7 @@ class AuditRuntimeService implements AuditToolService {
     const input = DashboardOpenInputSchema.parse(rawInput);
     const run = this.dashboardRun(input.auditId, input.revision);
     const actionable =
+      input.revision !== null &&
       run.revision !== null &&
       (run.state === "completed" || run.state === "completed_with_warnings");
     const results = actionable

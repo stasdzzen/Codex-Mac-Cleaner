@@ -594,10 +594,10 @@ describe("полная интеграция MCP App", () => {
         auditId,
         resourceUri: DASHBOARD_RESOURCE_URI,
       });
-      const liveRevision = (
-        liveDashboard.structuredContent as { revision: number | null }
-      ).revision;
-      expect(liveRevision === null || liveRevision === 1).toBe(true);
+      expect(liveDashboard.structuredContent).toMatchObject({
+        revision: null,
+        findings: [],
+      });
 
       let status;
       for (let attempt = 0; attempt < 100; attempt += 1) {
@@ -615,6 +615,17 @@ describe("полная интеграция MCP App", () => {
       expect(status?.structuredContent).toMatchObject({
         auditId,
         state: expect.stringMatching(/^completed(?:_with_warnings)?$/),
+      });
+
+      const completedLiveDashboard = await client.callTool({
+        name: "dashboard_open",
+        arguments: { auditId, revision: null },
+      });
+      expect(completedLiveDashboard.isError).not.toBe(true);
+      expect(completedLiveDashboard.structuredContent).toMatchObject({
+        auditId,
+        revision: null,
+        findings: [],
       });
 
       const results = await client.callTool({

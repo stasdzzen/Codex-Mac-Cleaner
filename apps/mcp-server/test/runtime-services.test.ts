@@ -325,6 +325,34 @@ describe("production runtime services", () => {
         },
       },
     });
+
+    let status = (await services.auditService?.status({
+      auditId: started.auditId,
+    })) as { state: string } | undefined;
+    while (status?.state === "queued" || status?.state === "running") {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      status = (await services.auditService?.status({
+        auditId: started.auditId,
+      })) as { state: string } | undefined;
+    }
+    expect(status?.state).toMatch(/^completed(?:_with_warnings)?$/u);
+
+    const completedLive = await services.auditService?.dashboard({
+      auditId: started.auditId,
+      revision: null,
+    });
+    expect(completedLive?.output).toMatchObject({
+      auditId: started.auditId,
+      revision: null,
+      findings: [],
+    });
+    expect(completedLive?.meta).toMatchObject({
+      dashboard: {
+        auditId: started.auditId,
+        revision: null,
+        findings: [],
+      },
+    });
   });
 
   it("останавливает зависший аудит по server-owned deadline", async () => {
