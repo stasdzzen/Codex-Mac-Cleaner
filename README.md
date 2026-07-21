@@ -32,10 +32,10 @@ codex plugin add codex-mac-cleaner@codex-mac-cleaner
 ### Обновление с beta.2
 
 Marketplace beta закреплён на точном Git-теге и не переключается на новую
-версию автоматически. Удалите старую установку и source, затем добавьте beta.3:
+версию автоматически. Удалять установленный плагин не нужно: замените только
+старый marketplace snapshot, затем повторно установите пакет из beta.3:
 
 ```bash
-codex plugin remove codex-mac-cleaner@codex-mac-cleaner
 codex plugin marketplace remove codex-mac-cleaner
 codex plugin marketplace add stasdzzen/Codex-Mac-Cleaner --ref v0.1.0-beta.3
 codex plugin add codex-mac-cleaner@codex-mac-cleaner
@@ -49,6 +49,28 @@ codex plugin add codex-mac-cleaner@codex-mac-cleaner
 ```bash
 codex plugin list
 ```
+
+### Следующие обновления одной командой
+
+Начиная со следующего prerelease после beta.3, пакет содержит отдельный
+безопасный навык обновления. В новой задаче Codex достаточно написать, например:
+
+> Обнови Codex Mac Cleaner до v0.1.0-beta.4.
+
+Навык принимает только явно указанный точный release-тег, проверяет
+канонический repository, меняет закреплённый ref средствами Codex CLI и
+проверяет новую версию. При ошибке он пытается восстановить предыдущий ref.
+Он не выбирает `latest`, не удаляет запись установленного плагина, не изменяет
+конфигурацию напрямую и не касается файлов, найденных аудитом.
+
+Ту же операцию из checkout разработчика можно вызвать напрямую:
+
+```bash
+node scripts/codex-mac-cleaner-update.mjs v0.1.0-beta.4
+```
+
+После успешного обновления полностью завершите Codex, откройте его снова и
+создайте новую задачу: текущий процесс уже загрузил прежнюю версию плагина.
 
 После установки откройте **новую задачу Codex** и напишите:
 
