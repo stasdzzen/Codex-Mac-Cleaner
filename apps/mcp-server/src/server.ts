@@ -866,7 +866,7 @@ export function createMcpServer(
 
   const server = new McpServer({
     name: "codex-mac-cleaner",
-    version: "0.1.0-beta.2",
+    version: "0.1.0-beta.3",
   });
   const scheduleService =
     options.scheduleService ?? new ScheduleIntentCoordinator(options.scheduleOptions);
