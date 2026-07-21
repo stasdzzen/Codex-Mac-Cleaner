@@ -1224,6 +1224,10 @@ class AuditRuntimeService implements AuditToolService {
       const result = await runAdapters([createLibraryRootsAdapter(this.filesystem)], {
         signal: run.controller.signal,
       });
+      // Coordinator может завершиться состоянием cancelled без исключения.
+      // Повторно проверяем общий signal, чтобы server deadline всегда проходил
+      // через единый failed/AUDIT_TIMEOUT путь, а явная отмена — через cancelled.
+      run.controller.signal.throwIfAborted();
       run.coverageWarningCodes = result.coverage.gaps.map((gap) => gap.errorCode);
       run.coverage = {
         checkedSourceCount: result.coverage.checkedSourceCount,
@@ -1317,6 +1321,7 @@ class AuditRuntimeService implements AuditToolService {
           ],
         };
       }
+      run.controller.signal.throwIfAborted();
       run.state =
         result.state === "completed" && run.coverageWarningCodes.length > 0
           ? "completed_with_warnings"
