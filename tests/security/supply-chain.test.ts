@@ -75,7 +75,7 @@ describe("CMC-10: supply-chain and public package boundary", () => {
           },
         );
         const entries = readTarEntries(
-          await readFile(join(outputRoot, "codex-mac-cleaner-v0.1.0-beta.2.tar")),
+          await readFile(join(outputRoot, "codex-mac-cleaner-v0.1.0-beta.3.tar")),
         );
         const noticesName = "docs/release/third-party-notices.json";
         const allowlist = JSON.parse(
