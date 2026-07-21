@@ -6,12 +6,11 @@
       "cwd": ".",
       "command": "node",
       "args": [
-        "${PLUGIN_ROOT}/.codex-plugin/runtime/server.js",
+        "./.codex-plugin/runtime/server.js",
         "--stdio"
       ],
       "env": {
-        "CODEX_MAC_CLEANER_PLUGIN_ROOT": "${PLUGIN_ROOT}",
-        "CODEX_MAC_CLEANER_PLUGIN_DATA": "${PLUGIN_DATA}"
+        "CODEX_MAC_CLEANER_PLUGIN_ROOT": "."
       }
     }
   }

@@ -41,14 +41,21 @@ describe("repository marketplace plugin", () => {
     const servers = mcp.mcpServers as Record<string, Record<string, unknown>>;
     expect(Object.keys(servers)).toEqual(["codexMacCleaner"]);
     expect(servers.codexMacCleaner).toMatchObject({
+      cwd: ".",
       command: "node",
-      args: ["${PLUGIN_ROOT}/.codex-plugin/runtime/server.js", "--stdio"],
+      args: ["./.codex-plugin/runtime/server.js", "--stdio"],
+      env: {
+        CODEX_MAC_CLEANER_PLUGIN_ROOT: ".",
+      },
     });
+    expect(servers.codexMacCleaner.env).not.toHaveProperty(
+      "CODEX_MAC_CLEANER_PLUGIN_DATA",
+    );
     expect(JSON.stringify(mcp)).not.toMatch(/https?:\/\/|telemetry|network/i);
 
-    const entrypoint = (servers.codexMacCleaner.args as string[])[0]?.replace(
-      "${PLUGIN_ROOT}",
+    const entrypoint = resolve(
       repositoryRoot,
+      (servers.codexMacCleaner.args as string[])[0] ?? "",
     );
     expect(entrypoint).toBeDefined();
     await access(entrypoint!);
