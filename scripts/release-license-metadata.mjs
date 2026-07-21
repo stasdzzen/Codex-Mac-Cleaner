@@ -25,6 +25,8 @@ export const repositoryMarketplaceFiles = Object.freeze([
   ".codex-plugin/assets/dashboard-v2.html",
   ".mcp.json",
   "skills/codex-mac-cleaner/SKILL.md",
+  "skills/codex-mac-cleaner-update/SKILL.md",
+  "scripts/codex-mac-cleaner-update.mjs",
   "LICENSE",
   thirdPartyNoticesPath,
 ]);

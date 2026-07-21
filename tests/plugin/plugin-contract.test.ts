@@ -87,6 +87,8 @@ describe("repository marketplace plugin", () => {
       ".codex-plugin/assets/dashboard-v2.html",
       ".mcp.json",
       "skills/codex-mac-cleaner/SKILL.md",
+      "skills/codex-mac-cleaner-update/SKILL.md",
+      "scripts/codex-mac-cleaner-update.mjs",
       "LICENSE",
       "docs/release/third-party-notices.json",
     ]);
@@ -114,5 +116,18 @@ describe("repository marketplace plugin", () => {
     expect(codePayload).not.toMatch(
       /\b(?:XMLHttpRequest|WebSocket|EventSource|StreamableHTTP|SSEServerTransport|telemetry)\b/i,
     );
+  });
+
+  it("update-skill требует точный ref и не удаляет установленный плагин", async () => {
+    const skill = await readFile(
+      resolve(repositoryRoot, "skills/codex-mac-cleaner-update/SKILL.md"),
+      "utf8",
+    );
+    expect(skill).toMatch(/явн[^\n]*запрос|явн[^\n]*тег/i);
+    expect(skill).toMatch(/node[^\n]*codex-mac-cleaner-update\.mjs[^\n]*--json/i);
+    expect(skill).toMatch(/точн[^\n]*тег/i);
+    expect(skill).toMatch(/rollback/i);
+    expect(skill).toMatch(/не[^\n]*latest/i);
+    expect(skill).toMatch(/не вызывает `codex plugin remove`/i);
   });
 });

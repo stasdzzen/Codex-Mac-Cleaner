@@ -49,6 +49,8 @@ const productionEntries = [
   "LICENSE",
   "README.md",
   "skills/codex-mac-cleaner/SKILL.md",
+  "skills/codex-mac-cleaner-update/SKILL.md",
+  "scripts/codex-mac-cleaner-update.mjs",
   thirdPartyNoticesPath,
 ].sort();
 
