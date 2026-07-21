@@ -214,7 +214,7 @@ describe("production Library adapter → resolver → classifier → policy", ()
     };
     const key = new InstallationKey(new Uint8Array(32).fill(11));
     const history = new History();
-    const adapter = createMacOSProductionCorrelationAdapter({
+    const createAdapter = () => createMacOSProductionCorrelationAdapter({
       commands: createCommandRunner(executor),
       candidates: createMacOSCandidateRegistry({
         candidates: new Map([["candidate-production-log", candidate]]),
@@ -225,6 +225,7 @@ describe("production Library adapter → resolver → classifier → policy", ()
       ownerBindingHistory: history,
       now: () => now,
     });
+    const adapter = createAdapter();
 
     const first = await adapter.buildInput({
       candidateRef: "candidate-production-log",
@@ -247,7 +248,7 @@ describe("production Library adapter → resolver → classifier → policy", ()
     installed = false;
     active = false;
     open = false;
-    const second = await adapter.buildInput({
+    const second = await createAdapter().buildInput({
       candidateRef: "candidate-production-log",
       snapshotId: "snapshot-production-n1",
       signal: new AbortController().signal,

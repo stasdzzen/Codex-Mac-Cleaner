@@ -5,7 +5,7 @@ description: Рабочие пакеты, зависимости, границы
 tags: [product, roadmap, issues, dependencies]
 status: approved
 owner: Architect
-date: 2026-07-19
+date: 2026-07-21
 ---
 
 # Правила roadmap
@@ -36,6 +36,9 @@ date: 2026-07-19
 | `CMC-09` | Public plugin manifest, Skill, `audit_cancel`, no-terminal flow, инертный schedule skeleton и MCP App integration | `CMC-07`, `CMC-08`, `CMC-12`, `CMC-21` | Средний | Завершено 19 июля 2026 года |
 | `CMC-23` | ADR-0014 и перенос host automation lifecycle после v0.1 при сохранении инертного skeleton/disabled fallback | `CMC-09` | Высокий: architecture/release scope | Текущая docs-first Issue #41; только этот worktree/branch/PR |
 | `CMC-10` | Universal policy/redaction, exclusions, disabled schedule fallback, clean-room/new-task, security и release evidence | `CMC-23` | Высокий: release | Только последовательно; release не выполняется без владельца |
+| `CMC-24` | Исправленный запуск packaged MCP после marketplace install | `CMC-10` | Средний: plugin runtime | Завершено 21 июля 2026 года |
+| `CMC-25` | Устанавливаемый prerelease `v0.1.0-beta.2` | `CMC-24` | Высокий: release | Завершено 21 июля 2026 года |
+| `CMC-26` | Dashboard v2 при старте, server-owned progress и shared global inventories A/B | `CMC-25` | Высокий: architecture/runtime | Issue #48; только последовательно |
 | `CMC-13` | Post-v0.1 capability-aware monthly automation lifecycle и scheduled prompt | `CMC-10` | Высокий: host integration | `cto:blocked` до отдельного owner decision открыть capability-релиз |
 | `CMC-14` | Architecture research Advanced Cleanup v0.2 и trusted privileged helper | `CMC-10` | Критический: system mutation | `cto:blocked` до owner approval и нового ADR |
 | `CMC-15` | Architecture research Browser/Developer Storage profiles v0.2 | `CMC-10` | Высокий: personal/developer data | `cto:blocked` до owner approval и новых threat models |

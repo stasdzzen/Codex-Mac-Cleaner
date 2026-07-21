@@ -15,7 +15,13 @@ export const standaloneFixture = deepFreeze<DashboardSnapshot>({
   revision: 1,
   state: "completed_with_warnings",
   stateVersion: 1,
-  progress: { completedSteps: 8, totalSteps: 8 },
+  progress: {
+    phase: "completed",
+    completedSteps: 8,
+    totalSteps: 8,
+    processedCandidates: 6,
+    totalCandidates: 6,
+  },
   coverage: {
     checkedSourceCount: 7,
     skippedSourceCount: 1,

@@ -35,6 +35,7 @@ function createBridge() {
 }
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -135,11 +136,15 @@ describe("Audit Dashboard contract", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Отменить аудит" }));
-    await waitFor(() => expect(running.callTool).toHaveBeenCalledOnce());
-    expect(running.callTool).toHaveBeenCalledWith("audit_cancel", {
-      auditId: "audit-synthetic-001",
-      requestId: expect.any(String),
-    });
+    await waitFor(() =>
+      expect(running.callTool).toHaveBeenCalledWith("audit_cancel", {
+        auditId: "audit-synthetic-001",
+        requestId: expect.any(String),
+      }),
+    );
+    expect(
+      running.callTool.mock.calls.filter(([name]) => name === "audit_cancel"),
+    ).toHaveLength(1);
 
     rerender(<AuditDashboard snapshot={cancellingFixture} bridge={running.bridge} />);
     expect(screen.getByRole("button", { name: "Отмена выполняется" })).toBeDisabled();
@@ -149,6 +154,60 @@ describe("Audit Dashboard contract", () => {
       "Аудит отменён. Результаты неполные, поэтому перемещение в карантин недоступно. Начните новый аудит",
     );
     fireEvent.click(screen.getByRole("tab", { name: "Находки" }));
+    expect(screen.queryByRole("button", { name: "Удалить" })).not.toBeInTheDocument();
+  });
+
+  it("сам обновляет живой прогресс через audit_status", async () => {
+    vi.useFakeTimers();
+    const callTool = vi.fn(async (
+      _name: string,
+      _input: Record<string, unknown>,
+    ) => ({
+      auditId: runningFixture.auditId,
+      state: "running",
+      stateVersion: runningFixture.stateVersion + 1,
+      progress: {
+        phase: "correlating_candidates",
+        completedSteps: 5,
+        totalSteps: 8,
+        processedCandidates: 4,
+        totalCandidates: 6,
+      },
+      coverageWarningCodes: [],
+    }));
+    const bridge: WidgetBridge = {
+      callTool: async <T,>(name: string, input: Record<string, unknown>) =>
+        (await callTool(name, input)) as T,
+      setViewState: vi.fn(),
+    };
+    render(<AuditDashboard snapshot={runningFixture} bridge={bridge} />);
+
+    await vi.advanceTimersByTimeAsync(1_100);
+
+    expect(callTool).toHaveBeenCalledWith("audit_status", {
+      auditId: runningFixture.auditId,
+    });
+    expect(screen.getByText(/Сопоставление кандидатов/)).toBeVisible();
+    expect(screen.getByText(/Кандидатов обработано: 4 из 6/)).toBeVisible();
+  });
+
+  it("показывает terminal failure без действий над находками", () => {
+    const { bridge } = createBridge();
+    render(
+      <AuditDashboard
+        snapshot={{
+          ...runningFixture,
+          state: "failed",
+          stateVersion: runningFixture.stateVersion + 1,
+          progress: { ...runningFixture.progress, phase: "failed" },
+        }}
+        bridge={bridge}
+      />,
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Проверка завершилась с безопасной ошибкой. Файлы не изменялись",
+    );
     expect(screen.queryByRole("button", { name: "Удалить" })).not.toBeInTheDocument();
   });
 

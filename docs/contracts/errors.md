@@ -5,7 +5,7 @@ description: Стабильные error codes, уровни серьёзност
 tags: [contracts, errors, fail-closed]
 status: approved
 owner: Architect
-date: 2026-07-19
+date: 2026-07-21
 ---
 
 # Формат
@@ -27,6 +27,7 @@ date: 2026-07-19
 | `CAPABILITY_UNAVAILABLE` | warning | Показать непроверенный источник |
 | `PERMISSION_DENIED` | warning или blocking | Показать coverage gap без совета использовать `sudo` или обходить TCC |
 | `AUDIT_STALE` | blocking | Повторить аудит |
+| `AUDIT_TIMEOUT` | blocking | Аудит превысил пятиминутную границу; повторить проверку и сохранить безопасный отчёт о фазе |
 | `SOURCE_CHANGED` | blocking | Не менять объект; повторить аудит |
 | `CORRELATION_AMBIGUOUS` | blocking | Не выбирать совпадение; показать `unknown` и повторить аудит после устранения неоднозначности |
 | `CORRELATION_MISSING` | blocking | Не выводить `absent`; показать missing identity evidence |

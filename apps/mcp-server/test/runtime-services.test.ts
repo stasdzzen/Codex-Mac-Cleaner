@@ -285,6 +285,148 @@ afterEach(async () => {
 });
 
 describe("production runtime services", () => {
+  it("открывает безопасный live Dashboard до завершения аудита", async () => {
+    const root = await mkdtemp(join(tmpdir(), "cmc-runtime-live-dashboard-"));
+    roots.push(root);
+    const homeDirectory = join(root, "home");
+    await mkdir(join(homeDirectory, "Library", "Caches"), { recursive: true });
+    const services = await createDefaultRuntimeServices({
+      homeDirectory,
+      stateRoot: join(root, "state"),
+    });
+
+    const started = (await services.auditService?.start({
+      requestId: "live-dashboard-request",
+      profile: "application_remnants",
+    })) as { auditId: string };
+    const live = await services.auditService?.dashboard({
+      auditId: started.auditId,
+      revision: null,
+    });
+
+    expect(live?.output).toMatchObject({
+      auditId: started.auditId,
+      revision: null,
+      state: expect.stringMatching(/^(?:queued|running)$/u),
+      resourceUri: "ui://codex-mac-cleaner/dashboard-v2.html",
+      findings: [],
+    });
+    expect(live?.meta).toMatchObject({
+      dashboard: {
+        auditId: started.auditId,
+        revision: null,
+        findings: [],
+        progress: {
+          phase: expect.stringMatching(
+            /^(?:queued|discovering_candidates|finalizing)$/u,
+          ),
+          processedCandidates: 0,
+          totalCandidates: 0,
+        },
+      },
+    });
+
+    let status = (await services.auditService?.status({
+      auditId: started.auditId,
+    })) as { state: string } | undefined;
+    while (status?.state === "queued" || status?.state === "running") {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      status = (await services.auditService?.status({
+        auditId: started.auditId,
+      })) as { state: string } | undefined;
+    }
+    expect(status?.state).toMatch(/^completed(?:_with_warnings)?$/u);
+
+    const completedLive = await services.auditService?.dashboard({
+      auditId: started.auditId,
+      revision: null,
+    });
+    expect(completedLive?.output).toMatchObject({
+      auditId: started.auditId,
+      revision: null,
+      findings: [],
+    });
+    expect(completedLive?.meta).toMatchObject({
+      dashboard: {
+        auditId: started.auditId,
+        revision: null,
+        findings: [],
+      },
+    });
+  });
+
+  it("останавливает зависший аудит по server-owned deadline", async () => {
+    const root = await mkdtemp(join(tmpdir(), "cmc-runtime-audit-timeout-"));
+    roots.push(root);
+    const homeDirectory = join(root, "home");
+    const candidatePath = join(
+      homeDirectory,
+      "Library",
+      "Caches",
+      "Synthetic Timeout Candidate",
+    );
+    await mkdir(candidatePath, { recursive: true });
+    const executor: ArgvExecutor = async (_executable, _argv, { signal }) =>
+      new Promise((_resolve, reject) => {
+        const abort = () =>
+          reject(Object.assign(new Error("aborted"), { name: "AbortError" }));
+        if (signal.aborted) abort();
+        else signal.addEventListener("abort", abort, { once: true });
+      });
+    const filesystem: MacOSCorrelationReadOnlyFileSystem = {
+      async canonicalize(path) {
+        return path;
+      },
+      async stat(path) {
+        return {
+          device: "device-timeout",
+          inode: inode(path),
+          fileType: "directory",
+          uid: process.getuid?.() ?? 501,
+          gid: process.getgid?.() ?? 20,
+          size: 0,
+          modifiedAtMs: 1,
+        };
+      },
+      async readDirectory() {
+        return [];
+      },
+    };
+    const services = await createDefaultRuntimeServices({
+      homeDirectory,
+      stateRoot: join(root, "state"),
+      auditTimeoutMs: 25,
+      correlation: {
+        commands: createCommandRunner(executor),
+        filesystem,
+      },
+    });
+    const started = (await services.auditService?.start({
+      requestId: "audit-timeout-request",
+      profile: "application_remnants",
+    })) as { auditId: string };
+
+    type TimeoutStatus = {
+      state: string;
+      coverageWarningCodes: string[];
+      progress: { phase: string };
+    };
+    let status: TimeoutStatus | null = null;
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      status = (await services.auditService?.status({
+        auditId: started.auditId,
+      })) as TimeoutStatus;
+      if (status?.state === "failed") break;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+
+    expect(status).toMatchObject({
+      state: "failed",
+      coverageWarningCodes: ["AUDIT_TIMEOUT"],
+      progress: { phase: "failed" },
+    });
+  });
+
   it.each(["directory", "file"] as const)(
     "исключает candidate до finding при вложенном .git-%s",
     async (markerKind) => {

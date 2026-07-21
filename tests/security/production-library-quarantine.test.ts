@@ -116,7 +116,7 @@ describe("security: production Library audit → quarantine → restore", () => 
     };
     const key = new InstallationKey(new Uint8Array(32).fill(17));
     const history = new MemoryHistory();
-    const adapter = createMacOSProductionCorrelationAdapter({
+    const createAdapter = () => createMacOSProductionCorrelationAdapter({
       commands: createCommandRunner(executor),
       candidates: createMacOSCandidateRegistry({
         candidates: new Map([["candidate-cache-flow", artifact]]),
@@ -127,6 +127,7 @@ describe("security: production Library audit → quarantine → restore", () => 
       ownerBindingHistory: history,
       now: () => now,
     });
+    const adapter = createAdapter();
     const first = await adapter.buildInput({
       candidateRef: "candidate-cache-flow",
       snapshotId: "snapshot-cache-n",
@@ -148,7 +149,7 @@ describe("security: production Library audit → quarantine → restore", () => 
     installed = false;
     running = false;
     open = false;
-    const second = await adapter.buildInput({
+    const second = await createAdapter().buildInput({
       candidateRef: "candidate-cache-flow",
       snapshotId: "snapshot-cache-n1",
       signal: new AbortController().signal,

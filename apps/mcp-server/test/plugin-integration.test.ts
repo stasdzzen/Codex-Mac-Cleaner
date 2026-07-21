@@ -471,7 +471,7 @@ describe("полная интеграция MCP App", () => {
 
   it("скомпилированный Dashboard package автономен", async () => {
     const html = await readFile(
-      packagedPath(".codex-plugin", "assets", "dashboard-v1.html"),
+      packagedPath(".codex-plugin", "assets", "dashboard-v2.html"),
       "utf8",
     );
     expect(html).toContain("Audit Dashboard");
@@ -585,6 +585,20 @@ describe("полная интеграция MCP App", () => {
       expect(started.structuredContent).toMatchObject({ state: "queued" });
       const auditId = (started.structuredContent as { auditId: string }).auditId;
 
+      const liveDashboard = await client.callTool({
+        name: "dashboard_open",
+        arguments: { auditId, revision: null },
+      });
+      expect(liveDashboard.isError).not.toBe(true);
+      expect(liveDashboard.structuredContent).toMatchObject({
+        auditId,
+        resourceUri: DASHBOARD_RESOURCE_URI,
+      });
+      expect(liveDashboard.structuredContent).toMatchObject({
+        revision: null,
+        findings: [],
+      });
+
       let status;
       for (let attempt = 0; attempt < 100; attempt += 1) {
         status = await client.callTool({
@@ -601,6 +615,17 @@ describe("полная интеграция MCP App", () => {
       expect(status?.structuredContent).toMatchObject({
         auditId,
         state: expect.stringMatching(/^completed(?:_with_warnings)?$/),
+      });
+
+      const completedLiveDashboard = await client.callTool({
+        name: "dashboard_open",
+        arguments: { auditId, revision: null },
+      });
+      expect(completedLiveDashboard.isError).not.toBe(true);
+      expect(completedLiveDashboard.structuredContent).toMatchObject({
+        auditId,
+        revision: null,
+        findings: [],
       });
 
       const results = await client.callTool({

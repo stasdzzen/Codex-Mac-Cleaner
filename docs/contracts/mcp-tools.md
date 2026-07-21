@@ -5,7 +5,7 @@ description: Имена, видимость, влияние и данные tool
 tags: [contracts, mcp, tools, ui]
 status: approved
 owner: Architect
-date: 2026-07-19
+date: 2026-07-21
 ---
 
 # Архитектурный тип
@@ -17,10 +17,10 @@ date: 2026-07-19
 | Tool | Назначение | Главный вход | Главный выход |
 |---|---|---|---|
 | `audit_start` | Начать read-only аудит | `requestId`, `profile=application_remnants` | `auditId`, `state`, `stateVersion` |
-| `audit_status` | Получить прогресс | `auditId` | state, progress, coverage warnings |
+| `audit_status` | Получить прогресс | `auditId` | state, phase, шаги, candidate counts, coverage warnings |
 | `audit_cancel` | Отменить read-only аудит | `auditId`, `requestId` | state, stateVersion, cancelRequestedAt |
 | `audit_results` | Получить страницу результатов | `auditId`, `revision`, `cursor`, filters | summary, finding IDs, next cursor |
-| `dashboard_open` | Открыть Audit Dashboard | `auditId`, `revision` | widget snapshot |
+| `dashboard_open` | Открыть Audit Dashboard | `auditId`, `revision=null \| integer` | live или immutable widget snapshot |
 | `finding_inspect` | Повторно проверить находку | `findingId`, `auditRevision` | evidence, policy, stale flag |
 | `finding_reveal` | Показать объект в Finder | `findingId`, `auditRevision` | outcome |
 | `schedule_intent_get` | Зарезервированный post-v0.1 host-intent skeleton | `intentId` | в v0.1 только безопасный unavailable outcome |
@@ -88,6 +88,7 @@ date: 2026-07-19
 * В v0.1 `schedule_request` не активирует lifecycle, а `schedule_intent_complete` не может записать успешный host outcome; state остаётся disabled. Полный bridge включается только в post-v0.1 CMC-13 после owner decision.
 * `findingId`, `auditRevision`, `correlationRevisionId`, `operationId` и opaque action handle обязательны там, где применимы; preview token остаётся server-side.
 * `audit_cancel` не принимает profile, path, revision или mutation-параметры.
+* `dashboard_open.revision=null` запрашивает текущий live snapshot. Integer revision допустима только для завершённой immutable revision.
 * Preview token хранится server-side и привязан к действию, UI session, finding/quarantine entry, immutable audit/correlation revision, candidate/parent fingerprints, edge/coverage digests, policy/derivation versions, exclusion state и сроку пять минут.
 * App получает только opaque action handle без identity или token material. Token одноразовый. Повтор с тем же `operationId` возвращает прежний результат.
 * Любой неизвестный input field отклоняется schema validation.
@@ -95,6 +96,7 @@ date: 2026-07-19
 # Правила выходов
 
 * `structuredContent` содержит краткие model-visible данные и `stateVersion`.
+* Live `dashboard_open` возвращает `revision=null`, пустые findings/actions и server-owned progress; он не создаёт action authority.
 * `content` содержит короткое русскоязычное объяснение без полного пути.
 * `_meta` содержит widget-only `SafeCorrelationView`, presentation state и server-owned actions. Полные пути, raw/digested identity claims, inventory, correlation edges, coverage certificates и token material отсутствуют.
 * `audit_results`, `dashboard_open` и `quarantine_list` возвращают серверную `StorageSummary`; UI не пересчитывает её.
@@ -112,7 +114,7 @@ date: 2026-07-19
 
 # UI resource
 
-Первый URI — `ui://codex-mac-cleaner/dashboard-v1.html`. Breaking change HTML, JS или CSS повышает версию URI.
+Текущий URI — `ui://codex-mac-cleaner/dashboard-v2.html`. Он вводит live progress и nullable pre-result revision. Breaking change HTML, JS или CSS снова повышает версию URI; v1 не переопределяется.
 
 CSP не содержит `connectDomains`, `resourceDomains` или `frameDomains`: bundle автономен и не загружает CDN.
 
