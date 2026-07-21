@@ -75,8 +75,20 @@ describe("CMC-10: supply-chain and public package boundary", () => {
           },
         );
         const entries = readTarEntries(
-          await readFile(join(outputRoot, "codex-mac-cleaner-v0.1.0-beta.3.tar")),
+          await readFile(join(outputRoot, "codex-mac-cleaner-v0.1.0-beta.4.tar")),
         );
+        for (const requiredEntry of [
+          "skills/codex-mac-cleaner/SKILL.md",
+          "skills/codex-mac-cleaner-update/SKILL.md",
+          "scripts/codex-mac-cleaner-update.mjs",
+        ]) {
+          expect(entries.has(requiredEntry), requiredEntry).toBe(true);
+        }
+        expect(
+          JSON.parse(
+            entries.get(".codex-plugin/plugin.json")!.toString("utf8"),
+          ),
+        ).toMatchObject({ name: "codex-mac-cleaner", version: "0.1.0-beta.4" });
         const noticesName = "docs/release/third-party-notices.json";
         const allowlist = JSON.parse(
           await readFile(
