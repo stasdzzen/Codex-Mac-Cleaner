@@ -513,8 +513,20 @@ describe("полная интеграция MCP App", () => {
     expect(runtime).not.toMatch(/token:[A-Za-z_$][\w$]*\.previewToken/u);
   });
 
-  it("скомпилированный stdio runtime выполняет безопасный audit/dashboard flow", async () => {
-    const runtimePath = packagedPath(".codex-plugin", "runtime", "server.js");
+  it("packaged MCP-манифест запускает безопасный audit/dashboard flow", async () => {
+    const mcpManifest = JSON.parse(
+      await readFile(join(repositoryRoot, ".mcp.json"), "utf8"),
+    ) as {
+      mcpServers: {
+        codexMacCleaner: {
+          command: string;
+          args: string[];
+          cwd: string;
+          env?: Record<string, string>;
+        };
+      };
+    };
+    const launch = mcpManifest.mcpServers.codexMacCleaner;
     const syntheticRoot = await mkdtemp(join(tmpdir(), "cmc-compiled-runtime-"));
     const syntheticHome = join(syntheticRoot, "home");
     const syntheticData = join(
@@ -541,14 +553,13 @@ describe("полная интеграция MCP App", () => {
       "utf8",
     );
     const transport = new StdioClientTransport({
-      command: process.execPath,
-      args: [runtimePath, "--stdio"],
-      cwd: repositoryRoot,
+      command: launch.command,
+      args: launch.args,
+      cwd: join(packagedRoot, launch.cwd),
       env: {
         ...getDefaultEnvironment(),
         HOME: syntheticHome,
-        CODEX_MAC_CLEANER_PLUGIN_ROOT: packagedRoot,
-        CODEX_MAC_CLEANER_PLUGIN_DATA: syntheticData,
+        ...launch.env,
       },
       stderr: "pipe",
     });
