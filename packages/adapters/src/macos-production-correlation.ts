@@ -40,6 +40,7 @@ import {
 import { isAbortError } from "./types.js";
 
 const MAX_SOURCE_RECORDS = 4_096;
+const MAX_COMMAND_CONCURRENCY = 4;
 const APP_ROOTS = ["/Applications", "/System/Applications"] as const;
 const PRIVATE_ACTIONABLE_CATEGORIES = new Set<CorrelationArtifactCategory>(["cache", "log"]);
 
@@ -186,6 +187,13 @@ interface ReceiptCapture {
   readonly packageIdentifiers: readonly string[];
 }
 
+interface GlobalCollectionCycle {
+  readonly installed: InstalledCapture;
+  readonly processes: ProcessCapture;
+  readonly openFiles: OpenCapture;
+  readonly startupTargets: ProductionSourceCapture<ProductionStartupTargetRecord>;
+}
+
 interface CollectionCycle {
   readonly candidate: ProductionCandidateIdentityRecord;
   readonly ownerBindings: ProductionSourceCapture<ProductionOwnerBindingRecord>;
@@ -217,6 +225,30 @@ function mergeState(...states: readonly RawQueryState[]): RawQueryState {
     (current, state) => STATE_PRIORITY[state] > STATE_PRIORITY[current] ? state : current,
     "complete",
   );
+}
+
+async function mapConcurrent<T, R>(
+  values: readonly T[],
+  concurrency: number,
+  worker: (value: T, index: number) => Promise<R>,
+): Promise<readonly R[]> {
+  if (!Number.isSafeInteger(concurrency) || concurrency < 1) {
+    throw new CorrelationInputError("CORRELATION_SCHEMA_UNSUPPORTED");
+  }
+  const output = new Array<R>(values.length);
+  let nextIndex = 0;
+  const runners = Array.from(
+    { length: Math.min(concurrency, values.length) },
+    async () => {
+      while (nextIndex < values.length) {
+        const index = nextIndex;
+        nextIndex += 1;
+        output[index] = await worker(values[index]!, index);
+      }
+    },
+  );
+  await Promise.all(runners);
+  return output;
 }
 
 function stable(value: unknown): string {
@@ -523,11 +555,18 @@ async function collectInstalledApps(
   if (packages.state === "complete") {
     const identifiers = [...new Set(packages.stdout.split(/\r?\n/u).map((line) => line.trim()).filter(Boolean))].sort();
     if (identifiers.length > MAX_SOURCE_RECORDS) state = mergeState(state, "truncated");
-    for (const packageIdentifier of identifiers.slice(0, MAX_SOURCE_RECORDS)) {
-      const [infoCommand, files] = await Promise.all([
-        runCommand(commands, "/usr/sbin/pkgutil", ["--pkg-info", packageIdentifier], signal),
-        runCommand(commands, "/usr/sbin/pkgutil", ["--files", packageIdentifier], signal),
-      ] as const);
+    const packageQueries = await mapConcurrent(
+      identifiers.slice(0, MAX_SOURCE_RECORDS),
+      MAX_COMMAND_CONCURRENCY,
+      async (packageIdentifier) => {
+        const [infoCommand, files] = await Promise.all([
+          runCommand(commands, "/usr/sbin/pkgutil", ["--pkg-info", packageIdentifier], signal),
+          runCommand(commands, "/usr/sbin/pkgutil", ["--files", packageIdentifier], signal),
+        ] as const);
+        return { packageIdentifier, infoCommand, files };
+      },
+    );
+    for (const { packageIdentifier, infoCommand, files } of packageQueries) {
       state = mergeState(state, infoCommand.state, files.state);
       if (infoCommand.state !== "complete" || files.state !== "complete") continue;
       const info = packageInstallInfo(infoCommand.stdout, packageIdentifier);
@@ -566,10 +605,22 @@ async function collectInstalledApps(
     }
   }
   if (discovered.size > MAX_SOURCE_RECORDS) state = mergeState(state, "truncated");
-  const apps: CollectedApp[] = [];
-  for (const [path, metadata] of [...discovered.entries()].sort(([left], [right]) => left.localeCompare(right)).slice(0, MAX_SOURCE_RECORDS)) {
-    apps.push(await collectApp(commands, filesystem, path, metadata.packageIdentifier, metadata.uninstaller, signal));
-  }
+  const appEntries = [...discovered.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .slice(0, MAX_SOURCE_RECORDS);
+  const apps = await mapConcurrent(
+    appEntries,
+    MAX_COMMAND_CONCURRENCY,
+    ([path, metadata]) =>
+      collectApp(
+        commands,
+        filesystem,
+        path,
+        metadata.packageIdentifier,
+        metadata.uninstaller,
+        signal,
+      ),
+  );
   state = mergeState(state, ...apps.map((app) => app.state));
   return {
     capture: sourceCapture(apps.map(({ record }) => record), state, "canonical", startedAt, now),
@@ -885,6 +936,46 @@ function ownerAppsForBinding(
   }));
 }
 
+async function collectGlobalCycle(
+  dependencies: Readonly<{
+    commands: CommandRunner;
+    filesystem: MacOSCorrelationReadOnlyFileSystem;
+    now: () => string;
+  }>,
+  userHome: string,
+  signal: AbortSignal,
+): Promise<GlobalCollectionCycle> {
+  const [installed, processes, openFiles, startupTargets] = await Promise.all([
+    collectInstalledApps(
+      dependencies.commands,
+      dependencies.filesystem,
+      userHome,
+      signal,
+      dependencies.now,
+    ),
+    collectProcesses(
+      dependencies.commands,
+      dependencies.filesystem,
+      signal,
+      dependencies.now,
+    ),
+    collectOpenFiles(
+      dependencies.commands,
+      dependencies.filesystem,
+      signal,
+      dependencies.now,
+    ),
+    collectStartupTargets(
+      dependencies.commands,
+      dependencies.filesystem,
+      userHome,
+      signal,
+      dependencies.now,
+    ),
+  ] as const);
+  return { installed, processes, openFiles, startupTargets };
+}
+
 async function collectCycle(
   dependencies: Readonly<{
     commands: CommandRunner;
@@ -894,6 +985,7 @@ async function collectCycle(
     key?: InstallationKey;
   }>,
   baselineHistory: readonly KeyedOwnerBindingHistoryRecord[],
+  global: GlobalCollectionCycle,
   candidateRef: string,
   signal: AbortSignal,
 ): Promise<CollectionCycle> {
@@ -918,11 +1010,8 @@ async function collectCycle(
     gid: candidate.filesystem.gid,
     fileType: candidate.filesystem.fileType,
   });
-  const [installed, processes, openFiles, startupTargets, receipts, container] = await Promise.all([
-    collectInstalledApps(dependencies.commands, dependencies.filesystem, location.userHome, signal, dependencies.now),
-    collectProcesses(dependencies.commands, dependencies.filesystem, signal, dependencies.now),
-    collectOpenFiles(dependencies.commands, dependencies.filesystem, signal, dependencies.now),
-    collectStartupTargets(dependencies.commands, dependencies.filesystem, location.userHome, signal, dependencies.now),
+  const { installed, processes, openFiles, startupTargets } = global;
+  const [receipts, container] = await Promise.all([
     collectReceipts(dependencies.commands, candidate, signal, dependencies.now),
     containerBinding(dependencies.commands, candidate, category, signal),
   ] as const);
@@ -1047,6 +1136,29 @@ export function createMacOSProductionCorrelationAdapter(
     now: input.now ?? (() => new Date().toISOString()),
     ...(input.installationKey === undefined ? {} : { key: input.installationKey }),
   } as const;
+  const globalCycles: Partial<
+    Record<"A" | "B", Promise<GlobalCollectionCycle>>
+  > = {};
+  let globalUserHome: string | null = null;
+
+  function globalCycle(
+    phase: "A" | "B",
+    userHome: string,
+    signal: AbortSignal,
+  ): Promise<GlobalCollectionCycle> {
+    if (globalUserHome !== null && globalUserHome !== userHome) {
+      return Promise.reject(
+        new CorrelationInputError("CORRELATION_SCHEMA_UNSUPPORTED"),
+      );
+    }
+    globalUserHome = userHome;
+    const existing = globalCycles[phase];
+    if (existing !== undefined) return existing;
+    const created = collectGlobalCycle(dependencies, userHome, signal);
+    globalCycles[phase] = created;
+    return created;
+  }
+
   return Object.freeze({
     async buildInput(
       buildInput: Parameters<ProductionCorrelationAdapter["buildInput"]>[0],
@@ -1063,7 +1175,20 @@ export function createMacOSProductionCorrelationAdapter(
       };
       const filesystemBoundary: ProductionCorrelationFilesystemBoundary = {
         async captureCandidate(candidateRef, phase, signal): Promise<ProductionCandidateCapture> {
-          const cycle = await collectCycle(buildDependencies, baselineHistory, candidateRef, signal);
+          const location = await buildDependencies.candidates.resolve(
+            candidateRef,
+            signal,
+          );
+          if (location === null) {
+            throw new CorrelationInputError("CORRELATION_MISSING");
+          }
+          const cycle = await collectCycle(
+            buildDependencies,
+            baselineHistory,
+            await globalCycle(phase, location.userHome, signal),
+            candidateRef,
+            signal,
+          );
           if (phase === "A") phaseA = cycle;
           else phaseB = cycle;
           return { candidate: cycle.candidate, snapshot: cycle.snapshot };

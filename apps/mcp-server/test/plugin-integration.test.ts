@@ -471,7 +471,7 @@ describe("полная интеграция MCP App", () => {
 
   it("скомпилированный Dashboard package автономен", async () => {
     const html = await readFile(
-      packagedPath(".codex-plugin", "assets", "dashboard-v1.html"),
+      packagedPath(".codex-plugin", "assets", "dashboard-v2.html"),
       "utf8",
     );
     expect(html).toContain("Audit Dashboard");
@@ -584,6 +584,20 @@ describe("полная интеграция MCP App", () => {
       expect(started.isError).not.toBe(true);
       expect(started.structuredContent).toMatchObject({ state: "queued" });
       const auditId = (started.structuredContent as { auditId: string }).auditId;
+
+      const liveDashboard = await client.callTool({
+        name: "dashboard_open",
+        arguments: { auditId, revision: null },
+      });
+      expect(liveDashboard.isError).not.toBe(true);
+      expect(liveDashboard.structuredContent).toMatchObject({
+        auditId,
+        resourceUri: DASHBOARD_RESOURCE_URI,
+      });
+      const liveRevision = (
+        liveDashboard.structuredContent as { revision: number | null }
+      ).revision;
+      expect(liveRevision === null || liveRevision === 1).toBe(true);
 
       let status;
       for (let attempt = 0; attempt < 100; attempt += 1) {

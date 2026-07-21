@@ -22,7 +22,7 @@ export const repositoryMarketplaceFiles = Object.freeze([
   ".codex-plugin/plugin.json",
   pluginAllowlistPath,
   ".codex-plugin/runtime/server.js",
-  ".codex-plugin/assets/dashboard-v1.html",
+  ".codex-plugin/assets/dashboard-v2.html",
   ".mcp.json",
   "skills/codex-mac-cleaner/SKILL.md",
   "LICENSE",

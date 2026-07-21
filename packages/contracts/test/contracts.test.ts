@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   AuditCancelInputSchema,
+  AuditStatusOutputSchema,
+  DashboardOpenInputSchema,
+  DashboardOpenOutputSchema,
   AuditReportSchema,
   AuditResultsInputSchema,
   AuditRunSchema,
@@ -59,6 +62,60 @@ describe("контракты аудита", () => {
     expect(AuditRunStateSchema.parse("cancelling")).toBe("cancelling");
     expect(AuditRunStateSchema.parse("cancelled")).toBe("cancelled");
     expect(AuditRunSchema.parse(completedAuditFixture).revision).toBe(1);
+  });
+
+  it("разрешает безопасный Dashboard до появления actionable revision", () => {
+    expect(
+      DashboardOpenInputSchema.parse({ auditId: "audit-live-1", revision: null }),
+    ).toEqual({ auditId: "audit-live-1", revision: null });
+    expect(() =>
+      DashboardOpenInputSchema.parse({
+        auditId: "audit-live-1",
+        revision: null,
+        path: "/synthetic/private",
+      }),
+    ).toThrow();
+
+    const progress = {
+      phase: "discovering_candidates",
+      completedSteps: 0,
+      totalSteps: 2,
+      processedCandidates: 0,
+      totalCandidates: 0,
+    } as const;
+    expect(
+      AuditStatusOutputSchema.parse({
+        auditId: "audit-live-1",
+        state: "running",
+        stateVersion: 1,
+        progress,
+        coverageWarningCodes: [],
+      }).progress,
+    ).toEqual(progress);
+    expect(
+      DashboardOpenOutputSchema.parse({
+        auditId: "audit-live-1",
+        revision: null,
+        state: "running",
+        stateVersion: 1,
+        resourceUri: "ui://codex-mac-cleaner/dashboard-v2.html",
+        storageSummary: {
+          candidateLogicalBytes: 0,
+          candidatePhysicalBytes: 0,
+          quarantinePhysicalBytes: 0,
+          purgedPhysicalBytes: 0,
+          stateVersion: 0,
+        },
+        diskObservation: {
+          availableBytes: 1,
+          totalBytes: 1,
+          observedAt: "2026-07-21T00:00:00.000Z",
+          source: "statfs",
+        },
+        excludedCount: 0,
+        findings: [],
+      }).revision,
+    ).toBeNull();
   });
 
   it.each([

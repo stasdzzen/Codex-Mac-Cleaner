@@ -91,6 +91,65 @@ export function AuditDashboard({ snapshot, bridge }: AuditDashboardProps) {
   }, [snapshot]);
 
   useEffect(() => {
+    if (
+      acceptedSnapshot.state !== "queued" &&
+      acceptedSnapshot.state !== "running" &&
+      acceptedSnapshot.state !== "cancelling"
+    ) {
+      return;
+    }
+    let stopped = false;
+    let requestInFlight = false;
+    const refresh = async (): Promise<void> => {
+      if (requestInFlight) return;
+      requestInFlight = true;
+      try {
+        const status = await bridge.callTool<{
+          auditId: string;
+          state: DashboardSnapshot["state"];
+          stateVersion: number;
+          progress: DashboardSnapshot["progress"];
+          coverageWarningCodes: readonly string[];
+        }>("audit_status", { auditId: acceptedSnapshot.auditId });
+        if (stopped || status.auditId !== acceptedSnapshot.auditId) return;
+        setAcceptedSnapshot((current) => {
+          if (
+            current.auditId !== status.auditId ||
+            !acceptSnapshot(current.stateVersion, status.stateVersion)
+          ) {
+            return current;
+          }
+          return {
+            ...current,
+            state: status.state,
+            stateVersion: status.stateVersion,
+            progress: status.progress,
+            coverage:
+              status.coverageWarningCodes.length === 0
+                ? current.coverage
+                : {
+                    ...current.coverage,
+                    warnings: status.coverageWarningCodes.map(
+                      (code) => `Источник проверен не полностью: ${code}.`,
+                    ),
+                  },
+          };
+        });
+      } catch {
+        // Начальный snapshot остаётся видимым; следующий polling tick повторит запрос.
+      } finally {
+        requestInFlight = false;
+      }
+    };
+    void refresh();
+    const interval = window.setInterval(() => void refresh(), 1_000);
+    return () => {
+      stopped = true;
+      window.clearInterval(interval);
+    };
+  }, [acceptedSnapshot.auditId, acceptedSnapshot.state, bridge]);
+
+  useEffect(() => {
     const nextRevisionKey = revisionKey(acceptedSnapshot);
     if (previousRevisionKey.current === nextRevisionKey) {
       return;
@@ -214,7 +273,16 @@ export function AuditDashboard({ snapshot, bridge }: AuditDashboardProps) {
         </p>
       </header>
 
-      {acceptedSnapshot.state === "cancelled" ? (
+      {acceptedSnapshot.state === "failed" ? (
+        <Alert variant="destructive">
+          <CircleAlertIcon aria-hidden="true" />
+          <AlertTitle>Аудит остановлен</AlertTitle>
+          <AlertDescription>
+            Проверка завершилась с безопасной ошибкой. Файлы не изменялись, а действия
+            над находками недоступны. Запустите новый аудит.
+          </AlertDescription>
+        </Alert>
+      ) : acceptedSnapshot.state === "cancelled" ? (
         <Alert variant="destructive">
           <BanIcon aria-hidden="true" />
           <AlertTitle>Аудит отменён</AlertTitle>

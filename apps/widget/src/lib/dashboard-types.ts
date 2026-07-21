@@ -45,8 +45,19 @@ export interface DashboardSnapshot {
   readonly state: AuditState;
   readonly stateVersion: number;
   readonly progress: {
+    readonly phase:
+      | "queued"
+      | "discovering_candidates"
+      | "collecting_global_evidence"
+      | "correlating_candidates"
+      | "finalizing"
+      | "completed"
+      | "cancelled"
+      | "failed";
     readonly completedSteps: number;
     readonly totalSteps: number;
+    readonly processedCandidates: number;
+    readonly totalCandidates: number;
   };
   readonly coverage: {
     readonly checkedSourceCount: number;

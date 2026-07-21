@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { AuditRunStateSchema } from "./audit.js";
+import { AuditProgressPhaseSchema, AuditRunStateSchema } from "./audit.js";
 import {
   IsoDateTimeSchema,
   ModelSafeTextSchema,
@@ -26,7 +26,13 @@ export const AuditStatusOutputSchema = z
     state: AuditRunStateSchema,
     stateVersion: SafeIntegerSchema,
     progress: z
-      .object({ completedSteps: SafeIntegerSchema, totalSteps: SafeIntegerSchema })
+      .object({
+        phase: AuditProgressPhaseSchema,
+        completedSteps: SafeIntegerSchema,
+        totalSteps: SafeIntegerSchema,
+        processedCandidates: SafeIntegerSchema,
+        totalCandidates: SafeIntegerSchema,
+      })
       .strict()
       .refine((value) => value.completedSteps <= value.totalSteps, {
         message: "Прогресс не может превышать общее число шагов",
@@ -60,10 +66,10 @@ export const AuditResultsOutputSchema = z
 export const DashboardOpenOutputSchema = z
   .object({
     auditId: OpaqueIdSchema,
-    revision: SafeIntegerSchema.min(1),
+    revision: SafeIntegerSchema.min(1).nullable(),
     state: AuditRunStateSchema,
     stateVersion: SafeIntegerSchema,
-    resourceUri: z.literal("ui://codex-mac-cleaner/dashboard-v1.html"),
+    resourceUri: z.literal("ui://codex-mac-cleaner/dashboard-v2.html"),
     storageSummary: StorageSummarySchema,
     diskObservation: DiskObservationSchema,
     excludedCount: SafeIntegerSchema,

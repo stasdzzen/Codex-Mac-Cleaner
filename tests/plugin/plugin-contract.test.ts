@@ -84,7 +84,7 @@ describe("repository marketplace plugin", () => {
       ".codex-plugin/plugin.json",
       ".codex-plugin/package-allowlist.json",
       ".codex-plugin/runtime/server.js",
-      ".codex-plugin/assets/dashboard-v1.html",
+      ".codex-plugin/assets/dashboard-v2.html",
       ".mcp.json",
       "skills/codex-mac-cleaner/SKILL.md",
       "LICENSE",

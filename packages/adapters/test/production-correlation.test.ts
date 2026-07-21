@@ -32,7 +32,11 @@ function id(path: string): string {
   return createHash("sha256").update(path).digest("hex").slice(0, 16);
 }
 
-function harness() {
+function harness(
+  candidates: ReadonlyMap<string, string> = new Map([
+    ["candidate-ref-library", candidatePath],
+  ]),
+) {
   let ownerInstalled = true;
   let ownerRunning = true;
   let ownerOpen = true;
@@ -106,19 +110,21 @@ function harness() {
   };
   const history = new MemoryHistory();
   const key = new InstallationKey(new Uint8Array(32).fill(7));
-  const adapter = createMacOSProductionCorrelationAdapter({
-    commands: createCommandRunner(executor),
-    candidates: createMacOSCandidateRegistry({
-      candidates: new Map([["candidate-ref-library", candidatePath]]),
-      userHome: home,
-    }),
-    filesystem,
-    installationKey: key,
-    ownerBindingHistory: history,
-    now: () => fixedNow,
-  });
+  const createAdapter = () =>
+    createMacOSProductionCorrelationAdapter({
+      commands: createCommandRunner(executor),
+      candidates: createMacOSCandidateRegistry({
+        candidates,
+        userHome: home,
+      }),
+      filesystem,
+      installationKey: key,
+      ownerBindingHistory: history,
+      now: () => fixedNow,
+    });
   return {
-    adapter,
+    adapter: createAdapter(),
+    createAdapter,
     calls,
     history,
     removeOwner() {
@@ -228,8 +234,16 @@ function packagePayloadHarness(options: Readonly<{
 }
 
 async function payloadFrom(adapter: ReturnType<typeof createMacOSProductionCorrelationAdapter>, snapshotId: string) {
+  return payloadFor(adapter, "candidate-ref-library", snapshotId);
+}
+
+async function payloadFor(
+  adapter: ReturnType<typeof createMacOSProductionCorrelationAdapter>,
+  candidateRef: string,
+  snapshotId: string,
+) {
   const input = await adapter.buildInput({
-    candidateRef: "candidate-ref-library",
+    candidateRef,
     snapshotId,
     signal: new AbortController().signal,
   });
@@ -237,6 +251,22 @@ async function payloadFrom(adapter: ReturnType<typeof createMacOSProductionCorre
 }
 
 describe("concrete macOS production correlation collector v2", () => {
+  it("снимает глобальные inventories один раз на фазу для нескольких кандидатов", async () => {
+    const secondCandidatePath = `${home}/Library/Logs/Owner/private-log`;
+    const test = harness(
+      new Map([
+        ["candidate-ref-library", candidatePath],
+        ["candidate-ref-library-2", secondCandidatePath],
+      ]),
+    );
+
+    await payloadFor(test.adapter, "candidate-ref-library", "snapshot-shared-1");
+    await payloadFor(test.adapter, "candidate-ref-library-2", "snapshot-shared-2");
+
+    expect(test.calls.filter(({ executable }) => executable === "/bin/ps")).toHaveLength(2);
+    expect(test.calls.filter(({ executable }) => executable === "/usr/sbin/lsof")).toHaveLength(2);
+  });
+
   it("оставляет candidate Library artifact и владеет canonical argv/parsing", async () => {
     const test = harness();
     const payload = await payloadFrom(test.adapter, "snapshot-library-a");
@@ -280,7 +310,7 @@ describe("concrete macOS production correlation collector v2", () => {
     expect(test.history.records).toHaveLength(1);
 
     test.removeOwner();
-    const revisionN1 = await payloadFrom(test.adapter, "snapshot-library-n1");
+    const revisionN1 = await payloadFrom(test.createAdapter(), "snapshot-library-n1");
     const binding = revisionN1.queries.find(({ queryScope }) => queryScope === "owner_bindings")!;
     expect(binding.state).toBe("complete");
     expect(binding.subjects).toHaveLength(1);

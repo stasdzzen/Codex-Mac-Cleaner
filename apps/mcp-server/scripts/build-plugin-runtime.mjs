@@ -47,7 +47,7 @@ const temporaryRoot = await mkdtemp(join(tmpdir(), "cmc-dashboard-build-"));
 const widgetOutput = join(temporaryRoot, "widget");
 const dashboardTarget = join(
   outputRoot,
-  ".codex-plugin/assets/dashboard-v1.html",
+  ".codex-plugin/assets/dashboard-v2.html",
 );
 const runtimeTarget = join(outputRoot, ".codex-plugin/runtime/server.js");
 
@@ -81,11 +81,11 @@ try {
     build: {
       outDir: widgetOutput,
       emptyOutDir: true,
-      rollupOptions: { input: join(widgetRoot, "dashboard-v1.html") },
+      rollupOptions: { input: join(widgetRoot, "dashboard-v2.html") },
     },
   });
 
-  const builtHtmlPath = join(widgetOutput, "dashboard-v1.html");
+  const builtHtmlPath = join(widgetOutput, "dashboard-v2.html");
   let html = await readFile(builtHtmlPath, "utf8");
   const scriptMatch = html.match(
     /<script\s+type="module"\s+crossorigin\s+src="([^"]+)"\s*><\/script>/u,

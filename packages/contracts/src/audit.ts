@@ -23,6 +23,17 @@ export const AuditRunStateSchema = z.enum([
   "failed",
 ]);
 
+export const AuditProgressPhaseSchema = z.enum([
+  "queued",
+  "discovering_candidates",
+  "collecting_global_evidence",
+  "correlating_candidates",
+  "finalizing",
+  "completed",
+  "cancelled",
+  "failed",
+]);
+
 export const AuditSourceSchema = z.enum([
   "application_inventory",
   "user_library_artifacts",
@@ -177,7 +188,10 @@ export const AuditResultsInputSchema = z
   .strict();
 
 export const DashboardOpenInputSchema = z
-  .object({ auditId: OpaqueIdSchema, revision: SafeIntegerSchema.min(1) })
+  .object({
+    auditId: OpaqueIdSchema,
+    revision: SafeIntegerSchema.min(1).nullable(),
+  })
   .strict();
 
 export const FindingInspectInputSchema = z
@@ -187,3 +201,4 @@ export const FindingInspectInputSchema = z
 export const FindingRevealInputSchema = FindingInspectInputSchema;
 
 export type AuditRun = z.infer<typeof AuditRunSchema>;
+export type AuditProgressPhase = z.infer<typeof AuditProgressPhaseSchema>;

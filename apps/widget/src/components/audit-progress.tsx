@@ -18,6 +18,17 @@ interface AuditProgressProps {
   readonly onCancel: () => void;
 }
 
+const PHASE_LABELS: Readonly<Record<DashboardSnapshot["progress"]["phase"], string>> = {
+  queued: "Ожидание запуска",
+  discovering_candidates: "Поиск кандидатов",
+  collecting_global_evidence: "Сбор системных доказательств",
+  correlating_candidates: "Сопоставление кандидатов",
+  finalizing: "Подготовка безопасного результата",
+  completed: "Проверка завершена",
+  cancelled: "Проверка отменена",
+  failed: "Проверка остановлена с ошибкой",
+};
+
 export function AuditProgress({ snapshot, onCancel }: AuditProgressProps) {
   const { completedSteps, totalSteps } = snapshot.progress;
   const value = totalSteps === 0 ? 0 : (completedSteps / totalSteps) * 100;
@@ -29,7 +40,7 @@ export function AuditProgress({ snapshot, onCancel }: AuditProgressProps) {
       <CardHeader>
         <CardTitle>Аудит application_remnants</CardTitle>
         <CardDescription>
-          Состояние: {snapshot.state}. Выполнено шагов: {completedSteps} из {totalSteps}.
+          Этап: {PHASE_LABELS[snapshot.progress.phase]}. Выполнено шагов: {completedSteps} из {totalSteps}.
         </CardDescription>
         {(isActive || isCancelling) && (
           <CardAction>
@@ -50,6 +61,11 @@ export function AuditProgress({ snapshot, onCancel }: AuditProgressProps) {
         )}
       </CardHeader>
       <CardContent className="flex flex-col gap-2">
+        {snapshot.progress.totalCandidates > 0 && (
+          <p className="text-sm text-muted-foreground">
+            Кандидатов обработано: {snapshot.progress.processedCandidates} из {snapshot.progress.totalCandidates}.
+          </p>
+        )}
         {totalSteps === 0 ? (
           <Skeleton className="h-1 w-full" aria-label="Ожидание прогресса" />
         ) : (

@@ -29,6 +29,7 @@ import {
   FindingInspectInputSchema,
   FindingRevealInputSchema,
   type DiskObservation,
+  type AuditProgressPhase,
   type FindingModelView,
   type StorageSummary,
   type UserExclusion,
@@ -71,7 +72,7 @@ import {
 import type { AuditToolService } from "./server.js";
 import type { QuarantineToolService } from "./tools/quarantine.js";
 
-const DASHBOARD_RESOURCE_URI = "ui://codex-mac-cleaner/dashboard-v1.html" as const;
+const DASHBOARD_RESOURCE_URI = "ui://codex-mac-cleaner/dashboard-v2.html" as const;
 
 const TERMINAL_STATES = new Set([
   "cancelled",
@@ -82,6 +83,7 @@ const TERMINAL_STATES = new Set([
 const MAX_GIT_SCAN_DEPTH = 128;
 const MAX_GIT_SCAN_ENTRIES = 100_000;
 const MAX_EMPTY_ARTIFACT_ENTRIES = 4_096;
+const DEFAULT_AUDIT_TIMEOUT_MS = 5 * 60 * 1_000;
 const EMPTY_CACHE_LOG_RULE_ID = "EMPTY_CACHE_LOG_ARTIFACT_V1" as const;
 const EMPTY_CACHE_LOG_RULE_VERSION = 1 as const;
 
@@ -456,25 +458,37 @@ class RuntimeFileSystemFacade implements FileSystemFacade {
           if (!this.isWithinBoundary(candidateBoundary, childPath)) {
             return { marker: null, blocked: true };
           }
+          if (entry.name === ".git") {
+            let childStats;
+            try {
+              childStats = await lstat(childPath, { bigint: true });
+            } catch {
+              return { marker: null, blocked: true };
+            }
+            if (childStats.dev !== rootStats.dev) {
+              return { marker: null, blocked: true };
+            }
+            return {
+              marker: childStats.isDirectory() ? "directory" : "file",
+              blocked: false,
+            };
+          }
+          if (entry.isSymbolicLink() || entry.isFile()) continue;
+          if (!entry.isDirectory()) return { marker: null, blocked: true };
           let childStats;
           try {
             childStats = await lstat(childPath, { bigint: true });
           } catch {
             return { marker: null, blocked: true };
           }
-          if (childStats.dev !== rootStats.dev) {
+          if (
+            childStats.dev !== rootStats.dev ||
+            childStats.isSymbolicLink() ||
+            !childStats.isDirectory()
+          ) {
             return { marker: null, blocked: true };
           }
-          if (entry.name === ".git") {
-            return {
-              marker: childStats.isDirectory() ? "directory" : "file",
-              blocked: false,
-            };
-          }
-          if (childStats.isSymbolicLink()) continue;
-          if (childStats.isDirectory()) {
-            pending.push({ path: childPath, depth: current.depth + 1 });
-          }
+          pending.push({ path: childPath, depth: current.depth + 1 });
         }
       }
     }
@@ -844,7 +858,11 @@ interface AuditRunRecord {
   stateVersion: number;
   cancelRequestedAt: string | null;
   revision: number | null;
+  progressPhase: AuditProgressPhase;
   completedSteps: number;
+  totalSteps: number;
+  processedCandidates: number;
+  totalCandidates: number;
   coverageWarningCodes: string[];
   coverage: {
     checkedSourceCount: number;
@@ -918,6 +936,8 @@ export interface RuntimeServiceOptions {
   readonly currentProjectRoot?: string;
   readonly now?: () => Date;
   readonly createId?: (prefix: string) => string;
+  /** Deterministic tests могут уменьшить deadline; packaged runtime использует 5 минут. */
+  readonly auditTimeoutMs?: number;
   /**
    * Низкоуровневые production boundaries для in-process проверки composition.
    * Они не доступны через MCP, env или plugin manifest; packaged runtime всегда
@@ -952,6 +972,7 @@ class AuditRuntimeService implements AuditToolService {
     private readonly correlationCommands: CommandRunner,
     private readonly correlationFilesystem: MacOSCorrelationReadOnlyFileSystem | undefined,
     private readonly ownerBindingHistory: MacOSOwnerBindingHistory | undefined,
+    private readonly auditTimeoutMs: number,
     private readonly now: () => Date,
     private readonly createId: (prefix: string) => string,
   ) {}
@@ -971,6 +992,25 @@ class AuditRuntimeService implements AuditToolService {
       throw new Error("AUDIT_STALE");
     }
     return run;
+  }
+
+  private dashboardRun(
+    auditId: string,
+    revision: number | null,
+  ): AuditRunRecord {
+    return revision === null
+      ? this.runFor(auditId)
+      : this.completedRun(auditId, revision);
+  }
+
+  private progress(run: AuditRunRecord) {
+    return {
+      phase: run.progressPhase,
+      completedSteps: run.completedSteps,
+      totalSteps: run.totalSteps,
+      processedCandidates: run.processedCandidates,
+      totalCandidates: run.totalCandidates,
+    };
   }
 
   private async exclusionSnapshot(): Promise<{
@@ -1170,7 +1210,14 @@ class AuditRuntimeService implements AuditToolService {
   }
 
   private async execute(run: AuditRunRecord): Promise<void> {
+    let deadlineExceeded = false;
+    const deadline = setTimeout(() => {
+      deadlineExceeded = true;
+      run.controller.abort();
+    }, this.auditTimeoutMs);
+    deadline.unref?.();
     run.state = "running";
+    run.progressPhase = "discovering_candidates";
     run.stateVersion += 1;
     this.filesystem.clear();
     try {
@@ -1183,6 +1230,14 @@ class AuditRuntimeService implements AuditToolService {
         skippedSourceCount: result.coverage.skippedSourceCount,
         warnings: result.coverage.gaps.map((gap) => gap.safeMessage),
       };
+      run.totalCandidates = result.observations.length;
+      run.totalSteps = result.observations.length + 2;
+      run.completedSteps = 1;
+      run.progressPhase =
+        result.observations.length === 0
+          ? "finalizing"
+          : "collecting_global_evidence";
+      run.stateVersion += 1;
       const exclusionState = await this.exclusionSnapshot();
       const candidatePaths = new Map(
         result.observations.flatMap((observation) => {
@@ -1222,6 +1277,7 @@ class AuditRuntimeService implements AuditToolService {
             correlationWarningCodes.add("CORRELATION_SNAPSHOT_STALE");
           }
         } catch {
+          run.controller.signal.throwIfAborted();
           correlationWarningCodes.add("CORRELATION_COVERAGE_INCOMPLETE");
         }
         const finding = this.buildFinding(
@@ -1240,6 +1296,13 @@ class AuditRuntimeService implements AuditToolService {
         } else {
           run.excludedCount += 1;
         }
+        run.processedCandidates += 1;
+        run.completedSteps = 1 + run.processedCandidates;
+        run.progressPhase =
+          run.processedCandidates < run.totalCandidates
+            ? "correlating_candidates"
+            : "finalizing";
+        run.stateVersion += 1;
       }
       run.findings = findings;
       run.coverageWarningCodes = [
@@ -1260,16 +1323,23 @@ class AuditRuntimeService implements AuditToolService {
           : result.state;
       run.revision =
         result.state === "completed" || result.state === "completed_with_warnings" ? 1 : null;
-      run.completedSteps = 1;
+      run.completedSteps = run.totalSteps;
+      run.progressPhase = "completed";
     } catch (error) {
-      if (run.controller.signal.aborted) {
+      if (deadlineExceeded) {
+        run.state = "failed";
+        run.progressPhase = "failed";
+        run.coverageWarningCodes = ["AUDIT_TIMEOUT"];
+      } else if (run.controller.signal.aborted) {
         run.state = "cancelled";
+        run.progressPhase = "cancelled";
       } else {
         run.state = "failed";
+        run.progressPhase = "failed";
         run.coverageWarningCodes = ["INTERNAL_ERROR"];
       }
-      run.completedSteps = 1;
     } finally {
+      clearTimeout(deadline);
       run.stateVersion += 1;
     }
   }
@@ -1290,7 +1360,11 @@ class AuditRuntimeService implements AuditToolService {
       stateVersion: 0,
       cancelRequestedAt: null,
       revision: null,
+      progressPhase: "queued",
       completedSteps: 0,
+      totalSteps: 2,
+      processedCandidates: 0,
+      totalCandidates: 0,
       coverageWarningCodes: [],
       coverage: { checkedSourceCount: 0, skippedSourceCount: 0, warnings: [] },
       findings: [],
@@ -1310,7 +1384,7 @@ class AuditRuntimeService implements AuditToolService {
       auditId: run.auditId,
       state: run.state,
       stateVersion: run.stateVersion,
-      progress: { completedSteps: run.completedSteps, totalSteps: 1 },
+      progress: this.progress(run),
       coverageWarningCodes: run.coverageWarningCodes,
     };
   }
@@ -1371,13 +1445,24 @@ class AuditRuntimeService implements AuditToolService {
 
   async dashboard(rawInput: unknown) {
     const input = DashboardOpenInputSchema.parse(rawInput);
-    const run = this.completedRun(input.auditId, input.revision);
-    const results = await this.results({
-      auditId: input.auditId,
-      revision: input.revision,
-      cursor: null,
-      filters: {},
-    });
+    const run = this.dashboardRun(input.auditId, input.revision);
+    const actionable =
+      run.revision !== null &&
+      (run.state === "completed" || run.state === "completed_with_warnings");
+    const results = actionable
+      ? await this.results({
+          auditId: input.auditId,
+          revision: run.revision,
+          cursor: null,
+          filters: {},
+        })
+      : {
+          auditId: run.auditId,
+          revision: null,
+          ...(await this.safeSnapshot(run)),
+          findings: [] as FindingModelView[],
+        };
+    run.stateVersion = Math.max(run.stateVersion, results.stateVersion);
     const output = {
       auditId: results.auditId,
       revision: results.revision,
@@ -1392,15 +1477,15 @@ class AuditRuntimeService implements AuditToolService {
     const manifests = await new ManifestRepository(this.stateRoot).list();
     const dashboard = {
       auditId: run.auditId,
-      revision: input.revision,
+      revision: results.revision,
       state: run.state,
       stateVersion: output.stateVersion,
-      progress: { completedSteps: 1, totalSteps: 1 },
+      progress: this.progress(run),
       coverage: run.coverage,
       storageSummary: output.storageSummary,
       diskObservation: output.diskObservation,
       excludedCount: output.excludedCount,
-      findings: run.findings.map((finding) => {
+      findings: actionable ? run.findings.map((finding) => {
         const safe = finding.correlation?.safeView;
         const facts = safe?.facts;
         const receiptState =
@@ -1454,7 +1539,7 @@ class AuditRuntimeService implements AuditToolService {
           },
           evidence: [],
         };
-      }),
+      }) : [],
       quarantineEntries: manifests
         .filter((manifest) => manifest.state === "moved")
         .map((manifest) => ({
@@ -2107,6 +2192,7 @@ export async function createRuntimeCore(
     options.correlation?.commands ?? createNodeCommandRunner(),
     options.correlation?.filesystem,
     options.correlation?.ownerBindingHistory,
+    options.auditTimeoutMs ?? DEFAULT_AUDIT_TIMEOUT_MS,
     options.now ?? (() => new Date()),
     options.createId ?? ((prefix) => `${prefix}-${randomUUID()}`),
   );

@@ -15,7 +15,13 @@ const baseSnapshot: DashboardSnapshot = {
   revision: 7,
   state: "completed_with_warnings",
   stateVersion: 12,
-  progress: { completedSteps: 8, totalSteps: 8 },
+  progress: {
+    phase: "completed",
+    completedSteps: 8,
+    totalSteps: 8,
+    processedCandidates: 6,
+    totalCandidates: 6,
+  },
   coverage: {
     checkedSourceCount: 7,
     skippedSourceCount: 1,
@@ -190,7 +196,13 @@ export const runningFixture = deepFreeze({
   revision: null,
   state: "running" as const,
   stateVersion: 13,
-  progress: { completedSteps: 3, totalSteps: 8 },
+  progress: {
+    phase: "correlating_candidates" as const,
+    completedSteps: 3,
+    totalSteps: 8,
+    processedCandidates: 2,
+    totalCandidates: 6,
+  },
   findings: [],
 });
 
