@@ -29,8 +29,8 @@ export function registerDashboardResource(
     "codex-mac-cleaner-dashboard-v2",
     DASHBOARD_RESOURCE_URI,
     {
-      title: "Codex Mac Cleaner — Audit Dashboard",
-      description: "Локальный пяти-вкладочный Dashboard аудита и карантина.",
+      title: "Codex Mac Cleaner — проверка Mac",
+      description: "Локальное окно с результатами проверки и карантином.",
       mimeType: DASHBOARD_RESOURCE_MIME_TYPE,
     },
     async () => ({
@@ -47,7 +47,7 @@ export function registerDashboardResource(
               },
             },
             "openai/widgetDescription":
-              "Audit Dashboard показывает серверный snapshot и принимает только поэлементные действия пользователя.",
+              "Окно показывает безопасные результаты проверки. Пользователь подтверждает каждое действие отдельно.",
           },
         },
       ],

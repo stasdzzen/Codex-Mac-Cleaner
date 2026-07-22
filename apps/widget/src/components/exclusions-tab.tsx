@@ -123,9 +123,9 @@ export function ExclusionsTab({ bridge, refreshKey }: ExclusionsTabProps) {
       setEntries((current) =>
         current.filter((candidate) => candidate.exclusionId !== entry.exclusionId),
       );
-      toast.success("Исключение удалено. Объект снова будет проверяться.");
+      toast.success("Объект снова будет проверяться.");
     } catch {
-      toast.error("Не удалось удалить исключение. Обновите список.");
+      toast.error("Не удалось изменить выбор. Попробуйте ещё раз.");
     }
   }
 
@@ -139,7 +139,7 @@ export function ExclusionsTab({ bridge, refreshKey }: ExclusionsTabProps) {
       );
       setResetToken(result.resetToken);
     } catch {
-      toast.error("Не удалось подготовить подтверждение сброса.");
+      toast.error("Не удалось подготовить подтверждение. Попробуйте ещё раз.");
       setResetOpen(false);
     } finally {
       setResetPreparing(false);
@@ -156,9 +156,9 @@ export function ExclusionsTab({ bridge, refreshKey }: ExclusionsTabProps) {
       setEntries([]);
       setResetOpen(false);
       setResetToken(null);
-      toast.success("Все пользовательские исключения сброшены.");
+      toast.success("Все оставленные объекты снова будут проверяться.");
     } catch {
-      toast.error("Сброс не выполнен. Подготовьте новое подтверждение.");
+      toast.error("Не удалось изменить список. Попробуйте ещё раз.");
     }
   }
 
@@ -166,7 +166,7 @@ export function ExclusionsTab({ bridge, refreshKey }: ExclusionsTabProps) {
     return (
       <Alert variant="destructive">
         <ShieldCheckIcon aria-hidden="true" />
-        <AlertTitle>Состояние исключений недоступно</AlertTitle>
+        <AlertTitle>Не удалось загрузить оставленные объекты</AlertTitle>
         <AlertDescription>
           Находки остаются видимыми, но действия с файлами недоступны, пока локальное
           состояние не восстановится.
@@ -179,7 +179,7 @@ export function ExclusionsTab({ bridge, refreshKey }: ExclusionsTabProps) {
     <section aria-labelledby="exclusions-title" className="flex flex-col gap-4">
       <Card>
         <CardHeader>
-          <CardTitle id="exclusions-title">Пользовательские исключения</CardTitle>
+          <CardTitle id="exclusions-title">Всегда оставлять</CardTitle>
           <CardDescription>
             Сохранённые здесь объекты не будут предлагаться для очистки. Защищённые области
             Mac по-прежнему недоступны для изменений.
@@ -191,7 +191,7 @@ export function ExclusionsTab({ bridge, refreshKey }: ExclusionsTabProps) {
         <CardContent>
           <FieldGroup className="gap-3 sm:flex-row">
             <Field className="flex-1">
-              <FieldLabel htmlFor="exclusion-search">Поиск исключений</FieldLabel>
+              <FieldLabel htmlFor="exclusion-search">Поиск оставленных объектов</FieldLabel>
               <Input
                 id="exclusion-search"
                 value={search}
@@ -201,7 +201,7 @@ export function ExclusionsTab({ bridge, refreshKey }: ExclusionsTabProps) {
             </Field>
             <Field className="sm:w-auto">
               <FieldLabel htmlFor="exclusion-reason-filter">
-                Фильтр по причине
+                Причина
               </FieldLabel>
               <NativeSelect
                 id="exclusion-reason-filter"
@@ -240,7 +240,7 @@ export function ExclusionsTab({ bridge, refreshKey }: ExclusionsTabProps) {
               }
             >
                 <RotateCcwIcon data-icon="inline-start" />
-                Сбросить все исключения
+                Проверять все снова
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
@@ -248,7 +248,7 @@ export function ExclusionsTab({ bridge, refreshKey }: ExclusionsTabProps) {
                   <RotateCcwIcon aria-hidden="true" />
                 </AlertDialogMedia>
                 <AlertDialogTitle>
-                  Сбросить все пользовательские исключения?
+                  Снова проверять все оставленные объекты?
                 </AlertDialogTitle>
                 <AlertDialogDescription>
                   Будут удалены только локальные правила исключений. Это не изменяет
@@ -269,7 +269,7 @@ export function ExclusionsTab({ bridge, refreshKey }: ExclusionsTabProps) {
                       data-icon="inline-start"
                     />
                   )}
-                  Подтвердить сброс
+                  Проверять все снова
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
@@ -280,20 +280,20 @@ export function ExclusionsTab({ bridge, refreshKey }: ExclusionsTabProps) {
       {loading ? (
         <Alert>
           <LoaderCircleIcon className="animate-spin" aria-hidden="true" />
-          <AlertTitle>Загрузка исключений</AlertTitle>
-          <AlertDescription>Загружаем сохранённые на этом Mac исключения.</AlertDescription>
+          <AlertTitle>Загрузка оставленных объектов</AlertTitle>
+          <AlertDescription>Загружаем ваш сохранённый выбор.</AlertDescription>
         </Alert>
       ) : entries.length === 0 ? (
         <Alert>
           <ShieldCheckIcon aria-hidden="true" />
-          <AlertTitle>Пользовательских исключений нет.</AlertTitle>
+          <AlertTitle>Оставленных объектов нет</AlertTitle>
           <AlertDescription>Следующая проверка покажет все доступные объекты.</AlertDescription>
         </Alert>
       ) : visibleEntries.length === 0 ? (
         <Alert>
           <SearchIcon aria-hidden="true" />
-          <AlertTitle>Исключения по выбранным фильтрам не найдены.</AlertTitle>
-          <AlertDescription>Измените поиск или фильтр причины.</AlertDescription>
+          <AlertTitle>Ничего не найдено</AlertTitle>
+          <AlertDescription>Измените текст поиска или выберите другую причину.</AlertDescription>
         </Alert>
       ) : (
         <div className="grid gap-3 lg:grid-cols-2">

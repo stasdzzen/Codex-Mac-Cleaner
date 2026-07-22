@@ -69,7 +69,7 @@ function EntryActionDialog({
       );
       setPreviewToken(preview.previewToken);
     } catch {
-      toast.error("Не удалось подготовить действие. Обновите состояние карантина.");
+      toast.error("Не удалось проверить объект. Закройте окно и откройте карантин снова.");
       setOpen(false);
     } finally {
       setPreparing(false);
@@ -85,10 +85,10 @@ function EntryActionDialog({
         previewToken,
         operationId: entry.entryId,
       });
-      toast.success(isPurge ? "Запись удалена навсегда." : "Восстановление запрошено.");
+      toast.success(isPurge ? "Объект удалён из карантина навсегда." : "Объект восстановлен.");
       setOpen(false);
     } catch {
-      toast.error("Действие не выполнено. Обновите состояние карантина.");
+      toast.error("Действие не выполнено. Закройте окно и откройте карантин снова.");
     }
   }
 
@@ -131,7 +131,7 @@ function EntryActionDialog({
             )}
           </AlertDialogMedia>
           <AlertDialogTitle>
-            {isPurge ? "Удалить навсегда" : "Восстановить"}: {entry.displayName}
+            {isPurge ? "Удалить навсегда" : "Восстановить"} «{entry.displayName}»?
           </AlertDialogTitle>
           <AlertDialogDescription>
             {isPurge
@@ -150,7 +150,7 @@ function EntryActionDialog({
             }}
           >
             {preparing && <LoaderCircleIcon data-icon="inline-start" className="animate-spin" />}
-            {isPurge ? "Удалить одну запись" : "Восстановить одну запись"}
+            {isPurge ? "Удалить этот объект" : "Восстановить этот объект"}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

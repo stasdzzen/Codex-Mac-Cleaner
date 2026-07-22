@@ -65,7 +65,7 @@ export function ActionDialog({ finding, auditRevision, bridge }: ActionDialogPro
       toast.success("Объект перемещён в карантин.");
       setOpen(false);
     } catch {
-      toast.error("Перемещение не выполнено. Обновите ревизию и повторите проверку.");
+      toast.error("Объект изменился после проверки. Запустите проверку ещё раз.");
     }
   }
 
@@ -98,7 +98,7 @@ export function ActionDialog({ finding, auditRevision, bridge }: ActionDialogPro
           <AlertDialogMedia>
             <ArchiveRestoreIcon aria-hidden="true" />
           </AlertDialogMedia>
-          <AlertDialogTitle>Переместить в карантин: {finding.displayName}</AlertDialogTitle>
+          <AlertDialogTitle>Переместить «{finding.displayName}» в карантин?</AlertDialogTitle>
           <AlertDialogDescription
             render={<div className="flex flex-col gap-2" />}
           >

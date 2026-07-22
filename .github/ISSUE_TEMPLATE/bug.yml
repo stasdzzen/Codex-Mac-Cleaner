@@ -1,17 +1,17 @@
 name: Ошибка
 description: Сообщить о воспроизводимой ошибке Codex Mac Cleaner
-title: "[BUG] "
+title: "[ОШИБКА] "
 labels:
   - bug
 body:
   - type: markdown
     attributes:
-      value: Не публикуйте secrets, реальные полные пути и сведения об уязвимостях. Для уязвимостей используйте Private vulnerability reporting.
+      value: Не публикуйте секреты, реальные полные пути и сведения об уязвимостях. Об уязвимости сообщите через закрытую форму GitHub.
   - type: input
     id: version
     attributes:
-      label: Commit или версия
-      description: Точный commit SHA либо версия установленного Release
+      label: Коммит или версия
+      description: Точный номер коммита или версия установленного плагина
     validations:
       required: true
   - type: input
@@ -25,14 +25,14 @@ body:
     id: profile
     attributes:
       label: Профиль
-      description: Например, application_remnants
+      description: Например, проверка остатков удалённых приложений (`application_remnants`)
     validations:
       required: true
   - type: textarea
     id: steps
     attributes:
       label: Шаги воспроизведения
-      description: Минимальные действия и синтетические входные данные без secrets и реальных путей
+      description: Короткая последовательность действий и искусственные тестовые данные без секретов и реальных путей
     validations:
       required: true
   - type: textarea
@@ -51,7 +51,7 @@ body:
     id: safe_evidence
     attributes:
       label: Безопасное доказательство
-      description: Только относящийся фрагмент без содержимого файлов, tokens, app inventory и полного environment dump
+      description: Только относящийся к ошибке фрагмент без содержимого файлов, ключей доступа, списка приложений и полного списка настроек среды
     validations:
       required: true
   - type: checkboxes
@@ -59,7 +59,7 @@ body:
     attributes:
       label: Проверка приватности
       options:
-        - label: Я удалил secrets, реальные полные пути и персональные данные.
+        - label: Я удалил секреты, реальные полные пути и персональные данные.
           required: true
         - label: Это не закрытый отчёт об уязвимости.
           required: true

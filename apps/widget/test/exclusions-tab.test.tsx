@@ -52,14 +52,14 @@ function createBridge() {
   return { bridge, callTool };
 }
 
-describe("вкладка Исключения", () => {
+describe("вкладка Оставленные", () => {
   it("создаёт exclusion из finding только по IDs и сохраняет его после remount", async () => {
     const state = createBridge();
     const { unmount } = render(
       <AuditDashboard snapshot={dashboardFixture} bridge={state.bridge} />,
     );
     fireEvent.click(screen.getByRole("tab", { name: "Найдено" }));
-    fireEvent.click(screen.getByRole("button", { name: "Исключить: Synthetic Cache" }));
+    fireEvent.click(screen.getByRole("button", { name: "Оставить: Synthetic Cache" }));
 
     await waitFor(() =>
       expect(state.callTool).toHaveBeenCalledWith("exclusion_create", {
@@ -75,18 +75,18 @@ describe("вкладка Исключения", () => {
 
     unmount();
     render(<AuditDashboard snapshot={dashboardFixture} bridge={state.bridge} />);
-    fireEvent.click(screen.getByRole("tab", { name: "Исключения" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Оставленные" }));
     expect((await screen.findAllByText("Сохранённый объект"))).toHaveLength(2);
   });
 
   it("поддерживает поиск, фильтр, причину, дату и поэлементное Снова проверять", async () => {
     const state = createBridge();
     render(<AuditDashboard snapshot={dashboardFixture} bridge={state.bridge} />);
-    fireEvent.click(screen.getByRole("tab", { name: "Исключения" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Оставленные" }));
 
     expect((await screen.findAllByText("Сохранённый объект"))).toHaveLength(2);
-    const searchControl = screen.getByLabelText("Поиск исключений");
-    const filterControl = screen.getByLabelText("Фильтр по причине");
+    const searchControl = screen.getByLabelText("Поиск оставленных объектов");
+    const filterControl = screen.getByLabelText("Причина");
     const fieldGroup = searchControl.closest('[data-slot="field-group"]');
     expect(fieldGroup).not.toBeNull();
     expect(searchControl.closest('[data-slot="field"]')).not.toBeNull();
@@ -95,7 +95,7 @@ describe("вкладка Исключения", () => {
     expect(screen.getAllByText("сохранить данные").some((item) => item.tagName === "SPAN")).toBe(true);
     expect(screen.getAllByText(/Добавлено:/)).toHaveLength(2);
 
-    fireEvent.change(screen.getByLabelText("Поиск исключений"), {
+    fireEvent.change(screen.getByLabelText("Поиск оставленных объектов"), {
       target: { value: "файл" },
     });
     expect(screen.getAllByText("Сохранённый объект")).toHaveLength(1);
@@ -103,12 +103,12 @@ describe("вкладка Исключения", () => {
       screen.getAllByText("объект определён ошибочно").some((item) => item.tagName === "SPAN"),
     ).toBe(true);
 
-    fireEvent.change(screen.getByLabelText("Фильтр по причине"), {
+    fireEvent.change(screen.getByLabelText("Причина"), {
       target: { value: "keep_data" },
     });
-    expect(screen.getByText("Исключения по выбранным фильтрам не найдены.")).toBeVisible();
+    expect(screen.getByText("Ничего не найдено")).toBeVisible();
 
-    fireEvent.change(screen.getByLabelText("Поиск исключений"), {
+    fireEvent.change(screen.getByLabelText("Поиск оставленных объектов"), {
       target: { value: "" },
     });
     fireEvent.click(screen.getAllByRole("button", { name: "Снова проверять этот объект" })[0]!);
@@ -123,21 +123,21 @@ describe("вкладка Исключения", () => {
   it("reset all использует отдельное подтверждение и одноразовый token", async () => {
     const state = createBridge();
     render(<AuditDashboard snapshot={dashboardFixture} bridge={state.bridge} />);
-    fireEvent.click(screen.getByRole("tab", { name: "Исключения" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Оставленные" }));
     expect((await screen.findAllByText("Сохранённый объект"))).toHaveLength(2);
 
-    fireEvent.click(screen.getByRole("button", { name: "Сбросить все исключения" }));
+    fireEvent.click(screen.getByRole("button", { name: "Проверять все снова" }));
     await waitFor(() =>
       expect(state.callTool).toHaveBeenCalledWith("exclusion_reset_prepare", {
         requestId: expect.any(String),
       }),
     );
     const dialog = screen.getByRole("alertdialog", {
-      name: "Сбросить все пользовательские исключения?",
+      name: "Снова проверять все оставленные объекты?",
     });
     expect(within(dialog).getByText(/не изменяет исключённые файлы/i)).toBeVisible();
 
-    fireEvent.click(within(dialog).getByRole("button", { name: "Подтвердить сброс" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Проверять все снова" }));
     await waitFor(() =>
       expect(state.callTool).toHaveBeenCalledWith("exclusion_reset", {
         resetToken: "reset-synthetic-a",

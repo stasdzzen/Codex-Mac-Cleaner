@@ -115,17 +115,17 @@ const BaseAnnotations = {
 
 export const MODEL_VISIBLE_SCHEDULE_TOOL_DEFINITIONS = {
   schedule_intent_get: {
-    title: "Получить intent расписания",
+    title: "Получить запрос автоматической проверки",
     description:
-      "Возвращает только fail-closed unavailable intent v0.1.",
+      "Сообщает, что автоматическая проверка недоступна в этой версии.",
     inputSchema: ScheduleIntentGetInputSchema,
     outputSchema: ScheduleIntentGetOutputSchema,
     annotations: { ...BaseAnnotations, readOnlyHint: true },
   },
   schedule_intent_complete: {
-    title: "Завершить intent расписания",
+    title: "Завершить запрос автоматической проверки",
     description:
-      "Инертный endpoint v0.1: успешный host outcome и automation ID запрещены.",
+      "Не включает автоматическую проверку и не создаёт задачу в системе.",
     inputSchema: ScheduleIntentCompleteInputSchema,
     outputSchema: ScheduleIntentCompleteOutputSchema,
     annotations: { ...BaseAnnotations, readOnlyHint: false },
@@ -136,7 +136,7 @@ export const APP_VISIBLE_SCHEDULE_TOOL_DEFINITIONS = {
   schedule_request: {
     title: "Запросить изменение расписания",
     description:
-      "Возвращает unavailable intent без host action, cron, RRULE или shell.",
+      "Сообщает, что автоматическая проверка недоступна, и ничего не меняет в системе.",
     inputSchema: ScheduleRequestInputSchema,
     outputSchema: ScheduleRequestOutputSchema,
     annotations: { ...BaseAnnotations, readOnlyHint: false },
@@ -144,7 +144,7 @@ export const APP_VISIBLE_SCHEDULE_TOOL_DEFINITIONS = {
   },
   schedule_state: {
     title: "Состояние расписания",
-    description: "Возвращает disabled/manual-run состояние v0.1.",
+    description: "Сообщает, что проверку нужно запускать вручную.",
     inputSchema: ScheduleStateInputSchema,
     outputSchema: ScheduleStateOutputSchema,
     annotations: { ...BaseAnnotations, readOnlyHint: true },

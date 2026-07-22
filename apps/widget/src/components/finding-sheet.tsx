@@ -91,8 +91,8 @@ export function FindingSheet({ finding, open, onOpenChange }: FindingSheetProps)
               {stateLine("Сведения установщика", presenceLabel(finding.findingFacts.receiptState))}
               {stateLine("Зависимости", presenceLabel(finding.findingFacts.dependencyState))}
               {stateLine("Чувствительные данные", flags.length > 0 ? flags.map(sensitivityLabel).join(", ") : "не обнаружены")}
-              {stateLine("Вывод", findingLabel(finding.label))}
-              {stateLine("Уверенность", confidenceLabel(finding.confidence))}
+              {stateLine("Что это", findingLabel(finding.label))}
+              {stateLine("Насколько надёжен вывод", confidenceLabel(finding.confidence))}
               {stateLine("Риск", riskLabel(finding.risk))}
               {stateLine(
                 "Рекомендуемый способ",

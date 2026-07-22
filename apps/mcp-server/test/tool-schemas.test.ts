@@ -155,8 +155,10 @@ describe("model-visible MCP skeleton", () => {
         .previewToken;
     expect(inputHandle.description).toMatch(/opaque action handle/u);
     expect(outputHandle.description).toMatch(/opaque action handle/u);
-    expect(inputHandle.description).toMatch(/core token server-only/u);
-    expect(inputHandle.description).toMatch(/exact operationId replay идемпотентен/u);
+    expect(inputHandle.description).toMatch(/секрет остаётся только на сервере/u);
+    expect(inputHandle.description).toMatch(
+      /повтор с тем же operationId возвращает прежний результат/u,
+    );
   });
 
   it("проверяет platform guard до создания server", () => {

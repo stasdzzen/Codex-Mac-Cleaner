@@ -3,7 +3,7 @@
   "version": "0.1.0-beta.8",
   "description": "Проверяет Mac на остатки удалённых приложений и помогает безопасно убрать их через карантин.",
   "author": {
-    "name": "Codex Mac Cleaner contributors"
+    "name": "Участники проекта Codex Mac Cleaner"
   },
   "homepage": "https://github.com/stasdzzen/Codex-Mac-Cleaner",
   "repository": "https://github.com/stasdzzen/Codex-Mac-Cleaner",
@@ -19,9 +19,9 @@
   "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "Codex Mac Cleaner",
-    "shortDescription": "Проверка Mac и безопасный карантин",
-    "longDescription": "Плагин локально ищет остатки удалённых приложений, объясняет каждую находку и позволяет по одному перемещать объекты в карантин. Ничего не удаляется автоматически.",
-    "developerName": "Codex Mac Cleaner contributors",
+    "shortDescription": "Поиск остатков приложений и безопасный карантин",
+    "longDescription": "Плагин ищет на Mac остатки удалённых приложений, объясняет, почему найден каждый объект, и позволяет по одному перемещать их в карантин. Сам плагин ничего не удаляет.",
+    "developerName": "Участники проекта Codex Mac Cleaner",
     "category": "Productivity",
     "capabilities": [
       "Interactive",

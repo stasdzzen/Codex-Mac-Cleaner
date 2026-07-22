@@ -85,7 +85,7 @@ const TAB_LABELS: ReadonlyArray<{ value: DashboardTab; label: string }> = [
   { value: "overview", label: "Обзор" },
   { value: "findings", label: "Найдено" },
   { value: "quarantine", label: "Карантин" },
-  { value: "exclusions", label: "Исключения" },
+  { value: "exclusions", label: "Оставленные" },
   { value: "schedule", label: "Автопроверка" },
 ];
 
@@ -230,7 +230,7 @@ export function AuditDashboard({ snapshot, bridge }: AuditDashboardProps) {
         new Set([...current.skippedFindingIds, finding.findingId]),
       ),
     }));
-    toast("Объект скрыт до следующей проверки.");
+    toast("Объект пропущен до следующей проверки.");
   }
 
   async function cancelAudit(): Promise<void> {
@@ -252,7 +252,7 @@ export function AuditDashboard({ snapshot, bridge }: AuditDashboardProps) {
       });
       toast.success("Проверка запущена. Она только читает данные и ничего не удаляет.");
     } catch {
-      toast.error("Не удалось запустить проверку.");
+      toast.error("Не удалось запустить проверку. Попробуйте ещё раз.");
     }
   }
 
@@ -420,9 +420,9 @@ export function AuditDashboard({ snapshot, bridge }: AuditDashboardProps) {
             </div>
           <Card className="lg:col-span-4 lg:col-start-9 lg:row-start-1">
             <CardHeader>
-              <CardTitle>Краткая сводка находок</CardTitle>
+              <CardTitle>Итог проверки</CardTitle>
               <CardDescription>
-                Найдено объектов: {acceptedSnapshot.findings.length}. В исключениях: {acceptedSnapshot.excludedCount}.
+                Найдено объектов: {acceptedSnapshot.findings.length}. Оставлено по вашему выбору: {acceptedSnapshot.excludedCount}.
                 Источников проверено: {acceptedSnapshot.coverage.checkedSourceCount}; недоступно: {acceptedSnapshot.coverage.skippedSourceCount}.
               </CardDescription>
             </CardHeader>
@@ -611,7 +611,7 @@ function FindingsTable({
               <TableHead>Объект</TableHead>
               <TableHead>Почему найден</TableHead>
               <TableHead>Размер</TableHead>
-              <TableHead>Состояние действия</TableHead>
+              <TableHead>Можно ли убрать</TableHead>
               <TableHead>Действия</TableHead>
             </TableRow>
           </TableHeader>
@@ -644,8 +644,8 @@ function FindingsTable({
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-col gap-1 whitespace-normal">
-                      <span>Вывод: {findingLabel(finding.label)}</span>
-                      <span>Уверенность: {confidenceLabel(finding.confidence)}</span>
+                      <span>Что это: {findingLabel(finding.label)}</span>
+                      <span>Насколько надёжен вывод: {confidenceLabel(finding.confidence)}</span>
                       <span>Риск: {riskLabel(finding.risk)}</span>
                     </div>
                   </TableCell>
@@ -715,12 +715,12 @@ function ExclusionAction({
     <Button
       variant="outline"
       disabled={pending}
-      aria-label={`Исключить: ${finding.displayName}`}
+      aria-label={`Оставить: ${finding.displayName}`}
       onClick={() => {
         setPending(true);
         void onExclude(finding)
-          .then(() => toast.success("Находка добавлена в постоянные исключения."))
-          .catch(() => toast.error("Не удалось сохранить исключение."))
+          .then(() => toast.success("Объект оставлен и больше не будет предлагаться для очистки."))
+          .catch(() => toast.error("Не удалось сохранить ваш выбор. Попробуйте ещё раз."))
           .finally(() => setPending(false));
       }}
     >
@@ -729,7 +729,7 @@ function ExclusionAction({
       ) : (
         <ShieldCheckIcon data-icon="inline-start" />
       )}
-      Исключить
+      Оставить
     </Button>
   );
 }
