@@ -37,6 +37,7 @@ function harness(
     ["candidate-ref-library", candidatePath],
   ]),
 ) {
+  const candidatePaths = [...candidates.values()];
   let ownerInstalled = true;
   let ownerRunning = true;
   let ownerOpen = true;
@@ -76,7 +77,9 @@ function harness(
     }
     if (executable === "/usr/sbin/lsof") {
       return {
-        stdout: ownerOpen ? `p42\ncOwner\nn${candidatePath}\n` : "",
+        stdout: ownerOpen
+          ? `p42\ncOwner\n${candidatePaths.map((path) => `n${path}`).join("\n")}\n`
+          : "",
         stderr: "",
         exitCode: 0,
       };
@@ -260,11 +263,42 @@ describe("concrete macOS production correlation collector v2", () => {
       ]),
     );
 
-    await payloadFor(test.adapter, "candidate-ref-library", "snapshot-shared-1");
-    await payloadFor(test.adapter, "candidate-ref-library-2", "snapshot-shared-2");
+    await Promise.all([
+      payloadFor(test.adapter, "candidate-ref-library", "snapshot-shared-1"),
+      payloadFor(test.adapter, "candidate-ref-library-2", "snapshot-shared-2"),
+    ]);
 
     expect(test.calls.filter(({ executable }) => executable === "/bin/ps")).toHaveLength(2);
     expect(test.calls.filter(({ executable }) => executable === "/usr/sbin/lsof")).toHaveLength(2);
+    expect(
+      test.calls.filter(
+        ({ executable, argv }) =>
+          executable === "/usr/sbin/pkgutil" && argv[0] === "--pkgs",
+      ),
+    ).toHaveLength(2);
+    expect(
+      test.calls.filter(
+        ({ executable, argv }) =>
+          executable === "/usr/sbin/pkgutil" && argv[0] === "--file-info",
+      ),
+    ).toHaveLength(4);
+  });
+
+  it("сериализует concurrent owner-history merges без потери записей", async () => {
+    const secondCandidatePath = `${home}/Library/Logs/Owner/private-log`;
+    const test = harness(
+      new Map([
+        ["candidate-ref-library", candidatePath],
+        ["candidate-ref-library-2", secondCandidatePath],
+      ]),
+    );
+
+    await Promise.all([
+      payloadFor(test.adapter, "candidate-ref-library", "snapshot-history-1"),
+      payloadFor(test.adapter, "candidate-ref-library-2", "snapshot-history-2"),
+    ]);
+
+    expect(test.history.records).toHaveLength(2);
   });
 
   it("оставляет candidate Library artifact и владеет canonical argv/parsing", async () => {

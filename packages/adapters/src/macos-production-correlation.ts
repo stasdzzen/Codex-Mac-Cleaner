@@ -170,6 +170,10 @@ interface OpenInternal {
 interface InstalledCapture {
   readonly capture: ProductionSourceCapture<ProductionInstalledAppRecord>;
   readonly apps: readonly CollectedApp[];
+  readonly packageInventory: Readonly<{
+    state: RawQueryState;
+    identifiers: readonly string[];
+  }>;
 }
 
 interface ProcessCapture {
@@ -552,11 +556,17 @@ async function collectInstalledApps(
 
   const packages = await runCommand(commands, "/usr/sbin/pkgutil", ["--pkgs"], signal);
   state = mergeState(state, packages.state);
+  let packageInventoryState = packages.state;
+  let packageIdentifiers: readonly string[] = [];
   if (packages.state === "complete") {
     const identifiers = [...new Set(packages.stdout.split(/\r?\n/u).map((line) => line.trim()).filter(Boolean))].sort();
-    if (identifiers.length > MAX_SOURCE_RECORDS) state = mergeState(state, "truncated");
+    if (identifiers.length > MAX_SOURCE_RECORDS) {
+      state = mergeState(state, "truncated");
+      packageInventoryState = "truncated";
+    }
+    packageIdentifiers = identifiers.slice(0, MAX_SOURCE_RECORDS);
     const packageQueries = await mapConcurrent(
-      identifiers.slice(0, MAX_SOURCE_RECORDS),
+      packageIdentifiers,
       MAX_COMMAND_CONCURRENCY,
       async (packageIdentifier) => {
         const [infoCommand, files] = await Promise.all([
@@ -625,6 +635,10 @@ async function collectInstalledApps(
   return {
     capture: sourceCapture(apps.map(({ record }) => record), state, "canonical", startedAt, now),
     apps,
+    packageInventory: {
+      state: packageInventoryState,
+      identifiers: packageIdentifiers,
+    },
   };
 }
 
@@ -741,19 +755,19 @@ async function collectStartupTargets(
 async function collectReceipts(
   commands: CommandRunner,
   candidate: ProductionCandidateIdentityRecord,
+  inventory: InstalledCapture["packageInventory"],
   signal: AbortSignal,
   now: () => string,
 ): Promise<ReceiptCapture> {
   const startedAt = now();
-  const inventory = await runCommand(commands, "/usr/sbin/pkgutil", ["--pkgs"], signal);
-  if (inventory.state !== "complete") {
+  if (inventory.state !== "complete" && inventory.state !== "truncated") {
     return { capture: sourceCapture([], inventory.state, "candidate_specific", startedAt, now), packageIdentifiers: [] };
   }
   const fileInfo = await runCommand(commands, "/usr/sbin/pkgutil", ["--file-info", candidate.filesystem.canonicalPath], signal);
   if (fileInfo.state !== "complete") {
     return { capture: sourceCapture([], fileInfo.state, "candidate_specific", startedAt, now), packageIdentifiers: [] };
   }
-  const canonicalPackages = new Set(inventory.stdout.split(/\r?\n/u).map((line) => line.trim()).filter(Boolean));
+  const canonicalPackages = new Set(inventory.identifiers);
   const parsed = fileInfo.stdout.split(/\r?\n/u)
     .map((line) => line.match(/^(?:package-id|pkgid):\s*(\S+)$/u)?.[1])
     .filter((value): value is string => value !== undefined);
@@ -766,7 +780,7 @@ async function collectReceipts(
         packageIdentifier,
         targetFilesystemFingerprint: candidate.filesystem.fingerprint,
       })),
-      unrecognized ? "parse_loss" : "complete",
+      mergeState(inventory.state, unrecognized && inventory.state === "complete" ? "parse_loss" : "complete"),
       "candidate_specific",
       startedAt,
       now,
@@ -1012,7 +1026,13 @@ async function collectCycle(
   });
   const { installed, processes, openFiles, startupTargets } = global;
   const [receipts, container] = await Promise.all([
-    collectReceipts(dependencies.commands, candidate, signal, dependencies.now),
+    collectReceipts(
+      dependencies.commands,
+      candidate,
+      installed.packageInventory,
+      signal,
+      dependencies.now,
+    ),
     containerBinding(dependencies.commands, candidate, category, signal),
   ] as const);
   const bindings = bindingRecords(
@@ -1139,7 +1159,45 @@ export function createMacOSProductionCorrelationAdapter(
   const globalCycles: Partial<
     Record<"A" | "B", Promise<GlobalCollectionCycle>>
   > = {};
+  let baselineHistoryPromise = history === undefined
+    ? Promise.resolve<readonly KeyedOwnerBindingHistoryRecord[]>([])
+    : history.list();
+  let historyWriteQueue = Promise.resolve();
   let globalUserHome: string | null = null;
+
+  function historyIdentity(record: KeyedOwnerBindingHistoryRecord): string {
+    return stable({
+      keyId: record.keyId,
+      derivationVersion: record.derivationVersion,
+      artifactDigest: record.artifactDigest,
+      ownerTypeDigest: record.ownerTypeDigest,
+      rootDigest: record.rootDigest,
+      ownerBundleDigest: record.ownerBundleDigest,
+      ownerSigningDigest: record.ownerSigningDigest,
+      ownerExecutableDigest: record.ownerExecutableDigest,
+    });
+  }
+
+  async function persistDiscoveredHistory(
+    discovered: readonly KeyedOwnerBindingHistoryRecord[],
+  ): Promise<void> {
+    if (history === undefined || discovered.length === 0) return;
+    const operation = historyWriteQueue.then(async () => {
+      const current = await history.list();
+      const unique = [
+        ...new Map(
+          [...current, ...discovered].map(
+            (record) => [historyIdentity(record), record] as const,
+          ),
+        ).values(),
+      ];
+      await history.replace(unique);
+      return unique;
+    });
+    historyWriteQueue = operation.then(() => undefined, () => undefined);
+    baselineHistoryPromise = operation.catch(() => history.list());
+    await operation;
+  }
 
   function globalCycle(
     phase: "A" | "B",
@@ -1165,7 +1223,7 @@ export function createMacOSProductionCorrelationAdapter(
     ): Promise<EphemeralCorrelationInput> {
       const key = input.installationKey ?? (keyStore === undefined ? undefined : await keyStore.loadOrCreate());
       const buildDependencies = key === undefined ? dependencies : { ...dependencies, key };
-      const baselineHistory = history === undefined ? [] : await history.list();
+      const baselineHistory = await baselineHistoryPromise;
       let phaseA: CollectionCycle | undefined;
       let phaseB: CollectionCycle | undefined;
       const commandBoundary: ProductionCorrelationCommandBoundary = {
@@ -1203,19 +1261,7 @@ export function createMacOSProductionCorrelationAdapter(
       const result = await buildProductionCorrelationInput({ ...buildInput, commandBoundary, filesystemBoundary });
       if (history !== undefined && phaseA !== undefined && phaseB !== undefined && stable(phaseA.snapshot) === stable(phaseB.snapshot)) {
         const discovered = [...phaseA.discoveredHistory, ...phaseB.discoveredHistory];
-        if (discovered.length > 0) {
-          const unique = [...new Map([...baselineHistory, ...discovered].map((record) => [stable({
-            keyId: record.keyId,
-            derivationVersion: record.derivationVersion,
-            artifactDigest: record.artifactDigest,
-            ownerTypeDigest: record.ownerTypeDigest,
-            rootDigest: record.rootDigest,
-            ownerBundleDigest: record.ownerBundleDigest,
-            ownerSigningDigest: record.ownerSigningDigest,
-            ownerExecutableDigest: record.ownerExecutableDigest,
-          }), record] as const)).values()];
-          await history.replace(unique);
-        }
+        await persistDiscoveredHistory(discovered);
       }
       return result;
     },

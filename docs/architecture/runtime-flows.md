@@ -5,7 +5,7 @@ description: Последовательности аудита, карантин
 tags: [architecture, flows, audit, quarantine]
 status: approved
 owner: Architect
-date: 2026-07-21
+date: 2026-07-22
 ---
 
 # Аудит
@@ -28,7 +28,7 @@ date: 2026-07-21
 16. Local Store сохраняет safe immutable audit/correlation revision, `StorageSummary`, `DiskObservation` и агрегированный coverage/excluded count без raw identity graph, inventory, path или token material.
 17. Модель и Dashboard получают только `SafeCorrelationView`; widget-only `_meta` не содержит raw identities или paths. После появления integer revision Skill вызывает `audit_results` и повторно открывает Dashboard для immutable результатов.
 
-Во время работы сервер публикует фазы `queued → discovering_candidates → collecting_global_evidence → correlating_candidates → finalizing → completed`. Global installed-app/process/open-file/startup inventories снимаются один раз для Snapshot A и один раз для Snapshot B в пределах audit adapter; candidate-specific receipts, container metadata и filesystem identity остаются отдельными. Любой gap сохраняет `unknown` и блокирует mutation.
+Во время работы сервер публикует фазы `queued → discovering_candidates → collecting_global_evidence → correlating_candidates → finalizing → completed`. Global installed-app/process/open-file/startup/package inventories снимаются один раз для Snapshot A и один раз для Snapshot B в пределах audit adapter; candidate-specific receipts, container metadata и filesystem identity остаются отдельными. Кандидаты обрабатываются с bounded concurrency четыре, но findings сохраняют discovery order. Любой gap сохраняет `unknown` и блокирует mutation.
 
 Server-owned deadline всего audit run равен пяти минутам. При превышении run получает `failed`, progress phase `failed` и safe warning `AUDIT_TIMEOUT`; findings/actions и actionable revision отсутствуют.
 
