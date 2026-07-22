@@ -99,8 +99,11 @@ try {
   const script = await readFile(resolve(widgetOutput, scriptMatch[1]), "utf8");
   const style = await readFile(resolve(widgetOutput, styleMatch[1]), "utf8");
   html = html
-    .replace(scriptMatch[0], `<script type="module">${script}</script>`)
-    .replace(styleMatch[0], `<style>${style}</style>`);
+    .replace(
+      scriptMatch[0],
+      () => `<script type="module">${script}</script>`,
+    )
+    .replace(styleMatch[0], () => `<style>${style}</style>`);
   const scriptStart = html.indexOf('<script type="module">');
   const scriptEnd = html.lastIndexOf("</script>");
   const withoutScript =
