@@ -1,6 +1,6 @@
 {
   "name": "codex-mac-cleaner",
-  "version": "0.1.0-beta.6",
+  "version": "0.1.0-beta.7",
   "description": "Локальный read-only аудит остатков приложений с поэлементным карантином и Audit Dashboard.",
   "author": {
     "name": "Codex Mac Cleaner contributors"
