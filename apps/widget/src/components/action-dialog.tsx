@@ -62,6 +62,7 @@ export function ActionDialog({ finding, auditRevision, bridge }: ActionDialogPro
         operationId: createRequestId("move"),
       });
       toast.success("Объект перемещён в карантин.");
+      setOpen(false);
     } catch {
       toast.error("Перемещение не выполнено. Обновите ревизию и повторите проверку.");
     }
@@ -78,16 +79,18 @@ export function ActionDialog({ finding, auditRevision, bridge }: ActionDialogPro
         }
       }}
     >
-      <AlertDialogTrigger asChild>
-        <Button
-          variant="destructive"
-          onClick={() => {
-            void prepareMove();
-          }}
-        >
-          <Trash2Icon data-icon="inline-start" />
-          Удалить
-        </Button>
+      <AlertDialogTrigger
+        render={
+          <Button
+            variant="destructive"
+            onClick={() => {
+              void prepareMove();
+            }}
+          />
+        }
+      >
+        <Trash2Icon data-icon="inline-start" />
+        Удалить
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
@@ -95,8 +98,9 @@ export function ActionDialog({ finding, auditRevision, bridge }: ActionDialogPro
             <ArchiveRestoreIcon aria-hidden="true" />
           </AlertDialogMedia>
           <AlertDialogTitle>Переместить в карантин: {finding.displayName}</AlertDialogTitle>
-          <AlertDialogDescription asChild>
-            <div className="flex flex-col gap-2">
+          <AlertDialogDescription
+            render={<div className="flex flex-col gap-2" />}
+          >
               <p>
                 Будет перемещён в карантин ровно один объект. Это не прямое удаление исходника.
               </p>
@@ -106,7 +110,6 @@ export function ActionDialog({ finding, auditRevision, bridge }: ActionDialogPro
               </p>
               <p>Объект можно восстановить в исходное место, если оно остаётся свободным.</p>
               {preparing && <p>Сервер повторно проверяет policy и fingerprint…</p>}
-            </div>
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

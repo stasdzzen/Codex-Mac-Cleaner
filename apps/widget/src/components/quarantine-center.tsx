@@ -85,6 +85,7 @@ function EntryActionDialog({
         operationId: entry.entryId,
       });
       toast.success(isPurge ? "Запись удалена навсегда." : "Восстановление запрошено.");
+      setOpen(false);
     } catch {
       toast.error("Действие не выполнено. Обновите состояние карантина.");
     }
@@ -101,21 +102,23 @@ function EntryActionDialog({
         }
       }}
     >
-      <AlertDialogTrigger asChild>
-        <Button
-          variant={isPurge ? "destructive" : "outline"}
-          aria-label={`${isPurge ? "Удалить навсегда" : "Восстановить"}: ${entry.displayName}`}
-          onClick={() => {
-            void prepareAction();
-          }}
-        >
+      <AlertDialogTrigger
+        render={
+          <Button
+            variant={isPurge ? "destructive" : "outline"}
+            aria-label={`${isPurge ? "Удалить навсегда" : "Восстановить"}: ${entry.displayName}`}
+            onClick={() => {
+              void prepareAction();
+            }}
+          />
+        }
+      >
           {isPurge ? (
             <Trash2Icon data-icon="inline-start" />
           ) : (
             <ArchiveRestoreIcon data-icon="inline-start" />
           )}
           {isPurge ? "Удалить навсегда" : "Восстановить"}
-        </Button>
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>

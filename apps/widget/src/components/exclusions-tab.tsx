@@ -225,15 +225,17 @@ export function ExclusionsTab({ bridge, refreshKey }: ExclusionsTabProps) {
               }
             }}
           >
-            <AlertDialogTrigger asChild>
-              <Button
-                variant="destructive"
-                disabled={entries.length === 0 || loading}
-                onClick={() => void prepareReset()}
-              >
+            <AlertDialogTrigger
+              render={
+                <Button
+                  variant="destructive"
+                  disabled={entries.length === 0 || loading}
+                  onClick={() => void prepareReset()}
+                />
+              }
+            >
                 <RotateCcwIcon data-icon="inline-start" />
                 Сбросить все исключения
-              </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
