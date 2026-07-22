@@ -281,7 +281,7 @@ describe("полная интеграция MCP App", () => {
         expect(
           (byName.get(name)?._meta as { ui?: { visibility?: string[] } } | undefined)
             ?.ui?.visibility,
-        ).toBeUndefined();
+        ).toEqual(name === "dashboard_open" ? ["model"] : undefined);
       }
       for (const name of appToolNames) {
         expect(byName.get(name)?._meta).toMatchObject({
@@ -289,7 +289,13 @@ describe("полная интеграция MCP App", () => {
         });
       }
       expect(byName.get("dashboard_open")?._meta).toMatchObject({
-        ui: { resourceUri: DASHBOARD_RESOURCE_URI },
+        ui: {
+          resourceUri: DASHBOARD_RESOURCE_URI,
+          visibility: ["model"],
+        },
+        "ui/resourceUri": DASHBOARD_RESOURCE_URI,
+        "openai/outputTemplate": DASHBOARD_RESOURCE_URI,
+        "openai/widgetAccessible": true,
       });
     } finally {
       await client.close();
@@ -477,6 +483,12 @@ describe("полная интеграция MCP App", () => {
     expect(html).toContain("Audit Dashboard");
     expect(html).toContain("ui/notifications/tool-result");
     expect(html).toContain("tools/call");
+    expect(html.match(/<!doctype html>/giu)).toHaveLength(1);
+    expect(html.match(/<script type="module">/giu)).toHaveLength(1);
+    expect(html.match(/<\/script>/giu)).toHaveLength(1);
+    expect(html.match(/<style\b/giu)).toHaveLength(1);
+    expect(html.match(/<\/style>/giu)).toHaveLength(1);
+    expect(html).not.toMatch(/<script[^>]+src=["'][^"']+/iu);
     const scriptStart = html.indexOf('<script type="module">');
     const scriptEnd = html.lastIndexOf("</script>");
     const withoutScript = `${html.slice(0, scriptStart)}${html.slice(
@@ -593,6 +605,9 @@ describe("полная интеграция MCP App", () => {
       expect(liveDashboard.structuredContent).toMatchObject({
         auditId,
         resourceUri: DASHBOARD_RESOURCE_URI,
+      });
+      expect(liveDashboard._meta).toMatchObject({
+        "openai/outputTemplate": DASHBOARD_RESOURCE_URI,
       });
       expect(liveDashboard.structuredContent).toMatchObject({
         revision: null,

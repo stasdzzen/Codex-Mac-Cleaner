@@ -83,7 +83,13 @@ interface ModelToolDefinition {
   readonly outputSchema: z.ZodObject;
   readonly annotations: ToolAnnotations;
   readonly _meta?: {
-    readonly ui: { readonly resourceUri: typeof DASHBOARD_RESOURCE_URI };
+    readonly ui: {
+      readonly resourceUri: typeof DASHBOARD_RESOURCE_URI;
+      readonly visibility: readonly ["model"];
+    };
+    readonly "ui/resourceUri": typeof DASHBOARD_RESOURCE_URI;
+    readonly "openai/outputTemplate": typeof DASHBOARD_RESOURCE_URI;
+    readonly "openai/widgetAccessible": true;
   };
 }
 
@@ -131,7 +137,15 @@ export const MODEL_VISIBLE_TOOL_DEFINITIONS = {
     inputSchema: DashboardOpenInputSchema,
     outputSchema: DashboardOpenOutputSchema,
     annotations: { ...ModelToolAnnotations, readOnlyHint: true },
-    _meta: { ui: { resourceUri: DASHBOARD_RESOURCE_URI } },
+    _meta: {
+      ui: {
+        resourceUri: DASHBOARD_RESOURCE_URI,
+        visibility: ["model"],
+      },
+      "ui/resourceUri": DASHBOARD_RESOURCE_URI,
+      "openai/outputTemplate": DASHBOARD_RESOURCE_URI,
+      "openai/widgetAccessible": true,
+    },
   },
   finding_inspect: {
     title: "Проверить находку",
@@ -736,7 +750,7 @@ export interface AuditToolService {
   results(input: unknown): Promise<unknown>;
   dashboard(input: unknown): Promise<{
     readonly output: unknown;
-    readonly meta: unknown;
+    readonly meta: Readonly<Record<string, unknown>>;
   }>;
   inspect(input: unknown): Promise<unknown>;
   reveal(input: unknown): Promise<unknown>;
@@ -782,7 +796,10 @@ async function callAuditModelTool(
           toolName,
           dashboard.output,
           "Dashboard готов к открытию.",
-          dashboard.meta,
+          {
+            ...dashboard.meta,
+            "openai/outputTemplate": DASHBOARD_RESOURCE_URI,
+          },
         );
       }
       case "finding_inspect":
