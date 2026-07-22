@@ -14,12 +14,10 @@ export interface WidgetViewState {
   readonly skippedFindingIds: readonly string[];
 }
 
-export type WidgetDisplayMode = "inline" | "fullscreen" | "pip";
-
 export interface WidgetBridge {
   callTool<T>(name: string, input: Record<string, unknown>): Promise<T>;
   setViewState(state: WidgetViewState): void;
-  requestDisplayMode?(mode: WidgetDisplayMode): Promise<void>;
+  requestDisplayMode?(mode: "fullscreen"): Promise<void>;
 }
 
 export function acceptSnapshot(
@@ -40,7 +38,7 @@ export function createStandaloneBridge(): WidgetBridge {
   const host = window as unknown as {
     openai?: {
       requestDisplayMode?: (request: {
-        mode: WidgetDisplayMode;
+        mode: "fullscreen";
       }) => Promise<unknown>;
     };
   };
@@ -53,7 +51,7 @@ export function createStandaloneBridge(): WidgetBridge {
     ...(requestDisplayMode === undefined
       ? {}
       : {
-          async requestDisplayMode(mode: WidgetDisplayMode): Promise<void> {
+          async requestDisplayMode(mode: "fullscreen"): Promise<void> {
             await requestDisplayMode.call(host.openai, { mode });
           },
         }),

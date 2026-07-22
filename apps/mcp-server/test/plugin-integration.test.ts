@@ -485,9 +485,9 @@ describe("полная интеграция MCP App", () => {
     expect(html).toContain("tools/call");
     expect(html).toContain("requestDisplayMode");
     expect(html).toContain("fullscreen");
-    expect(html).toContain("pip");
     expect(html).toContain("Развернуть");
-    expect(html).toContain("Мини-окно");
+    expect(html).not.toContain("Мини-окно");
+    expect(html).not.toMatch(/(?:["'`])pip(?:["'`])/u);
     expect(html.match(/<!doctype html>/giu)).toHaveLength(1);
     expect(html.match(/<script type="module">/giu)).toHaveLength(1);
     expect(html.match(/<\/script>/giu)).toHaveLength(1);

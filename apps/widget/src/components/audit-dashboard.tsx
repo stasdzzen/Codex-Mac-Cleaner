@@ -7,7 +7,6 @@ import {
   ListFilterIcon,
   LoaderCircleIcon,
   Maximize2Icon,
-  PictureInPicture2Icon,
   ShieldCheckIcon,
   SkipForwardIcon,
 } from "lucide-react";
@@ -48,7 +47,6 @@ import {
   createRequestId,
   type DashboardTab,
   type WidgetBridge,
-  type WidgetDisplayMode,
   type WidgetViewState,
 } from "@/lib/bridge";
 import type { DashboardFinding, DashboardSnapshot } from "@/lib/dashboard-types";
@@ -84,8 +82,7 @@ export function AuditDashboard({ snapshot, bridge }: AuditDashboardProps) {
   const [acceptedSnapshot, setAcceptedSnapshot] = useState(snapshot);
   const [viewState, setViewState] = useState<WidgetViewState>(INITIAL_VIEW_STATE);
   const [exclusionRefreshKey, setExclusionRefreshKey] = useState(0);
-  const [pendingDisplayMode, setPendingDisplayMode] =
-    useState<WidgetDisplayMode | null>(null);
+  const [isFullscreenPending, setFullscreenPending] = useState(false);
   const previousRevisionKey = useRef(revisionKey(snapshot));
   const tabRefs = useRef(new Map<DashboardTab, HTMLButtonElement>());
 
@@ -261,24 +258,20 @@ export function AuditDashboard({ snapshot, bridge }: AuditDashboardProps) {
     setExclusionRefreshKey((current) => current + 1);
   }
 
-  async function requestDisplayMode(mode: "fullscreen" | "pip"): Promise<void> {
+  async function requestFullscreen(): Promise<void> {
     if (bridge.requestDisplayMode === undefined) {
       toast.error(
         "Эта версия Codex не поддерживает переключение режима. Dashboard остаётся в чате.",
       );
       return;
     }
-    setPendingDisplayMode(mode);
+    setFullscreenPending(true);
     try {
-      await bridge.requestDisplayMode(mode);
+      await bridge.requestDisplayMode("fullscreen");
     } catch {
-      toast.error(
-        mode === "pip"
-          ? "Codex не открыл мини-окно. Dashboard остаётся в текущем режиме."
-          : "Codex не развернул Dashboard. Он остаётся в текущем режиме.",
-      );
+      toast.error("Codex не развернул Dashboard. Он остаётся в текущем режиме.");
     } finally {
-      setPendingDisplayMode(null);
+      setFullscreenPending(false);
     }
   }
 
@@ -295,28 +288,15 @@ export function AuditDashboard({ snapshot, bridge }: AuditDashboardProps) {
             <Button
               type="button"
               variant="outline"
-              disabled={pendingDisplayMode !== null}
-              onClick={() => void requestDisplayMode("fullscreen")}
+              disabled={isFullscreenPending}
+              onClick={() => void requestFullscreen()}
             >
-              {pendingDisplayMode === "fullscreen" ? (
+              {isFullscreenPending ? (
                 <LoaderCircleIcon className="animate-spin" data-icon="inline-start" />
               ) : (
                 <Maximize2Icon data-icon="inline-start" />
               )}
               Развернуть
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={pendingDisplayMode !== null}
-              onClick={() => void requestDisplayMode("pip")}
-            >
-              {pendingDisplayMode === "pip" ? (
-                <LoaderCircleIcon className="animate-spin" data-icon="inline-start" />
-              ) : (
-                <PictureInPicture2Icon data-icon="inline-start" />
-              )}
-              Мини-окно
             </Button>
             <Badge variant="outline">stateVersion: {acceptedSnapshot.stateVersion}</Badge>
           </div>

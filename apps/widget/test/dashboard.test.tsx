@@ -48,17 +48,16 @@ afterEach(() => {
 });
 
 describe("Audit Dashboard contract", () => {
-  it("запрашивает fullscreen и PiP только после отдельного нажатия пользователя", async () => {
+  it("запрашивает только fullscreen после отдельного нажатия пользователя", async () => {
     const { bridge, requestDisplayMode } = createBridge();
     render(<AuditDashboard snapshot={dashboardFixture} bridge={bridge} />);
 
     expect(requestDisplayMode).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Мини-окно" })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Развернуть" }));
     await waitFor(() => expect(requestDisplayMode).toHaveBeenCalledWith("fullscreen"));
-
-    fireEvent.click(screen.getByRole("button", { name: "Мини-окно" }));
-    await waitFor(() => expect(requestDisplayMode).toHaveBeenCalledWith("pip"));
+    expect(requestDisplayMode).toHaveBeenCalledTimes(1);
   });
 
   it("сохраняет inline Dashboard и объясняет отсутствие display-mode capability", () => {
@@ -79,17 +78,17 @@ describe("Audit Dashboard contract", () => {
     );
   });
 
-  it("безопасно обрабатывает отказ хоста открыть PiP", async () => {
+  it("безопасно обрабатывает отказ хоста развернуть Dashboard", async () => {
     const errorToast = vi.spyOn(toast, "error");
     const { bridge, requestDisplayMode } = createBridge();
     vi.mocked(requestDisplayMode).mockRejectedValueOnce(new Error("HOST_REJECTED"));
 
     render(<AuditDashboard snapshot={dashboardFixture} bridge={bridge} />);
-    fireEvent.click(screen.getByRole("button", { name: "Мини-окно" }));
+    fireEvent.click(screen.getByRole("button", { name: "Развернуть" }));
 
     await waitFor(() =>
       expect(errorToast).toHaveBeenCalledWith(
-        "Codex не открыл мини-окно. Dashboard остаётся в текущем режиме.",
+        "Codex не развернул Dashboard. Он остаётся в текущем режиме.",
       ),
     );
     expect(screen.getByRole("heading", { name: "Audit Dashboard" })).toBeVisible();
