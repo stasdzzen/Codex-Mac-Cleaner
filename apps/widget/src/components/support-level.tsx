@@ -1,5 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import type { DashboardFinding } from "@/lib/dashboard-types";
+import { supportLevelLabel } from "@/lib/presentation";
 
 interface SupportLevelProps {
   readonly level: DashboardFinding["supportLevel"];
@@ -8,5 +9,5 @@ interface SupportLevelProps {
 export function SupportLevel({ level }: SupportLevelProps) {
   const variant = level === "candidate" ? "secondary" : "outline";
 
-  return <Badge variant={variant}>Уровень поддержки: {level}</Badge>;
+  return <Badge variant={variant}>{supportLevelLabel(level)}</Badge>;
 }

@@ -20,9 +20,9 @@ interface AuditProgressProps {
 
 const PHASE_LABELS: Readonly<Record<DashboardSnapshot["progress"]["phase"], string>> = {
   queued: "Ожидание запуска",
-  discovering_candidates: "Поиск кандидатов",
-  collecting_global_evidence: "Сбор системных доказательств",
-  correlating_candidates: "Сопоставление кандидатов",
+  discovering_candidates: "Поиск возможных остатков приложений",
+  collecting_global_evidence: "Проверка владельцев, процессов и установщика",
+  correlating_candidates: "Проверка связей найденных объектов",
   finalizing: "Подготовка безопасного результата",
   completed: "Проверка завершена",
   cancelled: "Проверка отменена",
@@ -44,7 +44,7 @@ export function AuditProgress({ snapshot, onCancel }: AuditProgressProps) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <span className="audit-status-mark" aria-hidden="true" />
-          Аудит application_remnants
+          Проверка остатков приложений
         </CardTitle>
         <CardDescription>
           Этап: {PHASE_LABELS[snapshot.progress.phase]}. Выполнено шагов: {completedSteps} из {totalSteps}.
@@ -55,14 +55,14 @@ export function AuditProgress({ snapshot, onCancel }: AuditProgressProps) {
               variant="outline"
               disabled={isCancelling}
               onClick={onCancel}
-              aria-label={isCancelling ? "Отмена выполняется" : "Отменить аудит"}
+              aria-label={isCancelling ? "Проверка останавливается" : "Остановить проверку"}
             >
               {isCancelling ? (
                 <LoaderCircleIcon data-icon="inline-start" className="animate-spin" />
               ) : (
                 <BanIcon data-icon="inline-start" />
               )}
-              {isCancelling ? "Отмена выполняется" : "Отменить аудит"}
+              {isCancelling ? "Останавливаем" : "Остановить проверку"}
             </Button>
           </CardAction>
         )}
@@ -75,7 +75,7 @@ export function AuditProgress({ snapshot, onCancel }: AuditProgressProps) {
           </div>
           {snapshot.progress.totalCandidates > 0 && (
             <p className="text-sm text-muted-foreground">
-              Кандидатов обработано: {snapshot.progress.processedCandidates} из {snapshot.progress.totalCandidates}.
+              Объектов проверено: {snapshot.progress.processedCandidates} из {snapshot.progress.totalCandidates}.
             </p>
           )}
         </div>
@@ -85,7 +85,7 @@ export function AuditProgress({ snapshot, onCancel }: AuditProgressProps) {
           <Progress
             className="audit-progress-track h-2"
             value={value}
-            aria-label={`Прогресс аудита: ${Math.round(value)}%`}
+            aria-label={`Прогресс проверки: ${Math.round(value)}%`}
           />
         )}
       </CardContent>

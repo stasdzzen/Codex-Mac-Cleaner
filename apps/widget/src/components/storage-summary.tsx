@@ -10,6 +10,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import type { DashboardSnapshot } from "@/lib/dashboard-types";
+import { formatDateTime } from "@/lib/presentation";
 import { formatBytes } from "@/lib/utils";
 
 interface StorageSummaryProps {
@@ -23,27 +24,23 @@ export function StorageSummary({
 }: StorageSummaryProps) {
   const metrics = [
     {
-      label: "Логический размер находок",
+      label: "Размер найденных файлов",
       value: storageSummary.candidateLogicalBytes,
-      source: "Источник: StorageSummary",
       tone: "1",
     },
     {
-      label: "Физический размер находок",
+      label: "Занимают на диске",
       value: storageSummary.candidatePhysicalBytes,
-      source: "Источник: StorageSummary",
       tone: "2",
     },
     {
-      label: "В карантине",
+      label: "Хранится в карантине",
       value: storageSummary.quarantinePhysicalBytes,
-      source: "Источник: StorageSummary",
       tone: "3",
     },
     {
-      label: "Удалено навсегда",
+      label: "Удалено из карантина",
       value: storageSummary.purgedPhysicalBytes,
-      source: "Источник: append-only journal",
       tone: "4",
     },
   ] as const;
@@ -57,21 +54,21 @@ export function StorageSummary({
       <div className="flex items-center gap-2">
         <HardDriveIcon aria-hidden="true" />
         <h2 id="storage-summary-title" className="text-base font-medium">
-          Server-owned показатели
+          Место на диске
         </h2>
       </div>
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1.65fr)_minmax(16rem,0.75fr)]">
         <Card>
           <CardHeader>
-            <CardTitle>Сравнение snapshot</CardTitle>
+            <CardTitle>Что занимает место</CardTitle>
             <CardDescription>
-              Четыре независимые метрики в масштабе крупнейшего значения.
+              Сравнение размеров по состоянию на момент проверки.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <figure role="img" aria-label={comparisonLabel} className="flex flex-col gap-4">
               <ul className="flex flex-col gap-4">
-                {metrics.map(({ label, value, source, tone }) => {
+                {metrics.map(({ label, value, tone }) => {
                   const width = (value / maximumValue) * 100;
                   const style = {
                     "--storage-bar-width": `${width}%`,
@@ -92,14 +89,13 @@ export function StorageSummary({
                           style={style}
                         />
                       </div>
-                      <span className="text-xs text-muted-foreground">{source}</span>
                     </li>
                   );
                 })}
               </ul>
               <figcaption className="text-xs text-muted-foreground">
-                Шкала сравнивает значения отдельно: показатели не суммируются и не
-                выражают изменение доступного объёма на APFS.
+                Показатели не нужно складывать. APFS может хранить общие блоки, поэтому
+                фактическое свободное место после удаления может измениться иначе.
               </figcaption>
             </figure>
           </CardContent>
@@ -108,7 +104,7 @@ export function StorageSummary({
         <Card>
           <CardHeader>
             <CardTitle>Свободно на диске</CardTitle>
-            <CardDescription>Источник: DiskObservation</CardDescription>
+            <CardDescription>Текущее состояние диска Mac</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-2">
             <p className="audit-progress-value tabular-nums">
@@ -119,8 +115,8 @@ export function StorageSummary({
             </p>
           </CardContent>
           <CardFooter className="flex-col items-start gap-1 text-xs text-muted-foreground">
-            <p>Наблюдение диска: {diskObservation.observedAt}</p>
-            <p>Источник: {diskObservation.source}</p>
+            <p>Проверено: {formatDateTime(diskObservation.observedAt)}</p>
+            <p>Значение macOS может обновиться не сразу.</p>
           </CardFooter>
         </Card>
       </div>

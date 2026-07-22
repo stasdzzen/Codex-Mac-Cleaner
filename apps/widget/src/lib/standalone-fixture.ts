@@ -25,7 +25,7 @@ export const standaloneFixture = deepFreeze<DashboardSnapshot>({
   coverage: {
     checkedSourceCount: 7,
     skippedSourceCount: 1,
-    warnings: ["Часть областей не проверена: synthetic permission gap."],
+    warnings: ["macOS не дала проверить один из защищённых источников."],
   },
   storageSummary: {
     candidateLogicalBytes: 1_572_864,
@@ -44,8 +44,8 @@ export const standaloneFixture = deepFreeze<DashboardSnapshot>({
   findings: [
     {
       findingId: "finding-public-synthetic",
-      displayName: "Synthetic Cache",
-      componentDisplayName: "Example Studio",
+      displayName: "Кэш удалённого приложения",
+      componentDisplayName: "Пример приложения",
       category: "cache",
       supportLevel: "candidate",
       logicalSize: 1_572_864,
@@ -82,7 +82,7 @@ export const standaloneFixture = deepFreeze<DashboardSnapshot>({
           sourceAdapter: "application_inventory",
           outcome: "confirmed",
           observedAt: "2026-07-18T09:58:00.000Z",
-          summary: "Основной synthetic bundle не найден.",
+          summary: "Основное приложение не найдено.",
         },
       ],
       blockingReasons: [],
@@ -91,7 +91,7 @@ export const standaloneFixture = deepFreeze<DashboardSnapshot>({
   quarantineEntries: [
     {
       entryId: "quarantine-public-synthetic",
-      displayName: "Synthetic Old Cache",
+      displayName: "Старый кэш приложения",
       physicalBytes: 524_288,
       movedAt: "2026-07-17T08:00:00.000Z",
       state: "moved",

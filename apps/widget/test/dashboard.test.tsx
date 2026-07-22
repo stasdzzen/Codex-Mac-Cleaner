@@ -50,7 +50,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("Audit Dashboard contract", () => {
+describe("интерфейс проверки Mac", () => {
   it("запрашивает только fullscreen после отдельного нажатия пользователя", async () => {
     const { bridge, requestDisplayMode } = createBridge();
     render(<AuditDashboard snapshot={dashboardFixture} bridge={bridge} />);
@@ -63,7 +63,7 @@ describe("Audit Dashboard contract", () => {
     expect(requestDisplayMode).toHaveBeenCalledTimes(1);
   });
 
-  it("сохраняет inline Dashboard и объясняет отсутствие display-mode capability", () => {
+  it("сохраняет интерфейс в чате и объясняет отсутствие полноэкранного режима", () => {
     const errorToast = vi.spyOn(toast, "error");
     const { bridge } = createBridge();
     const bridgeWithoutDisplayMode: WidgetBridge = {
@@ -77,11 +77,11 @@ describe("Audit Dashboard contract", () => {
     fireEvent.click(screen.getByRole("button", { name: "Развернуть" }));
 
     expect(errorToast).toHaveBeenCalledWith(
-      "Эта версия Codex не поддерживает переключение режима. Dashboard остаётся в чате.",
+      "Эта версия Codex не умеет разворачивать окно. Проверка остаётся доступна здесь.",
     );
   });
 
-  it("безопасно обрабатывает отказ хоста развернуть Dashboard", async () => {
+  it("безопасно обрабатывает отказ Codex развернуть окно", async () => {
     const errorToast = vi.spyOn(toast, "error");
     const { bridge, requestDisplayMode } = createBridge();
     vi.mocked(requestDisplayMode).mockRejectedValueOnce(new Error("HOST_REJECTED"));
@@ -91,10 +91,10 @@ describe("Audit Dashboard contract", () => {
 
     await waitFor(() =>
       expect(errorToast).toHaveBeenCalledWith(
-        "Codex не развернул Dashboard. Он остаётся в текущем режиме.",
+        "Codex не развернул окно. Проверка остаётся доступна здесь.",
       ),
     );
-    expect(screen.getByRole("heading", { name: "Audit Dashboard" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Проверка Mac" })).toBeVisible();
   });
 
   it("показывает подвал и открывает только фиксированные ссылки по клику", async () => {
@@ -140,27 +140,27 @@ describe("Audit Dashboard contract", () => {
     expect(errorToast).toHaveBeenCalledWith(
       "Эта версия Codex не поддерживает открытие внешних ссылок.",
     );
-    expect(screen.getByRole("heading", { name: "Audit Dashboard" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Проверка Mac" })).toBeVisible();
   });
 
-  it("показывает пять вкладок, рабочие Исключения и ручной fallback CMC-13", async () => {
+  it("показывает пять вкладок, исключения и запуск проверки пользователем", async () => {
     const { bridge, callTool } = createBridge();
     render(<AuditDashboard snapshot={dashboardFixture} bridge={bridge} />);
 
-    for (const name of ["Обзор", "Находки", "Карантин", "Исключения", "Расписание"]) {
+    for (const name of ["Обзор", "Найдено", "Карантин", "Исключения", "Автопроверка"]) {
       expect(screen.getByRole("tab", { name })).toBeVisible();
     }
 
     fireEvent.click(screen.getByRole("tab", { name: "Исключения" }));
     expect(await screen.findByText("Пользовательских исключений нет.")).toBeVisible();
 
-    fireEvent.click(screen.getByRole("tab", { name: "Расписание" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Автопроверка" }));
     expect(
       screen.getByText(
-        "Автоматическое расписание недоступно в v0.1. Запустите обычный read-only аудит вручную.",
+        "В этой версии проверку запускает пользователь. Плагин не работает в фоне.",
       ),
     ).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "Запустить аудит вручную" }));
+    fireEvent.click(screen.getByRole("button", { name: "Проверить сейчас" }));
     await waitFor(() =>
       expect(callTool).toHaveBeenCalledWith("audit_start", {
         requestId: expect.any(String),
@@ -177,65 +177,63 @@ describe("Audit Dashboard contract", () => {
     overviewTab.focus();
     fireEvent.keyDown(overviewTab, { key: "ArrowRight" });
 
-    expect(screen.getByRole("tab", { name: "Находки" })).toHaveFocus();
+    expect(screen.getByRole("tab", { name: "Найдено" })).toHaveFocus();
   });
 
-  it("показывает coverage, FindingFacts, support levels, evidence и причины запрета текстом", () => {
+  it("понятно показывает полноту проверки, доказательства и причины запрета", () => {
     const { bridge } = createBridge();
     render(<AuditDashboard snapshot={dashboardFixture} bridge={bridge} />);
 
     expect(screen.getByRole("alert")).toHaveTextContent("Часть областей не проверена");
-    fireEvent.click(screen.getByRole("tab", { name: "Находки" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Найдено" }));
 
-    expect(screen.getByText("Уровень поддержки: candidate")).toBeVisible();
-    expect(screen.getByText("Уровень поддержки: analysis_only")).toBeVisible();
-    expect(screen.getByText("Уровень поддержки: unsupported_manual")).toBeVisible();
-    expect(screen.getByText("Требует расширенного режима")).toBeVisible();
+    expect(screen.getByText("можно проверить и переместить в карантин")).toBeVisible();
+    expect(screen.getByText("только просмотр")).toBeVisible();
+    expect(screen.getByText("нужна ручная проверка")).toBeVisible();
     expect(screen.queryByText(/sudo|launchctl|\brm\s/i)).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Подробнее: Synthetic Database" }));
     const sheet = screen.getByRole("dialog", { name: "Synthetic Database" });
     expect(within(sheet).getByText("Компонент: Example Notes")).toBeVisible();
-    expect(within(sheet).getByText("Категория: database")).toBeVisible();
-    expect(within(sheet).getByText("Временная классификация: current")).toBeVisible();
-    expect(within(sheet).getByText("Состояние приложения: unknown")).toBeVisible();
-    expect(within(sheet).getByText("Активность: unknown")).toBeVisible();
-    expect(within(sheet).getByText("Открытые файлы: unknown")).toBeVisible();
-    expect(within(sheet).getByText("Receipt: unknown")).toBeVisible();
-    expect(within(sheet).getByText("Чувствительные данные: database, personal_data")).toBeVisible();
-    expect(within(sheet).getByText("Метка: unknown")).toBeVisible();
-    expect(within(sheet).getByText("Уверенность: low")).toBeVisible();
-    expect(within(sheet).getByText("Риск: high")).toBeVisible();
-    expect(within(sheet).getByText("Действие недоступно: POLICY_RISK_CATEGORY")).toBeVisible();
-    expect(within(sheet).getByText("Обнаружены признаки пользовательской базы данных.")).toBeVisible();
-    expect(within(sheet).getByText(/Оценка освобождения: 0,26 МБ/)).toBeVisible();
-    expect(within(sheet).getByText("Оценка наблюдалась: 2026-07-18T09:59:00.000Z")).toBeVisible();
-    expect(within(sheet).getByText(/snapshot estimate/)).toBeVisible();
-    expect(within(sheet).getByText("Вход правила: data_kind")).toBeVisible();
+    expect(within(sheet).getByText("Категория: база данных")).toBeVisible();
+    expect(within(sheet).getByText("Актуальность: данные актуальны")).toBeVisible();
+    expect(within(sheet).getByText("Приложение-владелец: не удалось проверить")).toBeVisible();
+    expect(within(sheet).getByText("Активный процесс: не удалось проверить")).toBeVisible();
+    expect(within(sheet).getByText("Открытые файлы: не удалось проверить")).toBeVisible();
+    expect(within(sheet).getByText("Сведения установщика: не удалось проверить")).toBeVisible();
+    expect(within(sheet).getByText("Чувствительные данные: база данных, личные данные")).toBeVisible();
+    expect(within(sheet).getByText("Вывод: назначение не определено")).toBeVisible();
+    expect(within(sheet).getByText("Уверенность: низкая")).toBeVisible();
+    expect(within(sheet).getByText("Риск: высокий")).toBeVisible();
+    expect(within(sheet).getByText("Причина: категория требует ручной проверки")).toBeVisible();
+    expect(within(sheet).getByText("Проверено: тип данных.")).toBeVisible();
+    expect(within(sheet).getByText(/Объект занимает примерно 0,26 МБ/)).toBeVisible();
+    expect(within(sheet).getByText(/^Данные получены:/)).toBeVisible();
+    expect(within(sheet).getByText(/оценка сделана по снимку состояния/)).toBeVisible();
+    expect(within(sheet).getByText("Проверка: тип данных")).toBeVisible();
   });
 
-  it("показывает пять server-owned показателей и timestamp без причинного APFS claim", () => {
+  it("показывает пять показателей места без обещания точного прироста", () => {
     const { bridge } = createBridge();
     render(<AuditDashboard snapshot={dashboardFixture} bridge={bridge} />);
 
     for (const label of [
-      "Логический размер находок",
-      "Физический размер находок",
-      "В карантине",
-      "Удалено навсегда",
+      "Размер найденных файлов",
+      "Занимают на диске",
+      "Хранится в карантине",
+      "Удалено из карантина",
       "Свободно на диске",
     ]) {
       expect(screen.getByText(label)).toBeVisible();
     }
-    expect(screen.getByText("Наблюдение диска: 2026-07-18T10:05:00.000Z")).toBeVisible();
-    expect(screen.getByText("Источник: append-only journal")).toBeVisible();
+    expect(screen.getByText(/^Проверено:/)).toBeVisible();
     expect(
       screen.getByRole("img", {
         name: /Относительное сравнение размеров.*1,57 МБ.*1,05 МБ.*0,52 МБ.*0,26 МБ/u,
       }),
     ).toBeVisible();
     expect(document.querySelectorAll("[data-storage-bar]")).toHaveLength(4);
-    expect(screen.getByText(/Шкала сравнивает значения отдельно/u)).toBeVisible();
+    expect(screen.getByText(/Показатели не нужно складывать/u)).toBeVisible();
     expect(screen.queryByText(/освобождено после|прирост свободного места|APFS delta/i)).not.toBeInTheDocument();
   });
 
@@ -269,7 +267,7 @@ describe("Audit Dashboard contract", () => {
       <AuditDashboard snapshot={runningFixture} bridge={running.bridge} />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Отменить аудит" }));
+    fireEvent.click(screen.getByRole("button", { name: "Остановить проверку" }));
     await waitFor(() =>
       expect(running.callTool).toHaveBeenCalledWith("audit_cancel", {
         auditId: "audit-synthetic-001",
@@ -281,14 +279,14 @@ describe("Audit Dashboard contract", () => {
     ).toHaveLength(1);
 
     rerender(<AuditDashboard snapshot={cancellingFixture} bridge={running.bridge} />);
-    expect(screen.getByRole("button", { name: "Отмена выполняется" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Проверка останавливается" })).toBeDisabled();
 
     rerender(<AuditDashboard snapshot={cancelledFixture} bridge={running.bridge} />);
     expect(screen.getByRole("alert")).toHaveTextContent(
-      "Аудит отменён. Результаты неполные, поэтому перемещение в карантин недоступно. Начните новый аудит",
+      "Результаты неполные, поэтому перемещение в карантин недоступно. Начните новую проверку",
     );
-    fireEvent.click(screen.getByRole("tab", { name: "Находки" }));
-    expect(screen.queryByRole("button", { name: "Удалить" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: "Найдено" }));
+    expect(screen.queryByRole("button", { name: "В карантин" })).not.toBeInTheDocument();
   });
 
   it("сам обновляет живой прогресс через audit_status", async () => {
@@ -321,8 +319,8 @@ describe("Audit Dashboard contract", () => {
     expect(callTool).toHaveBeenCalledWith("audit_status", {
       auditId: runningFixture.auditId,
     });
-    expect(screen.getByText(/Сопоставление кандидатов/)).toBeVisible();
-    expect(screen.getByText(/Кандидатов обработано: 4 из 6/)).toBeVisible();
+    expect(screen.getByText(/Проверка связей найденных объектов/)).toBeVisible();
+    expect(screen.getByText(/Объектов проверено: 4 из 6/)).toBeVisible();
   });
 
   it("показывает terminal failure без действий над находками", () => {
@@ -340,9 +338,9 @@ describe("Audit Dashboard contract", () => {
     );
 
     expect(screen.getByRole("alert")).toHaveTextContent(
-      "Проверка завершилась с безопасной ошибкой. Файлы не изменялись",
+      "Файлы не изменялись. Действия над найденными объектами недоступны",
     );
-    expect(screen.queryByRole("button", { name: "Удалить" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "В карантин" })).not.toBeInTheDocument();
   });
 
   it("пропускает finding только в view state текущей ревизии и не вызывает tool", () => {
@@ -350,7 +348,7 @@ describe("Audit Dashboard contract", () => {
     const { rerender } = render(
       <AuditDashboard snapshot={dashboardFixture} bridge={state.bridge} />,
     );
-    fireEvent.click(screen.getByRole("tab", { name: "Находки" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Найдено" }));
     fireEvent.click(screen.getByRole("button", { name: "Пропустить сейчас" }));
 
     expect(state.callTool).not.toHaveBeenCalled();
@@ -395,9 +393,9 @@ describe("Audit Dashboard contract", () => {
   it("открывает отдельное подтверждение карантина одного объекта и возвращает focus", async () => {
     const state = createBridge();
     render(<AuditDashboard snapshot={dashboardFixture} bridge={state.bridge} />);
-    fireEvent.click(screen.getByRole("tab", { name: "Находки" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Найдено" }));
 
-    const trigger = screen.getByRole("button", { name: "Удалить" });
+    const trigger = screen.getByRole("button", { name: "В карантин" });
     trigger.focus();
     fireEvent.click(trigger);
 

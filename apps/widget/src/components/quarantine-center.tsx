@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/card";
 import type { WidgetBridge } from "@/lib/bridge";
 import type { QuarantineEntry } from "@/lib/dashboard-types";
+import { formatDateTime, quarantineStateLabel } from "@/lib/presentation";
 import { formatBytes } from "@/lib/utils";
 
 interface QuarantineCenterProps {
@@ -134,9 +135,9 @@ function EntryActionDialog({
           </AlertDialogTitle>
           <AlertDialogDescription>
             {isPurge
-              ? "Необратимо удаляется одна запись карантина. Восстановить этот payload после подтверждения нельзя."
-              : "Одна запись будет возвращена только в исходный свободный путь. Перезапись и создание изменившихся родителей запрещены."}
-            {preparing && " Сервер проверяет состояние одной записи перед подтверждением."}
+              ? "Будет необратимо удалён только один объект из карантина. После подтверждения восстановить его нельзя."
+              : "Будет восстановлен только этот объект. Если исходное место занято или изменилось, восстановление остановится без перезаписи файлов."}
+            {preparing && " Проверяем состояние объекта перед подтверждением."}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
@@ -172,7 +173,7 @@ export function QuarantineCenter({ entries, bridge }: QuarantineCenterProps) {
     <section aria-labelledby="quarantine-center-title" className="flex flex-col gap-3">
       <div>
         <h2 id="quarantine-center-title" className="text-base font-medium">
-          Quarantine Center
+          Карантин
         </h2>
         <p className="text-sm text-muted-foreground">
           Каждое действие относится только к одной записи и подтверждается отдельно.
@@ -183,13 +184,13 @@ export function QuarantineCenter({ entries, bridge }: QuarantineCenterProps) {
           <Card key={entry.entryId}>
             <CardHeader>
               <CardTitle>{entry.displayName}</CardTitle>
-              <CardDescription>Перемещено: {entry.movedAt}</CardDescription>
+              <CardDescription>Перемещено: {formatDateTime(entry.movedAt)}</CardDescription>
               <CardAction>
-                <Badge variant="secondary">{entry.state}</Badge>
+                <Badge variant="secondary">{quarantineStateLabel(entry.state)}</Badge>
               </CardAction>
             </CardHeader>
             <CardContent>
-              <p>Physical size payload: {formatBytes(entry.physicalBytes)}</p>
+              <p>Занимает на диске: {formatBytes(entry.physicalBytes)}</p>
             </CardContent>
             <CardFooter className="flex flex-wrap gap-2">
               <EntryActionDialog entry={entry} bridge={bridge} action="restore" />

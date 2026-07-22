@@ -59,6 +59,12 @@ import {
 } from "@/lib/bridge";
 import type { DashboardFinding, DashboardSnapshot } from "@/lib/dashboard-types";
 import { PROJECT_LINKS, type WidgetExternalUrl } from "@/lib/project-links";
+import {
+  blockingReasonLabel,
+  confidenceLabel,
+  findingLabel,
+  riskLabel,
+} from "@/lib/presentation";
 import { formatBytes } from "@/lib/utils";
 
 interface AuditDashboardProps {
@@ -77,10 +83,10 @@ const INITIAL_VIEW_STATE: WidgetViewState = {
 
 const TAB_LABELS: ReadonlyArray<{ value: DashboardTab; label: string }> = [
   { value: "overview", label: "Обзор" },
-  { value: "findings", label: "Находки" },
+  { value: "findings", label: "Найдено" },
   { value: "quarantine", label: "Карантин" },
   { value: "exclusions", label: "Исключения" },
-  { value: "schedule", label: "Расписание" },
+  { value: "schedule", label: "Автопроверка" },
 ];
 
 function revisionKey(snapshot: DashboardSnapshot): string {
@@ -224,7 +230,7 @@ export function AuditDashboard({ snapshot, bridge }: AuditDashboardProps) {
         new Set([...current.skippedFindingIds, finding.findingId]),
       ),
     }));
-    toast("Находка скрыта только до следующей ревизии аудита.");
+    toast("Объект скрыт до следующей проверки.");
   }
 
   async function cancelAudit(): Promise<void> {
@@ -234,7 +240,7 @@ export function AuditDashboard({ snapshot, bridge }: AuditDashboardProps) {
         requestId: createRequestId("cancel"),
       });
     } catch {
-      toast.error("Запрос отмены не принят. Обновите состояние аудита.");
+      toast.error("Не удалось остановить проверку. Подождите немного и повторите.");
     }
   }
 
@@ -244,9 +250,9 @@ export function AuditDashboard({ snapshot, bridge }: AuditDashboardProps) {
         requestId: createRequestId("manual-audit"),
         profile: "application_remnants",
       });
-      toast.success("Ручной read-only аудит запущен.");
+      toast.success("Проверка запущена. Она только читает данные и ничего не удаляет.");
     } catch {
-      toast.error("Не удалось запустить ручной read-only аудит.");
+      toast.error("Не удалось запустить проверку.");
     }
   }
 
@@ -270,7 +276,7 @@ export function AuditDashboard({ snapshot, bridge }: AuditDashboardProps) {
   async function requestFullscreen(): Promise<void> {
     if (bridge.requestDisplayMode === undefined) {
       toast.error(
-        "Эта версия Codex не поддерживает переключение режима. Dashboard остаётся в чате.",
+        "Эта версия Codex не умеет разворачивать окно. Проверка остаётся доступна здесь.",
       );
       return;
     }
@@ -278,7 +284,7 @@ export function AuditDashboard({ snapshot, bridge }: AuditDashboardProps) {
     try {
       await bridge.requestDisplayMode("fullscreen");
     } catch {
-      toast.error("Codex не развернул Dashboard. Он остаётся в текущем режиме.");
+      toast.error("Codex не развернул окно. Проверка остаётся доступна здесь.");
     } finally {
       setFullscreenPending(false);
     }
@@ -299,7 +305,7 @@ export function AuditDashboard({ snapshot, bridge }: AuditDashboardProps) {
               />
               <div>
                 <p className="text-sm text-muted-foreground">Codex Mac Cleaner</p>
-                <h1 className="text-2xl font-semibold tracking-tight">Audit Dashboard</h1>
+                <h1 className="text-2xl font-semibold tracking-tight">Проверка Mac</h1>
               </div>
             </div>
             <CardAction className="flex flex-wrap items-center gap-2 max-sm:col-start-1 max-sm:row-span-1 max-sm:row-start-3 max-sm:mt-3 max-sm:justify-self-start">
@@ -316,13 +322,12 @@ export function AuditDashboard({ snapshot, bridge }: AuditDashboardProps) {
                 )}
                 Развернуть
               </Button>
-              <Badge variant="outline">stateVersion: {acceptedSnapshot.stateVersion}</Badge>
             </CardAction>
           </CardHeader>
           <CardContent>
             <p className="max-w-3xl text-sm text-muted-foreground">
-              Локальный read-only аудит. Решения, policy и показатели приходят с сервера;
-              интерфейс только показывает их и собирает поэлементные подтверждения.
+              Плагин проверяет Mac локально и ничего не удаляет сам. Вы решаете, что
+              оставить, переместить в карантин, восстановить или удалить навсегда.
             </p>
           </CardContent>
         </Card>
@@ -331,29 +336,32 @@ export function AuditDashboard({ snapshot, bridge }: AuditDashboardProps) {
       {acceptedSnapshot.state === "failed" ? (
         <Alert variant="destructive">
           <CircleAlertIcon aria-hidden="true" />
-          <AlertTitle>Аудит остановлен</AlertTitle>
+          <AlertTitle>Проверка остановлена</AlertTitle>
           <AlertDescription>
-            Проверка завершилась с безопасной ошибкой. Файлы не изменялись, а действия
-            над находками недоступны. Запустите новый аудит.
+            Файлы не изменялись. Действия над найденными объектами недоступны — запустите
+            проверку ещё раз.
           </AlertDescription>
         </Alert>
       ) : acceptedSnapshot.state === "cancelled" ? (
         <Alert variant="destructive">
           <BanIcon aria-hidden="true" />
-          <AlertTitle>Аудит отменён</AlertTitle>
+          <AlertTitle>Проверка отменена</AlertTitle>
           <AlertDescription>
-            Аудит отменён. Результаты неполные, поэтому перемещение в карантин недоступно.
-            Начните новый аудит.
+            Результаты неполные, поэтому перемещение в карантин недоступно. Начните новую
+            проверку.
           </AlertDescription>
         </Alert>
       ) : (
-        acceptedSnapshot.coverage.warnings.map((warning) => (
-          <Alert key={warning}>
+        acceptedSnapshot.coverage.warnings.length > 0 && (
+          <Alert>
             <CircleAlertIcon aria-hidden="true" />
             <AlertTitle>Часть областей не проверена</AlertTitle>
-            <AlertDescription>{warning}</AlertDescription>
+            <AlertDescription>
+              macOS не дала прочитать некоторые источники. Плагин не предлагает действия
+              для объектов, которые не удалось проверить полностью.
+            </AlertDescription>
           </Alert>
-        ))
+        )
       )}
 
       <Tabs
@@ -365,7 +373,7 @@ export function AuditDashboard({ snapshot, bridge }: AuditDashboardProps) {
         <TabsList
           variant="line"
           className="max-w-full overflow-x-auto"
-          aria-label="Разделы Audit Dashboard"
+          aria-label="Разделы проверки Mac"
         >
           {TAB_LABELS.map((tab) => (
             <TabsTrigger
@@ -399,18 +407,23 @@ export function AuditDashboard({ snapshot, bridge }: AuditDashboardProps) {
           ))}
         </TabsList>
 
-        <TabsContent value="overview" className="flex flex-col gap-5">
-          <AuditProgress snapshot={acceptedSnapshot} onCancel={() => void cancelAudit()} />
-          <StorageSummary
-            storageSummary={acceptedSnapshot.storageSummary}
-            diskObservation={acceptedSnapshot.diskObservation}
-          />
-          <Card>
+        <TabsContent value="overview">
+          <div className="grid gap-5 lg:grid-cols-12">
+            <div className="lg:col-span-8">
+              <AuditProgress snapshot={acceptedSnapshot} onCancel={() => void cancelAudit()} />
+            </div>
+            <div className="lg:col-span-12 lg:row-start-2">
+              <StorageSummary
+                storageSummary={acceptedSnapshot.storageSummary}
+                diskObservation={acceptedSnapshot.diskObservation}
+              />
+            </div>
+          <Card className="lg:col-span-4 lg:col-start-9 lg:row-start-1">
             <CardHeader>
               <CardTitle>Краткая сводка находок</CardTitle>
               <CardDescription>
-                Найдено: {acceptedSnapshot.findings.length}; исключено: {acceptedSnapshot.excludedCount}; проверено источников: {acceptedSnapshot.coverage.checkedSourceCount};
-                пропущено: {acceptedSnapshot.coverage.skippedSourceCount}.
+                Найдено объектов: {acceptedSnapshot.findings.length}. В исключениях: {acceptedSnapshot.excludedCount}.
+                Источников проверено: {acceptedSnapshot.coverage.checkedSourceCount}; недоступно: {acceptedSnapshot.coverage.skippedSourceCount}.
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-wrap gap-2">
@@ -421,6 +434,7 @@ export function AuditDashboard({ snapshot, bridge }: AuditDashboardProps) {
               ))}
             </CardContent>
           </Card>
+          </div>
         </TabsContent>
 
         <TabsContent value="findings" className="flex flex-col gap-4">
@@ -477,7 +491,7 @@ function ProjectFooter({ bridge }: { readonly bridge: WidgetBridge }) {
     try {
       await bridge.openExternal(url);
     } catch {
-      toast.error("Codex не открыл внешнюю ссылку. Dashboard остаётся доступен.");
+      toast.error("Codex не открыл внешнюю ссылку. Интерфейс проверки остаётся доступен.");
     }
   }
 
@@ -576,7 +590,7 @@ function FindingsTable({
         <ListFilterIcon aria-hidden="true" />
         <AlertTitle>Нет видимых находок</AlertTitle>
         <AlertDescription>
-          Находки могут отсутствовать в snapshot или быть пропущены для текущей ревизии.
+          Проверка не нашла подходящих объектов, либо вы временно скрыли их.
         </AlertDescription>
       </Alert>
     );
@@ -585,9 +599,9 @@ function FindingsTable({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Находки текущей ревизии</CardTitle>
+        <CardTitle>Найденные объекты</CardTitle>
         <CardDescription>
-          Risk, coverage и состояние действия всегда продублированы текстом.
+          Для каждого объекта показаны причина, риск и доступное действие.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -595,7 +609,7 @@ function FindingsTable({
           <TableHeader>
             <TableRow>
               <TableHead>Объект</TableHead>
-              <TableHead>Классификация</TableHead>
+              <TableHead>Почему найден</TableHead>
               <TableHead>Размер</TableHead>
               <TableHead>Состояние действия</TableHead>
               <TableHead>Действия</TableHead>
@@ -626,31 +640,28 @@ function FindingsTable({
                       <span className="font-medium">{finding.displayName}</span>
                       <span className="text-muted-foreground">{finding.componentDisplayName}</span>
                       <SupportLevel level={finding.supportLevel} />
-                      {finding.supportLevel === "unsupported_manual" && (
-                        <span className="text-muted-foreground">Требует расширенного режима</span>
-                      )}
                     </div>
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-col gap-1 whitespace-normal">
-                      <span>Метка: {finding.label}</span>
-                      <span>Уверенность: {finding.confidence}</span>
-                      <span>Риск: {finding.risk}</span>
+                      <span>Вывод: {findingLabel(finding.label)}</span>
+                      <span>Уверенность: {confidenceLabel(finding.confidence)}</span>
+                      <span>Риск: {riskLabel(finding.risk)}</span>
                     </div>
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-col gap-1">
-                      <span>Logical: {formatBytes(finding.logicalSize)}</span>
-                      <span>Physical: {formatBytes(finding.physicalSize)}</span>
+                      <span>Размер файлов: {formatBytes(finding.logicalSize)}</span>
+                      <span>Занимает на диске: {formatBytes(finding.physicalSize)}</span>
                     </div>
                   </TableCell>
                   <TableCell>
                     {canMove ? (
                       <span>Доступно: перемещение одного объекта в карантин</span>
                     ) : reasons.length > 0 ? (
-                      <span>Действие недоступно: {reasons.join(", ")}</span>
+                      <span>Действие недоступно: {reasons.map(blockingReasonLabel).join(", ")}</span>
                     ) : (
-                      <span>Filesystem mutation недоступна</span>
+                      <span>Изменение файлов недоступно</span>
                     )}
                   </TableCell>
                   <TableCell>
@@ -732,17 +743,16 @@ function ScheduleFallbackCard({ onManualRun }: ScheduleFallbackCardProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Автоматическое расписание недоступно</CardTitle>
+        <CardTitle>Автопроверка появится позже</CardTitle>
         <CardDescription>
-          Автоматическое расписание недоступно в v0.1. Запустите обычный read-only
-          аудит вручную.
+          В этой версии проверку запускает пользователь. Плагин не работает в фоне.
         </CardDescription>
         <CardAction>
           <CalendarClockIcon aria-hidden="true" />
         </CardAction>
       </CardHeader>
       <CardContent className="flex flex-wrap items-center gap-3">
-        <Badge variant="outline">disabled v0.1</Badge>
+        <Badge variant="outline">Не работает в фоне</Badge>
         <Button
           type="button"
           disabled={pending}
@@ -756,7 +766,7 @@ function ScheduleFallbackCard({ onManualRun }: ScheduleFallbackCardProps) {
           ) : (
             <CalendarClockIcon data-icon="inline-start" />
           )}
-          Запустить аудит вручную
+          Проверить сейчас
         </Button>
       </CardContent>
     </Card>

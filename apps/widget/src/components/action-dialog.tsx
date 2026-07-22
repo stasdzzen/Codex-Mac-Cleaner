@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArchiveRestoreIcon, LoaderCircleIcon, Trash2Icon } from "lucide-react";
+import { ArchiveIcon, ArchiveRestoreIcon, LoaderCircleIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import type { WidgetBridge } from "@/lib/bridge";
 import { createRequestId } from "@/lib/bridge";
 import type { DashboardFinding } from "@/lib/dashboard-types";
+import { riskLabel } from "@/lib/presentation";
 import { formatBytes } from "@/lib/utils";
 
 interface MovePreview {
@@ -89,8 +90,8 @@ export function ActionDialog({ finding, auditRevision, bridge }: ActionDialogPro
           />
         }
       >
-        <Trash2Icon data-icon="inline-start" />
-        Удалить
+        <ArchiveIcon data-icon="inline-start" />
+        В карантин
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
@@ -105,11 +106,11 @@ export function ActionDialog({ finding, auditRevision, bridge }: ActionDialogPro
                 Будет перемещён в карантин ровно один объект. Это не прямое удаление исходника.
               </p>
               <p>
-                Оценка physical size: {formatBytes(finding.reclaimEstimate.estimatedPhysicalBytes)}.
-                Риск: {finding.risk}.
+                Занимает на диске примерно {formatBytes(finding.reclaimEstimate.estimatedPhysicalBytes)}.
+                Риск: {riskLabel(finding.risk)}.
               </p>
               <p>Объект можно восстановить в исходное место, если оно остаётся свободным.</p>
-              {preparing && <p>Сервер повторно проверяет policy и fingerprint…</p>}
+              {preparing && <p>Проверяем, что объект не изменился и его безопасно переместить…</p>}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
