@@ -493,16 +493,18 @@ function ProjectFooter({ bridge }: { readonly bridge: WidgetBridge }) {
           className="flex flex-wrap items-center gap-2"
         >
           <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                aria-label="Открыть GitHub проекта"
-                onClick={() => void openProjectLink(PROJECT_LINKS.repository)}
-              >
-                <GitHubMarkIcon />
-              </Button>
+            <TooltipTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Открыть GitHub проекта"
+                  onClick={() => void openProjectLink(PROJECT_LINKS.repository)}
+                />
+              }
+            >
+              <GitHubMarkIcon />
             </TooltipTrigger>
             <TooltipContent side="top">GitHub проекта</TooltipContent>
           </Tooltip>
