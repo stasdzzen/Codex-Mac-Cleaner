@@ -41,6 +41,7 @@ const builtEntries = new Set([
   thirdPartyNoticesPath,
 ]);
 const productionEntries = [
+  "assets/icon.png",
   ".codex-plugin/assets/dashboard-v2.html",
   ".codex-plugin/package-allowlist.json",
   ".codex-plugin/plugin.json",

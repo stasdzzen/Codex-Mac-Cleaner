@@ -65,8 +65,8 @@ describe("repository marketplace bundle freshness", () => {
 
     expect(runtime).toContain("EMPTY_CACHE_LOG_ARTIFACT_V1");
     expect(runtime).toContain("Объект кэша");
-    expect(dashboard).toContain("Автоматическое расписание недоступно");
-    expect(dashboard).toContain("Запустить аудит вручную");
+    expect(dashboard).toContain("Автопроверка появится позже");
+    expect(dashboard).toContain("Проверить сейчас");
     expect(dashboard).toContain("Развернуть");
     expect(dashboard).not.toContain("Мини-окно");
     expect(dashboard).toContain("audit_start");

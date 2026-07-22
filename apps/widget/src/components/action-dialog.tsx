@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArchiveRestoreIcon, LoaderCircleIcon, Trash2Icon } from "lucide-react";
+import { ArchiveIcon, ArchiveRestoreIcon, LoaderCircleIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import type { WidgetBridge } from "@/lib/bridge";
 import { createRequestId } from "@/lib/bridge";
 import type { DashboardFinding } from "@/lib/dashboard-types";
+import { riskLabel } from "@/lib/presentation";
 import { formatBytes } from "@/lib/utils";
 
 interface MovePreview {
@@ -62,6 +63,7 @@ export function ActionDialog({ finding, auditRevision, bridge }: ActionDialogPro
         operationId: createRequestId("move"),
       });
       toast.success("Объект перемещён в карантин.");
+      setOpen(false);
     } catch {
       toast.error("Перемещение не выполнено. Обновите ревизию и повторите проверку.");
     }
@@ -78,16 +80,18 @@ export function ActionDialog({ finding, auditRevision, bridge }: ActionDialogPro
         }
       }}
     >
-      <AlertDialogTrigger asChild>
-        <Button
-          variant="destructive"
-          onClick={() => {
-            void prepareMove();
-          }}
-        >
-          <Trash2Icon data-icon="inline-start" />
-          Удалить
-        </Button>
+      <AlertDialogTrigger
+        render={
+          <Button
+            variant="destructive"
+            onClick={() => {
+              void prepareMove();
+            }}
+          />
+        }
+      >
+        <ArchiveIcon data-icon="inline-start" />
+        В карантин
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
@@ -95,18 +99,18 @@ export function ActionDialog({ finding, auditRevision, bridge }: ActionDialogPro
             <ArchiveRestoreIcon aria-hidden="true" />
           </AlertDialogMedia>
           <AlertDialogTitle>Переместить в карантин: {finding.displayName}</AlertDialogTitle>
-          <AlertDialogDescription asChild>
-            <div className="flex flex-col gap-2">
+          <AlertDialogDescription
+            render={<div className="flex flex-col gap-2" />}
+          >
               <p>
                 Будет перемещён в карантин ровно один объект. Это не прямое удаление исходника.
               </p>
               <p>
-                Оценка physical size: {formatBytes(finding.reclaimEstimate.estimatedPhysicalBytes)}.
-                Риск: {finding.risk}.
+                Занимает на диске примерно {formatBytes(finding.reclaimEstimate.estimatedPhysicalBytes)}.
+                Риск: {riskLabel(finding.risk)}.
               </p>
               <p>Объект можно восстановить в исходное место, если оно остаётся свободным.</p>
-              {preparing && <p>Сервер повторно проверяет policy и fingerprint…</p>}
-            </div>
+              {preparing && <p>Проверяем, что объект не изменился и его безопасно переместить…</p>}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

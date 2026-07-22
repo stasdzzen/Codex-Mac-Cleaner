@@ -11,6 +11,25 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import type { DashboardFinding } from "@/lib/dashboard-types";
+import {
+  blockingReasonLabel,
+  categoryLabel,
+  confidenceLabel,
+  evidenceInputLabel,
+  evidenceOutcomeLabel,
+  evidenceSourceLabel,
+  evidenceSummary,
+  findingLabel,
+  formatDateTime,
+  presenceLabel,
+  reclaimBasisLabel,
+  reclaimLimitationLabel,
+  removalMethodLabel,
+  riskLabel,
+  sensitivityLabel,
+  startupKindLabel,
+  temporalLabel,
+} from "@/lib/presentation";
 import { formatBytes } from "@/lib/utils";
 
 interface FindingSheetProps {
@@ -43,7 +62,7 @@ export function FindingSheet({ finding, open, onOpenChange }: FindingSheetProps)
         <SheetHeader>
           <SheetTitle>{finding.displayName}</SheetTitle>
           <SheetDescription>
-            FindingFacts, доказательства и server-owned решение текущей ревизии.
+            Что проверено, почему объект найден и какое действие сейчас безопасно.
           </SheetDescription>
         </SheetHeader>
         <div className="flex flex-col gap-5 overflow-y-auto px-4 pb-6">
@@ -51,49 +70,50 @@ export function FindingSheet({ finding, open, onOpenChange }: FindingSheetProps)
             <div className="flex items-center gap-2">
               <FileSearchIcon aria-hidden="true" />
               <h3 id="finding-facts-title" className="font-medium">
-                FindingFacts
+                Что проверено
               </h3>
             </div>
             <ul className="flex list-none flex-col gap-1 p-0 text-sm">
               {stateLine("Компонент", finding.componentDisplayName)}
-              {stateLine("Категория", finding.category)}
-              {stateLine("Последнее наблюдение", finding.findingFacts.lastObservedAt)}
-              {stateLine("Временная классификация", finding.findingFacts.temporalKind)}
-              {stateLine("Состояние приложения", finding.findingFacts.mainBundleState)}
-              {stateLine("Активность", finding.findingFacts.activityState)}
-              {stateLine("Открытые файлы", finding.findingFacts.openFileState)}
+              {stateLine("Категория", categoryLabel(finding.category))}
+              {stateLine("Проверено", formatDateTime(finding.findingFacts.lastObservedAt))}
+              {stateLine("Актуальность", temporalLabel(finding.findingFacts.temporalKind))}
+              {stateLine("Приложение-владелец", presenceLabel(finding.findingFacts.mainBundleState))}
+              {stateLine("Активный процесс", presenceLabel(finding.findingFacts.activityState))}
+              {stateLine("Открытые файлы", presenceLabel(finding.findingFacts.openFileState))}
               {stateLine(
                 "Автозапуск",
                 finding.findingFacts.startupKinds.length > 0
-                  ? finding.findingFacts.startupKinds.join(", ")
+                  ? finding.findingFacts.startupKinds.map(startupKindLabel).join(", ")
                   : "не обнаружен",
               )}
-              {stateLine("Target executable", finding.findingFacts.targetExecutableState)}
-              {stateLine("Receipt", finding.findingFacts.receiptState)}
-              {stateLine("Зависимости", finding.findingFacts.dependencyState)}
-              {stateLine("Чувствительные данные", flags.length > 0 ? flags.join(", ") : "нет")}
-              {stateLine("Метка", finding.label)}
-              {stateLine("Уверенность", finding.confidence)}
-              {stateLine("Риск", finding.risk)}
+              {stateLine("Исполняемый файл владельца", presenceLabel(finding.findingFacts.targetExecutableState))}
+              {stateLine("Сведения установщика", presenceLabel(finding.findingFacts.receiptState))}
+              {stateLine("Зависимости", presenceLabel(finding.findingFacts.dependencyState))}
+              {stateLine("Чувствительные данные", flags.length > 0 ? flags.map(sensitivityLabel).join(", ") : "не обнаружены")}
+              {stateLine("Вывод", findingLabel(finding.label))}
+              {stateLine("Уверенность", confidenceLabel(finding.confidence))}
+              {stateLine("Риск", riskLabel(finding.risk))}
               {stateLine(
                 "Рекомендуемый способ",
-                finding.findingFacts.recommendedRemovalMethod,
+                removalMethodLabel(finding.findingFacts.recommendedRemovalMethod),
               )}
             </ul>
           </section>
 
           <section aria-labelledby="reclaim-estimate-title" className="flex flex-col gap-2">
             <h3 id="reclaim-estimate-title" className="font-medium">
-              ReclaimEstimate
+              Оценка места на диске
             </h3>
             <p>
-              Оценка освобождения: {formatBytes(finding.reclaimEstimate.estimatedPhysicalBytes)};
-              уверенность: {finding.reclaimEstimate.confidence}; основа: {finding.reclaimEstimate.basis}.
+              Объект занимает примерно {formatBytes(finding.reclaimEstimate.estimatedPhysicalBytes)};
+              уверенность оценки: {confidenceLabel(finding.reclaimEstimate.confidence)};
+              основа: {reclaimBasisLabel(finding.reclaimEstimate.basis)}.
             </p>
-            <p>Оценка наблюдалась: {finding.reclaimEstimate.observedAt}</p>
+            <p>Данные получены: {formatDateTime(finding.reclaimEstimate.observedAt)}</p>
             <p className="text-muted-foreground">
-              Ограничения: {finding.reclaimEstimate.limitations.map((item) => item.replaceAll("_", " ")).join(", ")}.
-              Это snapshot-оценка, а не обещание изменения свободного места.
+              Ограничения: {finding.reclaimEstimate.limitations.map(reclaimLimitationLabel).join(", ")}.
+              Это оценка текущего состояния, а не обещание точного прироста свободного места.
             </p>
           </section>
 
@@ -103,7 +123,7 @@ export function FindingSheet({ finding, open, onOpenChange }: FindingSheetProps)
               <AlertTitle>Действие недоступно</AlertTitle>
               <AlertDescription>
                 {reasons.map((reason) => (
-                  <p key={reason}>Действие недоступно: {reason}</p>
+                  <p key={reason}>Причина: {blockingReasonLabel(reason)}</p>
                 ))}
               </AlertDescription>
             </Alert>
@@ -111,17 +131,17 @@ export function FindingSheet({ finding, open, onOpenChange }: FindingSheetProps)
 
           <section aria-labelledby="evidence-title" className="flex flex-col gap-2">
             <h3 id="evidence-title" className="font-medium">
-              Доказательства
+              Почему так решили
             </h3>
             {finding.evidence.map((evidence) => (
               <div key={evidence.evidenceId} className="flex flex-col gap-1 rounded-lg border p-3">
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="outline">{evidence.outcome}</Badge>
-                  <span>{evidence.sourceAdapter}</span>
+                  <Badge variant="outline">{evidenceOutcomeLabel(evidence.outcome)}</Badge>
+                  <span>{evidenceSourceLabel(evidence.sourceAdapter)}</span>
                 </div>
-                <p>{evidence.summary}</p>
-                <p>Вход правила: {evidence.ruleInputType}</p>
-                <p className="text-muted-foreground">{evidence.observedAt}</p>
+                <p>{evidenceSummary(evidence.ruleInputType)}</p>
+                <p>Проверка: {evidenceInputLabel(evidence.ruleInputType)}</p>
+                <p className="text-muted-foreground">{formatDateTime(evidence.observedAt)}</p>
               </div>
             ))}
           </section>

@@ -484,7 +484,7 @@ describe("полная интеграция MCP App", () => {
       packagedPath(".codex-plugin", "assets", "dashboard-v2.html"),
       "utf8",
     );
-    expect(html).toContain("Audit Dashboard");
+    expect(html).toContain("Проверка Mac");
     expect(html).toContain("ui/notifications/tool-result");
     expect(html).toContain("tools/call");
     expect(html).toContain("requestDisplayMode");
@@ -518,7 +518,7 @@ describe("полная интеграция MCP App", () => {
     expect(html).not.toMatch(
       /audit-public-synthetic|finding-public-synthetic|quarantine-public-synthetic/,
     );
-    expect(html).toContain("Ожидание безопасного snapshot");
+    expect(html).toContain("Ожидание результатов");
   });
 
   it("не выпускает core preview secret в source или compiled package", async () => {

@@ -77,7 +77,7 @@ describe("Quarantine Center contract", () => {
       name: "Удалить навсегда: Synthetic Old Cache",
     });
     expect(within(dialog).getByText(/необратимо/i)).toBeVisible();
-    expect(within(dialog).getByText(/одна запись карантина/i)).toBeVisible();
+    expect(within(dialog).getByText(/один объект из карантина/i)).toBeVisible();
 
     await waitFor(() => expect(callTool).toHaveBeenCalledOnce());
     expect(callTool.mock.calls).toEqual([

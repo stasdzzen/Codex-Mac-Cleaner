@@ -39,6 +39,11 @@ import {
   NativeSelectOption,
 } from "@/components/ui/native-select";
 import { createRequestId, type WidgetBridge } from "@/lib/bridge";
+import {
+  artifactKindLabel,
+  exclusionReasonLabel,
+  formatDateTime,
+} from "@/lib/presentation";
 
 interface ExclusionsTabProps {
   readonly bridge: WidgetBridge;
@@ -99,7 +104,7 @@ export function ExclusionsTab({ bridge, refreshKey }: ExclusionsTabProps) {
     return entries.filter((entry) => {
       const matchesSearch =
         normalizedSearch.length === 0 ||
-        [entry.ruleId, entry.artifactKind, entry.reasonCategory]
+        [artifactKindLabel(entry.artifactKind), exclusionReasonLabel(entry.reasonCategory)]
           .join(" ")
           .toLocaleLowerCase("ru-RU")
           .includes(normalizedSearch);
@@ -163,8 +168,8 @@ export function ExclusionsTab({ bridge, refreshKey }: ExclusionsTabProps) {
         <ShieldCheckIcon aria-hidden="true" />
         <AlertTitle>Состояние исключений недоступно</AlertTitle>
         <AlertDescription>
-          Findings остаются видимыми, а destructive tokens заблокированы до восстановления
-          local state.
+          Находки остаются видимыми, но действия с файлами недоступны, пока локальное
+          состояние не восстановится.
         </AlertDescription>
       </Alert>
     );
@@ -176,8 +181,8 @@ export function ExclusionsTab({ bridge, refreshKey }: ExclusionsTabProps) {
         <CardHeader>
           <CardTitle id="exclusions-title">Пользовательские исключения</CardTitle>
           <CardDescription>
-            Локальные identity-based правила не ослабляют protected scopes и не разрешают
-            mutation.
+            Сохранённые здесь объекты не будут предлагаться для очистки. Защищённые области
+            Mac по-прежнему недоступны для изменений.
           </CardDescription>
           <CardAction>
             <Badge variant="outline">Всего: {entries.length}</Badge>
@@ -191,7 +196,7 @@ export function ExclusionsTab({ bridge, refreshKey }: ExclusionsTabProps) {
                 id="exclusion-search"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="Rule, тип или причина"
+                placeholder="Тип объекта или причина"
               />
             </Field>
             <Field className="sm:w-auto">
@@ -207,7 +212,7 @@ export function ExclusionsTab({ bridge, refreshKey }: ExclusionsTabProps) {
                 <NativeSelectOption value="all">Все причины</NativeSelectOption>
                 {REASON_FILTERS.map((reason) => (
                   <NativeSelectOption key={reason} value={reason}>
-                    {reason}
+                    {exclusionReasonLabel(reason)}
                   </NativeSelectOption>
                 ))}
               </NativeSelect>
@@ -225,15 +230,17 @@ export function ExclusionsTab({ bridge, refreshKey }: ExclusionsTabProps) {
               }
             }}
           >
-            <AlertDialogTrigger asChild>
-              <Button
-                variant="destructive"
-                disabled={entries.length === 0 || loading}
-                onClick={() => void prepareReset()}
-              >
+            <AlertDialogTrigger
+              render={
+                <Button
+                  variant="destructive"
+                  disabled={entries.length === 0 || loading}
+                  onClick={() => void prepareReset()}
+                />
+              }
+            >
                 <RotateCcwIcon data-icon="inline-start" />
                 Сбросить все исключения
-              </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
@@ -245,8 +252,8 @@ export function ExclusionsTab({ bridge, refreshKey }: ExclusionsTabProps) {
                 </AlertDialogTitle>
                 <AlertDialogDescription>
                   Будут удалены только локальные правила исключений. Это не изменяет
-                  исключённые файлы и не запускает mutation. Следующий аудит снова проверит
-                  объекты.
+                  исключённые файлы и не меняет данные на диске. Следующая проверка снова
+                  покажет эти объекты.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
@@ -274,13 +281,13 @@ export function ExclusionsTab({ bridge, refreshKey }: ExclusionsTabProps) {
         <Alert>
           <LoaderCircleIcon className="animate-spin" aria-hidden="true" />
           <AlertTitle>Загрузка исключений</AlertTitle>
-          <AlertDescription>Читается локальное versioned state.</AlertDescription>
+          <AlertDescription>Загружаем сохранённые на этом Mac исключения.</AlertDescription>
         </Alert>
       ) : entries.length === 0 ? (
         <Alert>
           <ShieldCheckIcon aria-hidden="true" />
           <AlertTitle>Пользовательских исключений нет.</AlertTitle>
-          <AlertDescription>Новые аудиты проверяют все доступные findings.</AlertDescription>
+          <AlertDescription>Следующая проверка покажет все доступные объекты.</AlertDescription>
         </Alert>
       ) : visibleEntries.length === 0 ? (
         <Alert>
@@ -293,19 +300,19 @@ export function ExclusionsTab({ bridge, refreshKey }: ExclusionsTabProps) {
           {visibleEntries.map((entry) => (
             <Card key={entry.exclusionId}>
               <CardHeader>
-                <CardTitle>{entry.ruleId}</CardTitle>
-                <CardDescription>Создано: {entry.createdAt}</CardDescription>
+                <CardTitle>Сохранённый объект</CardTitle>
+                <CardDescription>Добавлено: {formatDateTime(entry.createdAt)}</CardDescription>
                 <CardAction>
-                  <Badge variant="secondary">{entry.artifactKind}</Badge>
+                  <Badge variant="secondary">{artifactKindLabel(entry.artifactKind)}</Badge>
                 </CardAction>
               </CardHeader>
               <CardContent>
-                <p>Причина: <span>{entry.reasonCategory}</span></p>
+                <p>Причина: <span>{exclusionReasonLabel(entry.reasonCategory)}</span></p>
               </CardContent>
               <CardFooter>
                 <Button
                   variant="outline"
-                  aria-label={`Снова проверять: ${entry.ruleId}`}
+                  aria-label="Снова проверять этот объект"
                   onClick={() => void removeEntry(entry)}
                 >
                   <RotateCcwIcon data-icon="inline-start" />

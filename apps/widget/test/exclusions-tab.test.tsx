@@ -58,7 +58,7 @@ describe("вкладка Исключения", () => {
     const { unmount } = render(
       <AuditDashboard snapshot={dashboardFixture} bridge={state.bridge} />,
     );
-    fireEvent.click(screen.getByRole("tab", { name: "Находки" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Найдено" }));
     fireEvent.click(screen.getByRole("button", { name: "Исключить: Synthetic Cache" }));
 
     await waitFor(() =>
@@ -76,7 +76,7 @@ describe("вкладка Исключения", () => {
     unmount();
     render(<AuditDashboard snapshot={dashboardFixture} bridge={state.bridge} />);
     fireEvent.click(screen.getByRole("tab", { name: "Исключения" }));
-    expect(await screen.findByText("RULE_SYNTHETIC_CACHE")).toBeVisible();
+    expect((await screen.findAllByText("Сохранённый объект"))).toHaveLength(2);
   });
 
   it("поддерживает поиск, фильтр, причину, дату и поэлементное Снова проверять", async () => {
@@ -84,7 +84,7 @@ describe("вкладка Исключения", () => {
     render(<AuditDashboard snapshot={dashboardFixture} bridge={state.bridge} />);
     fireEvent.click(screen.getByRole("tab", { name: "Исключения" }));
 
-    expect(await screen.findByText("RULE_SYNTHETIC_CACHE")).toBeVisible();
+    expect((await screen.findAllByText("Сохранённый объект"))).toHaveLength(2);
     const searchControl = screen.getByLabelText("Поиск исключений");
     const filterControl = screen.getByLabelText("Фильтр по причине");
     const fieldGroup = searchControl.closest('[data-slot="field-group"]');
@@ -92,14 +92,16 @@ describe("вкладка Исключения", () => {
     expect(searchControl.closest('[data-slot="field"]')).not.toBeNull();
     expect(filterControl.closest('[data-slot="field"]')).not.toBeNull();
     expect(filterControl.closest('[data-slot="field-group"]')).toBe(fieldGroup);
-    expect(screen.getAllByText("keep_data").some((item) => item.tagName === "SPAN")).toBe(true);
-    expect(screen.getByText(/2026-07-18T00:00:00.000Z/)).toBeVisible();
+    expect(screen.getAllByText("сохранить данные").some((item) => item.tagName === "SPAN")).toBe(true);
+    expect(screen.getAllByText(/Добавлено:/)).toHaveLength(2);
 
     fireEvent.change(screen.getByLabelText("Поиск исключений"), {
-      target: { value: "LOG" },
+      target: { value: "файл" },
     });
-    expect(screen.queryByText("RULE_SYNTHETIC_CACHE")).not.toBeInTheDocument();
-    expect(screen.getByText("RULE_SYNTHETIC_LOG")).toBeVisible();
+    expect(screen.getAllByText("Сохранённый объект")).toHaveLength(1);
+    expect(
+      screen.getAllByText("объект определён ошибочно").some((item) => item.tagName === "SPAN"),
+    ).toBe(true);
 
     fireEvent.change(screen.getByLabelText("Фильтр по причине"), {
       target: { value: "keep_data" },
@@ -109,9 +111,7 @@ describe("вкладка Исключения", () => {
     fireEvent.change(screen.getByLabelText("Поиск исключений"), {
       target: { value: "" },
     });
-    fireEvent.click(
-      screen.getByRole("button", { name: "Снова проверять: RULE_SYNTHETIC_CACHE" }),
-    );
+    fireEvent.click(screen.getAllByRole("button", { name: "Снова проверять этот объект" })[0]!);
     await waitFor(() =>
       expect(state.callTool).toHaveBeenCalledWith("exclusion_remove", {
         exclusionId: "exclusion-synthetic-cache",
@@ -124,7 +124,7 @@ describe("вкладка Исключения", () => {
     const state = createBridge();
     render(<AuditDashboard snapshot={dashboardFixture} bridge={state.bridge} />);
     fireEvent.click(screen.getByRole("tab", { name: "Исключения" }));
-    await screen.findByText("RULE_SYNTHETIC_CACHE");
+    expect((await screen.findAllByText("Сохранённый объект"))).toHaveLength(2);
 
     fireEvent.click(screen.getByRole("button", { name: "Сбросить все исключения" }));
     await waitFor(() =>

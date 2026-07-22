@@ -7,7 +7,7 @@ import "@/styles.css";
 const root = document.getElementById("root");
 
 if (root === null) {
-  throw new Error("Не найден root для Audit Dashboard.");
+  throw new Error("Не удалось открыть интерфейс проверки Mac.");
 }
 
 createRoot(root).render(
