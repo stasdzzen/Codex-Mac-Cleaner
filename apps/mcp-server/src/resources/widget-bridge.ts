@@ -14,9 +14,12 @@ export interface WidgetViewState {
   readonly skippedFindingIds: readonly string[];
 }
 
+export type WidgetDisplayMode = "inline" | "fullscreen" | "pip";
+
 export interface WidgetBridge {
   callTool<T>(name: string, input: Record<string, unknown>): Promise<T>;
   setViewState(state: WidgetViewState): void;
+  requestDisplayMode?(mode: WidgetDisplayMode): Promise<void>;
 }
 
 interface JsonRpcResponse {
@@ -75,6 +78,15 @@ export function createRequestId(prefix: string): string {
 }
 
 export function createStandaloneBridge(): WidgetBridge {
+  const host = window as unknown as {
+    openai?: {
+      setWidgetState?: (value: WidgetViewState) => void;
+      requestDisplayMode?: (request: {
+        mode: WidgetDisplayMode;
+      }) => Promise<unknown>;
+    };
+  };
+  const requestDisplayMode = host.openai?.requestDisplayMode;
   return {
     callTool<T>(name: string, input: Record<string, unknown>): Promise<T> {
       const id = ++nextRequestId;
@@ -100,10 +112,14 @@ export function createStandaloneBridge(): WidgetBridge {
       });
     },
     setViewState(state: WidgetViewState): void {
-      const host = window as unknown as {
-        openai?: { setWidgetState?: (value: WidgetViewState) => void };
-      };
       host.openai?.setWidgetState?.(state);
     },
+    ...(requestDisplayMode === undefined
+      ? {}
+      : {
+          async requestDisplayMode(mode: WidgetDisplayMode): Promise<void> {
+            await requestDisplayMode.call(host.openai, { mode });
+          },
+        }),
   };
 }

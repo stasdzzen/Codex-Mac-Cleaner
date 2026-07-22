@@ -38,6 +38,7 @@ date: 2026-07-21
 | `REQ-CORR-PRIV-01` | Raw paths/inventory/bundle-package-signing identities/historical bindings/graph/tokens server-only; widget получает safe facts/actions | [Correlation contract](../contracts/correlation-identity.md) | `CMC-20`, `CMC-22`, `CMC-21`, `CMC-09`, `CMC-10` | D, G, H |
 | `REQ-UI-01` | Тёмный shadcn Audit Dashboard с пятью вкладками; «Расписание» в v0.1 только disabled/manual-run | [ADR-0006](../decisions/ADR-0006-dark-shadcn-dashboard.md), [ADR-0009](../decisions/ADR-0009-v01-safety-ux-completion.md), [ADR-0014](../decisions/ADR-0014-defer-host-automation-post-v01.md) | `CMC-08`, `CMC-09`, `CMC-12`, `CMC-10` | G |
 | `REQ-UI-LIVE-01` | Dashboard v2 открывается сразу, показывает server-owned phase/counts и до integer revision не содержит findings/actions | [ADR-0015](../decisions/ADR-0015-live-audit-dashboard-and-shared-inventories.md) | `CMC-26` | G, H |
+| `REQ-UI-DISPLAY-01` | Dashboard остаётся inline по умолчанию; fullscreen/PiP запрашиваются только кнопкой пользователя, отказ хоста безопасен, правая панель не обещается | [Components](../architecture/components.md) | `CMC-32` | G, H |
 | `REQ-AUDIT-PERF-01` | Global inventories снимаются один раз на Snapshot A/B фазу и не умножаются на число кандидатов | [ADR-0015](../decisions/ADR-0015-live-audit-dashboard-and-shared-inventories.md) | `CMC-26` | C, H |
 | `REQ-SKIP-01` | «Пропустить сейчас» — session-local no-op текущей ревизии | [ADR-0011](../decisions/ADR-0011-public-plugin-exclusions-scheduling.md) | `CMC-08`, `CMC-09`, `CMC-10` | G, H |
 | `REQ-FIND-01` | Карточка FindingFacts и честный `ReclaimEstimate` | [Публичный дизайн](../superpowers/specs/2026-07-17-public-plugin-contract-design.md) | `CMC-03`, `CMC-04`, `CMC-08`, `CMC-10` | C, G, H |
@@ -87,6 +88,12 @@ Issue и PR не могут объявить требование выполне
 | `CMC-23` | [#41 — перенос automation после v0.1](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/41) | Закрыта |
 | `CMC-24` | [#44 — запуск MCP из установленного плагина](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/44) | Закрыта |
 | `CMC-25` | [#46 — выпуск v0.1.0-beta.2](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/46) | Закрыта |
-| `CMC-26` | [#48 — живой прогресс и shared inventories](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/48) | `cto:in-progress` |
+| `CMC-26` | [#48 — живой прогресс и shared inventories](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/48) | Закрыта |
+| `CMC-27` | [#50 — выпуск v0.1.0-beta.3](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/50) | Закрыта |
+| `CMC-28` | [#52 — безопасное обновление плагина](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/52) | Закрыта |
+| `CMC-29` | [#54 — выпуск v0.1.0-beta.4](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/54) | Закрыта |
+| `CMC-30` | [#56 — упаковка и открытие Dashboard](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/56) | Закрыта |
+| `CMC-31` | [#58 — выпуск v0.1.0-beta.5](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/58) | Закрыта |
+| `CMC-32` | [#60 — режимы отображения Dashboard](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/60) | `cto:in-progress` |
 
 Operational label не заменяет dependency validation. Источником текущего readiness остаётся GitHub и `issue_contract.py`.

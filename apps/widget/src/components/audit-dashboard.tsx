@@ -6,6 +6,8 @@ import {
   EyeIcon,
   ListFilterIcon,
   LoaderCircleIcon,
+  Maximize2Icon,
+  PictureInPicture2Icon,
   ShieldCheckIcon,
   SkipForwardIcon,
 } from "lucide-react";
@@ -46,6 +48,7 @@ import {
   createRequestId,
   type DashboardTab,
   type WidgetBridge,
+  type WidgetDisplayMode,
   type WidgetViewState,
 } from "@/lib/bridge";
 import type { DashboardFinding, DashboardSnapshot } from "@/lib/dashboard-types";
@@ -81,6 +84,8 @@ export function AuditDashboard({ snapshot, bridge }: AuditDashboardProps) {
   const [acceptedSnapshot, setAcceptedSnapshot] = useState(snapshot);
   const [viewState, setViewState] = useState<WidgetViewState>(INITIAL_VIEW_STATE);
   const [exclusionRefreshKey, setExclusionRefreshKey] = useState(0);
+  const [pendingDisplayMode, setPendingDisplayMode] =
+    useState<WidgetDisplayMode | null>(null);
   const previousRevisionKey = useRef(revisionKey(snapshot));
   const tabRefs = useRef(new Map<DashboardTab, HTMLButtonElement>());
 
@@ -256,6 +261,27 @@ export function AuditDashboard({ snapshot, bridge }: AuditDashboardProps) {
     setExclusionRefreshKey((current) => current + 1);
   }
 
+  async function requestDisplayMode(mode: "fullscreen" | "pip"): Promise<void> {
+    if (bridge.requestDisplayMode === undefined) {
+      toast.error(
+        "Эта версия Codex не поддерживает переключение режима. Dashboard остаётся в чате.",
+      );
+      return;
+    }
+    setPendingDisplayMode(mode);
+    try {
+      await bridge.requestDisplayMode(mode);
+    } catch {
+      toast.error(
+        mode === "pip"
+          ? "Codex не открыл мини-окно. Dashboard остаётся в текущем режиме."
+          : "Codex не развернул Dashboard. Он остаётся в текущем режиме.",
+      );
+    } finally {
+      setPendingDisplayMode(null);
+    }
+  }
+
   return (
     <TooltipProvider>
       <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-5 p-4 sm:p-6">
@@ -265,7 +291,35 @@ export function AuditDashboard({ snapshot, bridge }: AuditDashboardProps) {
             <p className="text-sm text-muted-foreground">Codex Mac Cleaner</p>
             <h1 className="text-2xl font-semibold tracking-tight">Audit Dashboard</h1>
           </div>
-          <Badge variant="outline">stateVersion: {acceptedSnapshot.stateVersion}</Badge>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={pendingDisplayMode !== null}
+              onClick={() => void requestDisplayMode("fullscreen")}
+            >
+              {pendingDisplayMode === "fullscreen" ? (
+                <LoaderCircleIcon className="animate-spin" data-icon="inline-start" />
+              ) : (
+                <Maximize2Icon data-icon="inline-start" />
+              )}
+              Развернуть
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={pendingDisplayMode !== null}
+              onClick={() => void requestDisplayMode("pip")}
+            >
+              {pendingDisplayMode === "pip" ? (
+                <LoaderCircleIcon className="animate-spin" data-icon="inline-start" />
+              ) : (
+                <PictureInPicture2Icon data-icon="inline-start" />
+              )}
+              Мини-окно
+            </Button>
+            <Badge variant="outline">stateVersion: {acceptedSnapshot.stateVersion}</Badge>
+          </div>
         </div>
         <p className="max-w-3xl text-sm text-muted-foreground">
           Локальный read-only аудит. Решения, policy и показатели приходят с сервера;

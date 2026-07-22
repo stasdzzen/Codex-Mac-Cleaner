@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { toast } from "sonner";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AuditDashboard } from "@/components/audit-dashboard";
@@ -14,6 +15,7 @@ import {
 
 function createBridge() {
   let lastViewState: WidgetViewState | null = null;
+  const requestDisplayMode = vi.fn(async () => undefined);
   const callTool = vi.fn(async (name: string, _input: Record<string, unknown>) => {
     if (name === "quarantine_prepare_move") {
       return { previewToken: "preview-synthetic-001" };
@@ -30,8 +32,14 @@ function createBridge() {
     setViewState: vi.fn((state: WidgetViewState) => {
       lastViewState = state;
     }),
+    requestDisplayMode,
   };
-  return { bridge, callTool, getLastViewState: () => lastViewState };
+  return {
+    bridge,
+    callTool,
+    requestDisplayMode,
+    getLastViewState: () => lastViewState,
+  };
 }
 
 afterEach(() => {
@@ -40,6 +48,53 @@ afterEach(() => {
 });
 
 describe("Audit Dashboard contract", () => {
+  it("запрашивает fullscreen и PiP только после отдельного нажатия пользователя", async () => {
+    const { bridge, requestDisplayMode } = createBridge();
+    render(<AuditDashboard snapshot={dashboardFixture} bridge={bridge} />);
+
+    expect(requestDisplayMode).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Развернуть" }));
+    await waitFor(() => expect(requestDisplayMode).toHaveBeenCalledWith("fullscreen"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Мини-окно" }));
+    await waitFor(() => expect(requestDisplayMode).toHaveBeenCalledWith("pip"));
+  });
+
+  it("сохраняет inline Dashboard и объясняет отсутствие display-mode capability", () => {
+    const errorToast = vi.spyOn(toast, "error");
+    const { bridge } = createBridge();
+    const bridgeWithoutDisplayMode: WidgetBridge = {
+      callTool: bridge.callTool,
+      setViewState: bridge.setViewState,
+    };
+
+    render(
+      <AuditDashboard snapshot={dashboardFixture} bridge={bridgeWithoutDisplayMode} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Развернуть" }));
+
+    expect(errorToast).toHaveBeenCalledWith(
+      "Эта версия Codex не поддерживает переключение режима. Dashboard остаётся в чате.",
+    );
+  });
+
+  it("безопасно обрабатывает отказ хоста открыть PiP", async () => {
+    const errorToast = vi.spyOn(toast, "error");
+    const { bridge, requestDisplayMode } = createBridge();
+    vi.mocked(requestDisplayMode).mockRejectedValueOnce(new Error("HOST_REJECTED"));
+
+    render(<AuditDashboard snapshot={dashboardFixture} bridge={bridge} />);
+    fireEvent.click(screen.getByRole("button", { name: "Мини-окно" }));
+
+    await waitFor(() =>
+      expect(errorToast).toHaveBeenCalledWith(
+        "Codex не открыл мини-окно. Dashboard остаётся в текущем режиме.",
+      ),
+    );
+    expect(screen.getByRole("heading", { name: "Audit Dashboard" })).toBeVisible();
+  });
+
   it("показывает пять вкладок, рабочие Исключения и ручной fallback CMC-13", async () => {
     const { bridge, callTool } = createBridge();
     render(<AuditDashboard snapshot={dashboardFixture} bridge={bridge} />);
