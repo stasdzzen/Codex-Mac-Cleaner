@@ -661,7 +661,23 @@ describe("полная интеграция MCP App", () => {
         arguments: { auditId, revision: 1, cursor: null, filters: {} },
       });
       expect(results.isError).not.toBe(true);
-      expect(results.structuredContent).toMatchObject({ auditId, revision: 1, findings: [] });
+      expect(results.structuredContent).toMatchObject({ auditId, revision: 1 });
+      const resultFindings = (
+        results.structuredContent as {
+          findings: Array<{
+            category: string;
+            supportLevel: string;
+            allowedActions: string[];
+          }>;
+        }
+      ).findings;
+      for (const finding of resultFindings) {
+        expect(finding).toMatchObject({
+          category: "unknown",
+          supportLevel: expect.stringMatching(/^(?:analysis_only|unsupported_manual)$/u),
+          allowedActions: ["inspect"],
+        });
+      }
 
       const dashboard = await client.callTool({
         name: "dashboard_open",
@@ -672,7 +688,7 @@ describe("полная интеграция MCP App", () => {
         auditId,
         revision: 1,
         resourceUri: DASHBOARD_RESOURCE_URI,
-        findings: [],
+        findings: resultFindings,
       });
 
       const quarantine = await client.callTool({ name: "quarantine_list", arguments: {} });

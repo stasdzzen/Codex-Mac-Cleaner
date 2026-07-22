@@ -781,6 +781,7 @@ describe("production runtime services", () => {
       homeDirectory,
       stateRoot: join(root, "state"),
       correlation: { commands },
+      diagnostics: { enableProcessInspection: true },
     });
     const started = (await services.auditService?.start({
       requestId: "orphaned-process-diagnostic-request",

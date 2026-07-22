@@ -426,6 +426,7 @@ class RuntimeFileSystemFacade implements FileSystemFacade {
     private readonly currentProjectRoot: string,
     private readonly commands: CommandRunner,
     private readonly systemLibraryRoot: string,
+    private readonly processInspectionEnabled: boolean,
   ) {}
 
   candidate(ref: string): RuntimeCandidate | undefined {
@@ -1075,7 +1076,9 @@ class RuntimeFileSystemFacade implements FileSystemFacade {
       return [...launchAgents, ...launchDaemons];
     }
     if (kind === "orphaned_processes") {
-      return this.missingExecutableProcesses(signal);
+      return this.processInspectionEnabled
+        ? this.missingExecutableProcesses(signal)
+        : [];
     }
     return [];
   }
@@ -1205,7 +1208,7 @@ export interface RuntimeServiceOptions {
   readonly createId?: (prefix: string) => string;
   /** Deterministic tests могут уменьшить deadline; packaged runtime использует 5 минут. */
   readonly auditTimeoutMs?: number;
-  /** Deterministic tests могут переопределить bounded concurrency; packaged runtime использует 4. */
+  /** Deterministic tests могут переопределить bounded concurrency; packaged runtime использует 8. */
   readonly candidateConcurrency?: number;
   /**
    * Низкоуровневые production boundaries для in-process проверки composition.
@@ -1221,6 +1224,7 @@ export interface RuntimeServiceOptions {
   /** Test-only root override; packaged runtime inspects the real /Library read-only. */
   readonly diagnostics?: Readonly<{
     readonly systemLibraryRoot?: string;
+    readonly enableProcessInspection?: boolean;
   }>;
 }
 
@@ -2615,9 +2619,10 @@ export async function createRuntimeCore(
   const currentProjectRoot = await realpath(requestedCurrentProjectRoot);
   const correlationCommands =
     options.correlation?.commands ?? createNodeCommandRunner();
+  const realRuntimeHome = homeDirectory === resolve(homedir());
   const systemLibraryRoot = resolve(
     options.diagnostics?.systemLibraryRoot ??
-      (homeDirectory === resolve(homedir())
+      (realRuntimeHome
         ? "/Library"
         : join(homeDirectory, ".cmc-system-library-unavailable")),
   );
@@ -2627,6 +2632,7 @@ export async function createRuntimeCore(
     currentProjectRoot,
     correlationCommands,
     systemLibraryRoot,
+    options.diagnostics?.enableProcessInspection ?? realRuntimeHome,
   );
   const auditService = new AuditRuntimeService(
     filesystem,
