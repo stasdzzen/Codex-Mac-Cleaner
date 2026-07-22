@@ -3,7 +3,7 @@
   "source": {
     "command": "pnpm licenses list --prod --json",
     "lockfile": "pnpm-lock.yaml",
-    "lockfileSha256": "4634906bc7ef5563674abd95070dc6453557894f75d8f364ebf3f09c46afaa27"
+    "lockfileSha256": "c6f87657e2569da747d8c51ef9969acb57702e0dbec5f042dd47caea614d3eee"
   },
   "compatibilityPolicy": {
     "approvedSpdxLicenses": [
@@ -20,6 +20,33 @@
     }
   },
   "components": [
+    {
+      "bomRef": "pkg:npm/%40babel/runtime@7.29.7",
+      "name": "@babel/runtime",
+      "version": "7.29.7",
+      "license": "MIT",
+      "noticeIds": [
+        "sha256:117da2af0d4ce0fe1c8e19b5cff9dcd806adf973d328d27b11d4448c4ff24f76"
+      ]
+    },
+    {
+      "bomRef": "pkg:npm/%40base-ui/react@1.6.0",
+      "name": "@base-ui/react",
+      "version": "1.6.0",
+      "license": "MIT",
+      "noticeIds": [
+        "sha256:07fc1b39d69d14bc7d40482a628f47226258eb01265db68ae684944b916beb2a"
+      ]
+    },
+    {
+      "bomRef": "pkg:npm/%40base-ui/utils@0.3.1",
+      "name": "@base-ui/utils",
+      "version": "0.3.1",
+      "license": "MIT",
+      "noticeIds": [
+        "sha256:07fc1b39d69d14bc7d40482a628f47226258eb01265db68ae684944b916beb2a"
+      ]
+    },
     {
       "bomRef": "pkg:npm/%40floating-ui/core@1.8.0",
       "name": "@floating-ui/core",
@@ -129,546 +156,6 @@
       ]
     },
     {
-      "bomRef": "pkg:npm/%40radix-ui/number@1.1.2",
-      "name": "@radix-ui/number",
-      "version": "1.1.2",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/primitive@1.1.5",
-      "name": "@radix-ui/primitive",
-      "version": "1.1.5",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/react-accessible-icon@1.1.11",
-      "name": "@radix-ui/react-accessible-icon",
-      "version": "1.1.11",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/react-accordion@1.2.16",
-      "name": "@radix-ui/react-accordion",
-      "version": "1.2.16",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/react-alert-dialog@1.1.19",
-      "name": "@radix-ui/react-alert-dialog",
-      "version": "1.1.19",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/react-arrow@1.1.11",
-      "name": "@radix-ui/react-arrow",
-      "version": "1.1.11",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/react-aspect-ratio@1.1.11",
-      "name": "@radix-ui/react-aspect-ratio",
-      "version": "1.1.11",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/react-avatar@1.2.2",
-      "name": "@radix-ui/react-avatar",
-      "version": "1.2.2",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/react-checkbox@1.3.7",
-      "name": "@radix-ui/react-checkbox",
-      "version": "1.3.7",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/react-collapsible@1.1.16",
-      "name": "@radix-ui/react-collapsible",
-      "version": "1.1.16",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/react-collection@1.1.12",
-      "name": "@radix-ui/react-collection",
-      "version": "1.1.12",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/react-compose-refs@1.1.3",
-      "name": "@radix-ui/react-compose-refs",
-      "version": "1.1.3",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/react-context@1.2.0",
-      "name": "@radix-ui/react-context",
-      "version": "1.2.0",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/react-context-menu@2.3.3",
-      "name": "@radix-ui/react-context-menu",
-      "version": "2.3.3",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/react-dialog@1.1.19",
-      "name": "@radix-ui/react-dialog",
-      "version": "1.1.19",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/react-direction@1.1.2",
-      "name": "@radix-ui/react-direction",
-      "version": "1.1.2",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/react-dismissable-layer@1.1.15",
-      "name": "@radix-ui/react-dismissable-layer",
-      "version": "1.1.15",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/react-dropdown-menu@2.1.20",
-      "name": "@radix-ui/react-dropdown-menu",
-      "version": "2.1.20",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/react-focus-guards@1.1.4",
-      "name": "@radix-ui/react-focus-guards",
-      "version": "1.1.4",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/react-focus-scope@1.1.12",
-      "name": "@radix-ui/react-focus-scope",
-      "version": "1.1.12",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/react-form@0.1.12",
-      "name": "@radix-ui/react-form",
-      "version": "0.1.12",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/react-hover-card@1.1.19",
-      "name": "@radix-ui/react-hover-card",
-      "version": "1.1.19",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/react-id@1.1.2",
-      "name": "@radix-ui/react-id",
-      "version": "1.1.2",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/react-label@2.1.11",
-      "name": "@radix-ui/react-label",
-      "version": "2.1.11",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/react-menu@2.1.20",
-      "name": "@radix-ui/react-menu",
-      "version": "2.1.20",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/react-menubar@1.1.20",
-      "name": "@radix-ui/react-menubar",
-      "version": "1.1.20",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/react-navigation-menu@1.2.18",
-      "name": "@radix-ui/react-navigation-menu",
-      "version": "1.2.18",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/react-one-time-password-field@0.1.12",
-      "name": "@radix-ui/react-one-time-password-field",
-      "version": "0.1.12",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/react-password-toggle-field@0.1.7",
-      "name": "@radix-ui/react-password-toggle-field",
-      "version": "0.1.7",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/react-popover@1.1.19",
-      "name": "@radix-ui/react-popover",
-      "version": "1.1.19",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/react-popper@1.3.3",
-      "name": "@radix-ui/react-popper",
-      "version": "1.3.3",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/react-portal@1.1.13",
-      "name": "@radix-ui/react-portal",
-      "version": "1.1.13",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/react-presence@1.1.7",
-      "name": "@radix-ui/react-presence",
-      "version": "1.1.7",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/react-primitive@2.1.7",
-      "name": "@radix-ui/react-primitive",
-      "version": "2.1.7",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/react-progress@1.1.12",
-      "name": "@radix-ui/react-progress",
-      "version": "1.1.12",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/react-radio-group@1.4.3",
-      "name": "@radix-ui/react-radio-group",
-      "version": "1.4.3",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/react-roving-focus@1.1.15",
-      "name": "@radix-ui/react-roving-focus",
-      "version": "1.1.15",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/react-scroll-area@1.2.14",
-      "name": "@radix-ui/react-scroll-area",
-      "version": "1.2.14",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/react-select@2.3.3",
-      "name": "@radix-ui/react-select",
-      "version": "2.3.3",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/react-separator@1.1.11",
-      "name": "@radix-ui/react-separator",
-      "version": "1.1.11",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/react-slider@1.4.3",
-      "name": "@radix-ui/react-slider",
-      "version": "1.4.3",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/react-slot@1.3.0",
-      "name": "@radix-ui/react-slot",
-      "version": "1.3.0",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/react-switch@1.3.3",
-      "name": "@radix-ui/react-switch",
-      "version": "1.3.3",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/react-tabs@1.1.17",
-      "name": "@radix-ui/react-tabs",
-      "version": "1.1.17",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/react-toast@1.2.19",
-      "name": "@radix-ui/react-toast",
-      "version": "1.2.19",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/react-toggle@1.1.14",
-      "name": "@radix-ui/react-toggle",
-      "version": "1.1.14",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/react-toggle-group@1.1.15",
-      "name": "@radix-ui/react-toggle-group",
-      "version": "1.1.15",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/react-toolbar@1.1.15",
-      "name": "@radix-ui/react-toolbar",
-      "version": "1.1.15",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/react-tooltip@1.2.12",
-      "name": "@radix-ui/react-tooltip",
-      "version": "1.2.12",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/react-use-callback-ref@1.1.2",
-      "name": "@radix-ui/react-use-callback-ref",
-      "version": "1.1.2",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/react-use-controllable-state@1.2.3",
-      "name": "@radix-ui/react-use-controllable-state",
-      "version": "1.2.3",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/react-use-effect-event@0.0.3",
-      "name": "@radix-ui/react-use-effect-event",
-      "version": "0.0.3",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/react-use-escape-keydown@1.1.3",
-      "name": "@radix-ui/react-use-escape-keydown",
-      "version": "1.1.3",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/react-use-is-hydrated@0.1.1",
-      "name": "@radix-ui/react-use-is-hydrated",
-      "version": "0.1.1",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/react-use-layout-effect@1.1.2",
-      "name": "@radix-ui/react-use-layout-effect",
-      "version": "1.1.2",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/react-use-previous@1.1.2",
-      "name": "@radix-ui/react-use-previous",
-      "version": "1.1.2",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/react-use-rect@1.1.2",
-      "name": "@radix-ui/react-use-rect",
-      "version": "1.1.2",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/react-use-size@1.1.2",
-      "name": "@radix-ui/react-use-size",
-      "version": "1.1.2",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/react-visually-hidden@1.2.7",
-      "name": "@radix-ui/react-visually-hidden",
-      "version": "1.2.7",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/%40radix-ui/rect@1.1.2",
-      "name": "@radix-ui/rect",
-      "version": "1.1.2",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
       "bomRef": "pkg:npm/%40rolldown/binding-darwin-arm64@1.1.5",
       "name": "@rolldown/binding-darwin-arm64",
       "version": "1.1.5",
@@ -741,15 +228,6 @@
       ]
     },
     {
-      "bomRef": "pkg:npm/%40types/react-dom@19.2.3",
-      "name": "@types/react-dom",
-      "version": "19.2.3",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
-      ]
-    },
-    {
       "bomRef": "pkg:npm/accepts@2.0.0",
       "name": "accepts",
       "version": "2.0.0",
@@ -774,15 +252,6 @@
       "license": "MIT",
       "noticeIds": [
         "sha256:9df3bb69929a3b650ed73b3bfa1756725aaff0ac296461605753547004eafeaf"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/aria-hidden@1.2.6",
-      "name": "aria-hidden",
-      "version": "1.2.6",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:30f0cfddf483d1128e3610205020f2041a6c5e837aa999e0aa82e5576187d4a9"
       ]
     },
     {
@@ -936,15 +405,6 @@
       "license": "Apache-2.0",
       "noticeIds": [
         "sha256:b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/detect-node-es@1.1.0",
-      "name": "detect-node-es",
-      "version": "1.1.0",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:54b32293ea560d22cd9b62af9b2cda1a030d910a48c6601d227c5ff2338d95f8"
       ]
     },
     {
@@ -1143,15 +603,6 @@
       "license": "MIT",
       "noticeIds": [
         "sha256:39c5ec504cf6bd5cd782a7c695828e09189df79f5d94840e4f08feb97b9fd416"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/get-nonce@1.0.1",
-      "name": "get-nonce",
-      "version": "1.0.1",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:acf3b087b348d2f2e731b9d4131af185aad694c1204ce14a46909483fd42da05"
       ]
     },
     {
@@ -1533,15 +984,6 @@
       ]
     },
     {
-      "bomRef": "pkg:npm/radix-ui@1.6.2",
-      "name": "radix-ui",
-      "version": "1.6.2",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
-      ]
-    },
-    {
       "bomRef": "pkg:npm/range-parser@1.3.0",
       "name": "range-parser",
       "version": "1.3.0",
@@ -1578,39 +1020,21 @@
       ]
     },
     {
-      "bomRef": "pkg:npm/react-remove-scroll@2.7.2",
-      "name": "react-remove-scroll",
-      "version": "2.7.2",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:30f0cfddf483d1128e3610205020f2041a6c5e837aa999e0aa82e5576187d4a9"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/react-remove-scroll-bar@2.3.8",
-      "name": "react-remove-scroll-bar",
-      "version": "2.3.8",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:30f0cfddf483d1128e3610205020f2041a6c5e837aa999e0aa82e5576187d4a9"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/react-style-singleton@2.2.3",
-      "name": "react-style-singleton",
-      "version": "2.2.3",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:30f0cfddf483d1128e3610205020f2041a6c5e837aa999e0aa82e5576187d4a9"
-      ]
-    },
-    {
       "bomRef": "pkg:npm/require-from-string@2.0.2",
       "name": "require-from-string",
       "version": "2.0.2",
       "license": "MIT",
       "noticeIds": [
         "sha256:6ee0feb1f6ef996ff5a68600f8cf98909cf412d39ef3cdceaefd87d636fa1b7f"
+      ]
+    },
+    {
+      "bomRef": "pkg:npm/reselect@5.2.0",
+      "name": "reselect",
+      "version": "5.2.0",
+      "license": "MIT",
+      "noticeIds": [
+        "sha256:e98047a5dee068b33f82e8c4b7a63037b5108c93393198efd4097753004af5dd"
       ]
     },
     {
@@ -1848,21 +1272,12 @@
       ]
     },
     {
-      "bomRef": "pkg:npm/use-callback-ref@1.3.3",
-      "name": "use-callback-ref",
-      "version": "1.3.3",
+      "bomRef": "pkg:npm/use-sync-external-store@1.6.0",
+      "name": "use-sync-external-store",
+      "version": "1.6.0",
       "license": "MIT",
       "noticeIds": [
-        "sha256:30f0cfddf483d1128e3610205020f2041a6c5e837aa999e0aa82e5576187d4a9"
-      ]
-    },
-    {
-      "bomRef": "pkg:npm/use-sidecar@1.1.3",
-      "name": "use-sidecar",
-      "version": "1.1.3",
-      "license": "MIT",
-      "noticeIds": [
-        "sha256:30f0cfddf483d1128e3610205020f2041a6c5e837aa999e0aa82e5576187d4a9"
+        "sha256:da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93"
       ]
     },
     {
@@ -1930,6 +1345,14 @@
       "text": "MIT License\n\nCopyright (c) 2025 Wombosvideo\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n"
     },
     {
+      "id": "sha256:07fc1b39d69d14bc7d40482a628f47226258eb01265db68ae684944b916beb2a",
+      "sha256": "07fc1b39d69d14bc7d40482a628f47226258eb01265db68ae684944b916beb2a",
+      "fileNames": [
+        "LICENSE"
+      ],
+      "text": "MIT License\n\nCopyright (c) 2019 Material-UI SAS\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n"
+    },
+    {
       "id": "sha256:0ccbf956cffc8dcf515809433cb5242ee67c94513d46e48c261d68d0880de406",
       "sha256": "0ccbf956cffc8dcf515809433cb5242ee67c94513d46e48c261d68d0880de406",
       "fileNames": [
@@ -1954,12 +1377,12 @@
       "text": "MIT License\n\nCopyright (c) 2021-present Floating UI contributors\n\nPermission is hereby granted, free of charge, to any person obtaining a copy of\nthis software and associated documentation files (the \"Software\"), to deal in\nthe Software without restriction, including without limitation the rights to\nuse, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of\nthe Software, and to permit persons to whom the Software is furnished to do so,\nsubject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS\nFOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR\nCOPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER\nIN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN\nCONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.\n"
     },
     {
-      "id": "sha256:0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138",
-      "sha256": "0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138",
+      "id": "sha256:117da2af0d4ce0fe1c8e19b5cff9dcd806adf973d328d27b11d4448c4ff24f76",
+      "sha256": "117da2af0d4ce0fe1c8e19b5cff9dcd806adf973d328d27b11d4448c4ff24f76",
       "fileNames": [
         "LICENSE"
       ],
-      "text": "MIT License\n\nCopyright (c) 2022 WorkOS\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n"
+      "text": "MIT License\n\nCopyright (c) 2014-present Sebastian McKenzie and other contributors\n\nPermission is hereby granted, free of charge, to any person obtaining\na copy of this software and associated documentation files (the\n\"Software\"), to deal in the Software without restriction, including\nwithout limitation the rights to use, copy, modify, merge, publish,\ndistribute, sublicense, and/or sell copies of the Software, and to\npermit persons to whom the Software is furnished to do so, subject to\nthe following conditions:\n\nThe above copyright notice and this permission notice shall be\nincluded in all copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND,\nEXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF\nMERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND\nNONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE\nLIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION\nOF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION\nWITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.\n"
     },
     {
       "id": "sha256:11d017c3b9f1ee3f44caf7203035f0461d5b57e0db8ce1bc03a9af34fa7d3f6b",
@@ -2106,14 +1529,6 @@
       "text": "MIT License\n\nCopyright (c) 2024 ECMAScript Shims\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n"
     },
     {
-      "id": "sha256:30f0cfddf483d1128e3610205020f2041a6c5e837aa999e0aa82e5576187d4a9",
-      "sha256": "30f0cfddf483d1128e3610205020f2041a6c5e837aa999e0aa82e5576187d4a9",
-      "fileNames": [
-        "LICENSE"
-      ],
-      "text": "MIT License\n\nCopyright (c) 2017 Anton Korzunov\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n"
-    },
-    {
       "id": "sha256:37876d7de8bdf5e5b9b58a697ebc34044624e493e6f49eff5c938e5226dcac6b",
       "sha256": "37876d7de8bdf5e5b9b58a697ebc34044624e493e6f49eff5c938e5226dcac6b",
       "fileNames": [
@@ -2192,14 +1607,6 @@
         "LICENSE"
       ],
       "text": "\nThe MIT License (MIT)\n\nCopyright (c) 2014 Jonathan Ong <me@jongleberry.com>\nCopyright (c) 2016 Douglas Christopher Wilson <doug@somethingdoug.com>\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in\nall copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\nTHE SOFTWARE.\n"
-    },
-    {
-      "id": "sha256:54b32293ea560d22cd9b62af9b2cda1a030d910a48c6601d227c5ff2338d95f8",
-      "sha256": "54b32293ea560d22cd9b62af9b2cda1a030d910a48c6601d227c5ff2338d95f8",
-      "fileNames": [
-        "LICENSE"
-      ],
-      "text": "MIT License\n\nCopyright (c) 2017 Ilya Kantor\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n"
     },
     {
       "id": "sha256:553d4d20029a24e315b428a1a54a9e109eaa340f2e958a4f50a92362c2c4070b",
@@ -2554,14 +1961,6 @@
       "text": "The MIT License (MIT)\n\nCopyright (c) 2018 Made With MOXY Lda <hello@moxy.studio>\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in\nall copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\nTHE SOFTWARE.\n"
     },
     {
-      "id": "sha256:acf3b087b348d2f2e731b9d4131af185aad694c1204ce14a46909483fd42da05",
-      "sha256": "acf3b087b348d2f2e731b9d4131af185aad694c1204ce14a46909483fd42da05",
-      "fileNames": [
-        "LICENSE"
-      ],
-      "text": "MIT License\n\nCopyright (c) 2020 Anton Korzunov\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n"
-    },
-    {
       "id": "sha256:b1d741c26b53de1bbc0d4d7d3365b79888f9fe511527544a8a7b8e24dec43147",
       "sha256": "b1d741c26b53de1bbc0d4d7d3365b79888f9fe511527544a8a7b8e24dec43147",
       "fileNames": [
@@ -2744,6 +2143,14 @@
         "LICENSE.md"
       ],
       "text": "BSD 3-Clause License\n\nCopyright (c) 2014, Nathan LaFreniere and other [contributors](https://github.com/ljharb/qs/graphs/contributors)\nAll rights reserved.\n\nRedistribution and use in source and binary forms, with or without\nmodification, are permitted provided that the following conditions are met:\n\n1. Redistributions of source code must retain the above copyright notice, this\n   list of conditions and the following disclaimer.\n\n2. Redistributions in binary form must reproduce the above copyright notice,\n   this list of conditions and the following disclaimer in the documentation\n   and/or other materials provided with the distribution.\n\n3. Neither the name of the copyright holder nor the names of its\n   contributors may be used to endorse or promote products derived from\n   this software without specific prior written permission.\n\nTHIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\"\nAND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE\nIMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE\nDISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE\nFOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL\nDAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR\nSERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER\nCAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,\nOR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE\nOF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n"
+    },
+    {
+      "id": "sha256:e98047a5dee068b33f82e8c4b7a63037b5108c93393198efd4097753004af5dd",
+      "sha256": "e98047a5dee068b33f82e8c4b7a63037b5108c93393198efd4097753004af5dd",
+      "fileNames": [
+        "LICENSE"
+      ],
+      "text": "The MIT License (MIT)\n\nCopyright (c) 2015-2018 Reselect Contributors\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n"
     },
     {
       "id": "sha256:f655e6291356ec0de7a8f0e69f294961a2cea86678ec94588be1e6a492e278ab",

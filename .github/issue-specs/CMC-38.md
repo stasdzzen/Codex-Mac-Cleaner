@@ -2,7 +2,7 @@
 schema: 1
 dependencies: #70
 conflicts: none
-touched_paths: .github/issue-specs/; .codex-plugin/; apps/widget/; assets/; README.md; docs/product/requirements-traceability.md; scripts/; skills/; tests/plugin/
+touched_paths: .github/issue-specs/; .codex-plugin/; apps/mcp-server/src/resources/; apps/mcp-server/test/; apps/widget/; assets/; README.md; docs/architecture/components.md; docs/product/requirements-traceability.md; scripts/; skills/; tests/plugin/
 risk: medium
 parallel_safety: serial
 execution_profile: default

@@ -518,7 +518,7 @@ describe("полная интеграция MCP App", () => {
     expect(html).not.toMatch(
       /audit-public-synthetic|finding-public-synthetic|quarantine-public-synthetic/,
     );
-    expect(html).toContain("Ожидание безопасного snapshot");
+    expect(html).toContain("Ожидание результатов");
   });
 
   it("не выпускает core preview secret в source или compiled package", async () => {
