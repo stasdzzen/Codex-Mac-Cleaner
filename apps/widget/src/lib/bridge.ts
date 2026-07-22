@@ -14,9 +14,12 @@ export interface WidgetViewState {
   readonly skippedFindingIds: readonly string[];
 }
 
+export type WidgetDisplayMode = "inline" | "fullscreen" | "pip";
+
 export interface WidgetBridge {
   callTool<T>(name: string, input: Record<string, unknown>): Promise<T>;
   setViewState(state: WidgetViewState): void;
+  requestDisplayMode?(mode: WidgetDisplayMode): Promise<void>;
 }
 
 export function acceptSnapshot(
@@ -34,10 +37,25 @@ export function createRequestId(prefix: string): string {
 }
 
 export function createStandaloneBridge(): WidgetBridge {
+  const host = window as unknown as {
+    openai?: {
+      requestDisplayMode?: (request: {
+        mode: WidgetDisplayMode;
+      }) => Promise<unknown>;
+    };
+  };
+  const requestDisplayMode = host.openai?.requestDisplayMode;
   return {
     async callTool<T>(): Promise<T> {
       throw new Error("Подключение MCP App tools будет добавлено в CMC-09.");
     },
     setViewState(): void {},
+    ...(requestDisplayMode === undefined
+      ? {}
+      : {
+          async requestDisplayMode(mode: WidgetDisplayMode): Promise<void> {
+            await requestDisplayMode.call(host.openai, { mode });
+          },
+        }),
   };
 }
