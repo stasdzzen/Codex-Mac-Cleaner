@@ -70,7 +70,7 @@ describe("repository marketplace plugin", () => {
     expect(skill).toMatch(/profile[^\n]*application_remnants/i);
     expect(skill).toMatch(/dashboard_open/i);
     expect(skill).toMatch(/audit_cancel[^\n]*явн/i);
-    expect(skill).toMatch(/клик[^\n]*(?:подтверж|одн)|подтверж[^\n]*клик/i);
+    expect(skill).toMatch(/нажати[^\n]*кнопк[^\n]*(?:подтверж|одн)/i);
     expect(skill).not.toMatch(/```(?:bash|sh|zsh|shell)|\bsudo\b|\brm\s+-|launchctl|готово[»"]?/i);
     expect(skill).not.toMatch(
       /quarantine_(?:prepare|move|restore|purge|list)|exclusion_(?:create|list|remove|reset)|schedule_request|schedule_state/i,
@@ -127,9 +127,9 @@ describe("repository marketplace plugin", () => {
     expect(skill).toMatch(/явн[^\n]*запрос|явн[^\n]*тег/i);
     expect(skill).toMatch(/node[^\n]*codex-mac-cleaner-update\.mjs[^\n]*--json/i);
     expect(skill).toMatch(/точн[^\n]*тег/i);
-    expect(skill).toMatch(/rollback/i);
+    expect(skill).toMatch(/откат|восстановлен[\s\S]{0,80}верс/i);
     expect(skill).toMatch(/не[^\n]*latest/i);
-    expect(skill).toMatch(/не вызывает `codex plugin remove`/i);
+    expect(skill).toMatch(/не удаляет[\s\S]{0,40}плагин/i);
   });
 
   it("публикует единый адрес поддержки и GitHub Ideas", async () => {

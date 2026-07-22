@@ -30,12 +30,12 @@ describe("CMC-10: clean-room/new-task no-terminal contract", () => {
     );
     const source = sources.join("\n");
     for (const label of [
-      "Переместить в карантин",
+      "В карантин",
       "Исключить",
       "Пропустить сейчас",
       "Восстановить",
       "Удалить навсегда",
-      "Запустить аудит вручную",
+      "Проверить сейчас",
     ]) {
       expect(source).toContain(label);
     }
