@@ -21,6 +21,7 @@
 * [ADR-0015: живой Dashboard и shared inventories аудита](ADR-0015-live-audit-dashboard-and-shared-inventories.md)
 * [ADR-0016: только fullscreen для расширенного отображения Dashboard](ADR-0016-fullscreen-only-dashboard-display.md)
 * [ADR-0017: подвал Dashboard и host-mediated ссылки проекта](ADR-0017-dashboard-community-footer.md)
+* [ADR-0018: пропускная способность Real-Mac аудита и безопасная диагностика автозапуска](ADR-0018-real-mac-audit-throughput-and-diagnostics.md)
 
 ## Правило изменения
 

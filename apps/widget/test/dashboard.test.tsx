@@ -208,7 +208,7 @@ describe("Audit Dashboard contract", () => {
     expect(within(sheet).getByText("Риск: high")).toBeVisible();
     expect(within(sheet).getByText("Действие недоступно: POLICY_RISK_CATEGORY")).toBeVisible();
     expect(within(sheet).getByText("Обнаружены признаки пользовательской базы данных.")).toBeVisible();
-    expect(within(sheet).getByText(/Оценка освобождения: 262 144 байт/)).toBeVisible();
+    expect(within(sheet).getByText(/Оценка освобождения: 0,26 МБ/)).toBeVisible();
     expect(within(sheet).getByText("Оценка наблюдалась: 2026-07-18T09:59:00.000Z")).toBeVisible();
     expect(within(sheet).getByText(/snapshot estimate/)).toBeVisible();
     expect(within(sheet).getByText("Вход правила: data_kind")).toBeVisible();

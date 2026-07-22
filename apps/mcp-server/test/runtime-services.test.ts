@@ -427,7 +427,7 @@ describe("production runtime services", () => {
     });
   });
 
-  it("обрабатывает большой snapshot с bounded concurrency и сохраняет порядок findings", async () => {
+  it("обрабатывает большой snapshot с production concurrency восемь и сохраняет порядок findings", async () => {
     const root = await mkdtemp(join(tmpdir(), "cmc-runtime-bounded-audit-"));
     roots.push(root);
     const homeDirectory = join(root, "home");
@@ -458,8 +458,8 @@ describe("production runtime services", () => {
         activeFileInfo += 1;
         maxActiveFileInfo = Math.max(maxActiveFileInfo, activeFileInfo);
         try {
-          if (fileInfoCount <= 2) {
-            if (fileInfoCount === 2) releaseInitialFileInfo?.();
+          if (fileInfoCount <= 8) {
+            if (fileInfoCount === 8) releaseInitialFileInfo?.();
             await initialFileInfoGate;
           }
           signal.throwIfAborted();
@@ -495,7 +495,6 @@ describe("production runtime services", () => {
       homeDirectory,
       stateRoot: join(root, "state"),
       auditTimeoutMs: 2_000,
-      candidateConcurrency: 4,
       correlation: {
         commands: createCommandRunner(executor),
         filesystem,
@@ -527,8 +526,7 @@ describe("production runtime services", () => {
     }
 
     expect(state).toMatch(/^completed(?:_with_warnings)?$/u);
-    expect(maxActiveFileInfo).toBeGreaterThanOrEqual(2);
-    expect(maxActiveFileInfo).toBeLessThanOrEqual(4);
+    expect(maxActiveFileInfo).toBe(8);
     expect(packageInventoryCount).toBe(2);
     expect(fileInfoCount).toBe(16);
     const results = await services.auditService?.results({
@@ -550,6 +548,301 @@ describe("production runtime services", () => {
         return `Объект кэша ${publicSuffix}`;
       }),
     );
+    const dashboard = await services.auditService?.dashboard({
+      auditId: started.auditId,
+      revision: 1,
+    });
+    const widgetNames = (dashboard as unknown as {
+      meta: { dashboard: { findings: Array<{ componentDisplayName: string }> } };
+    }).meta.dashboard.findings.map(({ componentDisplayName }) => componentDisplayName);
+    expect(widgetNames).toEqual(discoveredNames);
+    expect(JSON.stringify(dashboard)).not.toContain(canonicalCacheRoot);
+  });
+
+  it("укладывает наблюдаемую Real-Mac стоимость 2 766 candidates в прежние пять минут", () => {
+    const candidateCount = 2_766;
+    const observedWorkerCostMs = Math.ceil((300_000 * 4) / 2_016);
+
+    expect(Math.ceil((candidateCount * observedWorkerCostMs) / 4)).toBeGreaterThan(300_000);
+    expect(Math.ceil((candidateCount * observedWorkerCostMs) / 8)).toBeLessThan(300_000);
+  });
+
+  it("показывает missing-target user LaunchAgent только как app-visible read-only diagnostic", async () => {
+    const root = await mkdtemp(join(tmpdir(), "cmc-runtime-autostart-diagnostic-"));
+    roots.push(root);
+    const homeDirectory = join(root, "home");
+    const launchAgentsRoot = join(homeDirectory, "Library", "LaunchAgents");
+    const launchAgentName = "org.example.synthetic-orphan.plist";
+    const launchAgentPath = join(launchAgentsRoot, launchAgentName);
+    const missingTarget = join(root, "missing", "Synthetic Helper");
+    await mkdir(launchAgentsRoot, { recursive: true });
+    await writeFile(launchAgentPath, "synthetic plist payload", "utf8");
+    const canonicalLaunchAgentPath = await realpath(launchAgentPath);
+    let plutilCalls = 0;
+    const commands = createCommandRunner(async (executable, argv, { signal }) => {
+      signal.throwIfAborted();
+      if (executable === "/usr/bin/plutil" && argv.at(-1) === canonicalLaunchAgentPath) {
+        plutilCalls += 1;
+        return {
+          stdout: JSON.stringify({ Program: missingTarget }),
+          stderr: "",
+          exitCode: 0,
+        };
+      }
+      return { stdout: "", stderr: "", exitCode: 0 };
+    });
+    const services = await createDefaultRuntimeServices({
+      homeDirectory,
+      stateRoot: join(root, "state"),
+      correlation: { commands },
+    });
+    const started = (await services.auditService?.start({
+      requestId: "autostart-diagnostic-request",
+      profile: "application_remnants",
+    })) as { auditId: string };
+
+    let state = "queued";
+    for (let attempt = 0; attempt < 200; attempt += 1) {
+      state = ((await services.auditService?.status({ auditId: started.auditId })) as {
+        state: string;
+      }).state;
+      if (state === "completed" || state === "completed_with_warnings") break;
+      if (state === "failed" || state === "cancelled") break;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    expect(state).toMatch(/^completed(?:_with_warnings)?$/u);
+
+    const results = await services.auditService?.results({
+      auditId: started.auditId,
+      revision: 1,
+      cursor: null,
+      filters: {},
+    });
+    expect(plutilCalls).toBe(1);
+    const modelFindings = (results as {
+      findings: Array<{
+        displayName: string;
+        category: string;
+        supportLevel: string;
+        allowedActions: string[];
+      }>;
+    }).findings;
+    expect(modelFindings).toEqual([
+      expect.objectContaining({
+        displayName: "Запись автозапуска с отсутствующим target",
+        category: "autostart",
+        supportLevel: "analysis_only",
+        allowedActions: ["inspect"],
+      }),
+    ]);
+    expect(JSON.stringify(results)).not.toContain(launchAgentName);
+    expect(JSON.stringify(results)).not.toContain(root);
+
+    const dashboard = await services.auditService?.dashboard({
+      auditId: started.auditId,
+      revision: 1,
+    });
+    const widgetFinding = (dashboard as unknown as {
+      meta: {
+        dashboard: {
+          findings: Array<{
+            componentDisplayName: string;
+            findingFacts: {
+              startupKinds: string[];
+              targetExecutableState: string;
+            };
+          }>;
+        };
+      };
+    }).meta.dashboard.findings[0];
+    expect(widgetFinding).toMatchObject({
+      componentDisplayName: launchAgentName,
+      findingFacts: {
+        startupKinds: ["launch_agent"],
+        targetExecutableState: "absent",
+      },
+    });
+    expect(JSON.stringify(dashboard)).not.toContain(root);
+  });
+
+  it("показывает missing-target system LaunchDaemon только как unsupported-manual diagnostic", async () => {
+    const root = await mkdtemp(join(tmpdir(), "cmc-runtime-system-autostart-diagnostic-"));
+    roots.push(root);
+    const homeDirectory = join(root, "home");
+    const systemLibraryRoot = join(root, "system-library");
+    const launchDaemonsRoot = join(systemLibraryRoot, "LaunchDaemons");
+    const launchDaemonName = "org.example.synthetic-system-orphan.plist";
+    const launchDaemonPath = join(launchDaemonsRoot, launchDaemonName);
+    const missingTarget = join(root, "missing", "Synthetic Privileged Helper");
+    await mkdir(homeDirectory, { recursive: true });
+    await mkdir(launchDaemonsRoot, { recursive: true });
+    await writeFile(launchDaemonPath, "synthetic plist payload", "utf8");
+    const commands = createCommandRunner(async (executable, argv, { signal }) => {
+      signal.throwIfAborted();
+      if (executable === "/usr/bin/plutil" && argv.at(-1) === launchDaemonPath) {
+        return {
+          stdout: JSON.stringify({ ProgramArguments: [missingTarget, "--background"] }),
+          stderr: "",
+          exitCode: 0,
+        };
+      }
+      return { stdout: "", stderr: "", exitCode: 0 };
+    });
+    const services = await createDefaultRuntimeServices({
+      homeDirectory,
+      stateRoot: join(root, "state"),
+      correlation: { commands },
+      diagnostics: { systemLibraryRoot },
+    });
+    const started = (await services.auditService?.start({
+      requestId: "system-autostart-diagnostic-request",
+      profile: "application_remnants",
+    })) as { auditId: string };
+
+    let state = "queued";
+    for (let attempt = 0; attempt < 200; attempt += 1) {
+      state = ((await services.auditService?.status({ auditId: started.auditId })) as {
+        state: string;
+      }).state;
+      if (state === "completed" || state === "completed_with_warnings") break;
+      if (state === "failed" || state === "cancelled") break;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    expect(state).toMatch(/^completed(?:_with_warnings)?$/u);
+
+    const results = await services.auditService?.results({
+      auditId: started.auditId,
+      revision: 1,
+      cursor: null,
+      filters: {},
+    });
+    expect((results as { findings: unknown[] }).findings).toEqual([
+      expect.objectContaining({
+        displayName: "Системная запись автозапуска с отсутствующим target",
+        category: "autostart",
+        supportLevel: "unsupported_manual",
+        allowedActions: ["inspect"],
+      }),
+    ]);
+    expect(JSON.stringify(results)).not.toContain(launchDaemonName);
+    expect(JSON.stringify(results)).not.toContain(root);
+
+    const dashboard = await services.auditService?.dashboard({
+      auditId: started.auditId,
+      revision: 1,
+    });
+    const widgetFinding = (dashboard as unknown as {
+      meta: {
+        dashboard: {
+          findings: Array<{
+            componentDisplayName: string;
+            allowedActions: string[];
+            findingFacts: {
+              startupKinds: string[];
+              targetExecutableState: string;
+            };
+          }>;
+        };
+      };
+    }).meta.dashboard.findings[0];
+    expect(widgetFinding).toMatchObject({
+      componentDisplayName: launchDaemonName,
+      allowedActions: ["inspect"],
+      findingFacts: {
+        startupKinds: ["launch_daemon"],
+        targetExecutableState: "absent",
+      },
+    });
+    expect(JSON.stringify(dashboard)).not.toContain(root);
+  });
+
+  it("показывает активный user process с отсутствующим executable только как diagnostic", async () => {
+    const root = await mkdtemp(join(tmpdir(), "cmc-runtime-orphaned-process-diagnostic-"));
+    roots.push(root);
+    const homeDirectory = join(root, "home");
+    const missingExecutable = join(root, "Deleted App.app", "Contents", "MacOS", "Deleted Helper");
+    const executableName = "Deleted Helper";
+    await mkdir(homeDirectory, { recursive: true });
+    const commands = createCommandRunner(async (executable, argv, { signal }) => {
+      signal.throwIfAborted();
+      if (
+        executable === "/bin/ps" &&
+        argv.join(" ") === "-axo pid=,uid=,comm="
+      ) {
+        return {
+          stdout: `481  ${process.getuid?.() ?? 501} ${missingExecutable}\n`,
+          stderr: "",
+          exitCode: 0,
+        };
+      }
+      return { stdout: "", stderr: "", exitCode: 0 };
+    });
+    const services = await createDefaultRuntimeServices({
+      homeDirectory,
+      stateRoot: join(root, "state"),
+      correlation: { commands },
+      diagnostics: { enableProcessInspection: true },
+    });
+    const started = (await services.auditService?.start({
+      requestId: "orphaned-process-diagnostic-request",
+      profile: "application_remnants",
+    })) as { auditId: string };
+
+    let state = "queued";
+    for (let attempt = 0; attempt < 200; attempt += 1) {
+      state = ((await services.auditService?.status({ auditId: started.auditId })) as {
+        state: string;
+      }).state;
+      if (state === "completed" || state === "completed_with_warnings") break;
+      if (state === "failed" || state === "cancelled") break;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    expect(state).toMatch(/^completed(?:_with_warnings)?$/u);
+
+    const results = await services.auditService?.results({
+      auditId: started.auditId,
+      revision: 1,
+      cursor: null,
+      filters: {},
+    });
+    expect((results as { findings: unknown[] }).findings).toEqual([
+      expect.objectContaining({
+        displayName: "Активный процесс с отсутствующим executable",
+        category: "unknown",
+        supportLevel: "analysis_only",
+        allowedActions: ["inspect"],
+      }),
+    ]);
+    expect(JSON.stringify(results)).not.toContain(executableName);
+    expect(JSON.stringify(results)).not.toContain(root);
+
+    const dashboard = await services.auditService?.dashboard({
+      auditId: started.auditId,
+      revision: 1,
+    });
+    const widgetFinding = (dashboard as unknown as {
+      meta: {
+        dashboard: {
+          findings: Array<{
+            componentDisplayName: string;
+            allowedActions: string[];
+            findingFacts: {
+              activityState: string;
+              targetExecutableState: string;
+            };
+          }>;
+        };
+      };
+    }).meta.dashboard.findings[0];
+    expect(widgetFinding).toMatchObject({
+      componentDisplayName: executableName,
+      allowedActions: ["inspect"],
+      findingFacts: {
+        activityState: "present",
+        targetExecutableState: "absent",
+      },
+    });
+    expect(JSON.stringify(dashboard)).not.toContain(root);
   });
 
   it("отменяет все concurrent candidate workers общим audit signal", async () => {

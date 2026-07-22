@@ -4,6 +4,7 @@ import {
   createAutostartAdapter,
   createFilesystemMetadataAdapter,
   createInspectionOnlyAdapter,
+  createOrphanedProcessAdapter,
   createProtectedContainerAdapter,
   createReceiptsAdapter,
   type TargetedRecord,
@@ -59,6 +60,31 @@ describe("Targeted read-only adapters", () => {
       allowedActions: ["inspect"],
     });
     expect(JSON.stringify(result)).not.toMatch(/sudo|\brm\b|launchctl|tccutil/i);
+  });
+
+  it("оставляет процесс с отсутствующим executable только read-only diagnostic", async () => {
+    const filesystem = new SyntheticFileSystem({}, {
+      orphaned_processes: [
+        record({ kind: "service", recommendedMethod: "inspect_only" }),
+        record({ kind: "service", recommendedMethod: "advanced_mode" }),
+      ],
+    });
+    const result = await createOrphanedProcessAdapter(filesystem).scan({
+      signal: new AbortController().signal,
+    });
+
+    expect(result.observations).toEqual([
+      expect.objectContaining({
+        evidenceKind: "process_activity",
+        supportLevel: "analysis_only",
+        allowedActions: ["inspect"],
+      }),
+      expect.objectContaining({
+        evidenceKind: "process_activity",
+        supportLevel: "unsupported_manual",
+        allowedActions: ["inspect"],
+      }),
+    ]);
   });
 
   it("возвращает filesystem/APFS/Time Machine observations без causal claim", async () => {

@@ -70,7 +70,7 @@ describe("CMC-10: model-safe privacy boundary", () => {
     expect(ModelSafeTextSchema.parse(value)).toBe(value);
   });
 
-  it("не переносит raw basename через production audit, results и widget hydration", async () => {
+  it("оставляет basename model-private и допускает в widget только безопасное имя", async () => {
     const temporaryRoot = await mkdtemp(join(tmpdir(), "cmc-privacy-production-"));
     const homeDirectory = join(temporaryRoot, "home");
     const cacheRoot = join(homeDirectory, "Library", "Caches");
@@ -123,12 +123,16 @@ describe("CMC-10: model-safe privacy boundary", () => {
     });
     try {
       const { results, dashboard } = await completedAudit(services.auditService);
-      const publicPayload = JSON.stringify({
+      const modelPayload = JSON.stringify({
         results: results.structuredContent,
         modelContent: results.content,
-        widgetMeta: dashboard._meta,
       });
-      for (const rawName of rawNames) expect(publicPayload).not.toContain(rawName);
+      const widgetPayload = JSON.stringify(dashboard._meta);
+      for (const rawName of rawNames) expect(modelPayload).not.toContain(rawName);
+      for (const secretLikeName of rawNames.slice(0, 3)) {
+        expect(widgetPayload).not.toContain(secretLikeName);
+      }
+      expect(widgetPayload).toContain("Readable Control Cache");
       const displayNames = (
         results.structuredContent as { findings: Array<{ displayName: string }> }
       ).findings.map(({ displayName }) => displayName);

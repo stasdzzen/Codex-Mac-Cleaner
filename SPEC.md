@@ -74,6 +74,13 @@ server-owned выводы, но не классифицирует файлы и 
 - Глобальные inventories, включая package inventory, снимаются не более одного раза
   для Snapshot A и одного раза для Snapshot B.
 - Candidate-specific evidence повторно проверяется в обеих фазах с фиксированной
-  bounded concurrency четыре; порядок итоговых findings остаётся детерминированным.
+  bounded concurrency восемь; порядок итоговых findings остаётся детерминированным.
 - Оптимизация не обрезает список кандидатов, не превращает partial coverage в
   complete и не создаёт actionable revision после timeout или cancellation.
+- Все byte-метрики Dashboard отображаются только в десятичных МБ/ГБ; значения
+  меньше 0,01 МБ не округляются до ложного нуля.
+- User missing-target LaunchAgents отображаются как `analysis_only`, системные
+  missing-target LaunchAgents/LaunchDaemons — как `unsupported_manual`; оба класса
+  доступны только для инспекции и не получают mutation или shell actions.
+- Активный процесс с доказанно отсутствующим абсолютным executable отображается
+  только как read-only diagnostic; PID и полный путь не покидают server boundary.
