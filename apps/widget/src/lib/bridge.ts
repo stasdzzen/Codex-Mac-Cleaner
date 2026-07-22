@@ -1,3 +1,8 @@
+import {
+  isAllowedExternalUrl,
+  type WidgetExternalUrl,
+} from "@/lib/project-links";
+
 export type DashboardTab =
   | "overview"
   | "findings"
@@ -18,6 +23,7 @@ export interface WidgetBridge {
   callTool<T>(name: string, input: Record<string, unknown>): Promise<T>;
   setViewState(state: WidgetViewState): void;
   requestDisplayMode?(mode: "fullscreen"): Promise<void>;
+  openExternal?(url: WidgetExternalUrl): Promise<void>;
 }
 
 export function acceptSnapshot(
@@ -40,9 +46,11 @@ export function createStandaloneBridge(): WidgetBridge {
       requestDisplayMode?: (request: {
         mode: "fullscreen";
       }) => Promise<unknown>;
+      openExternal?: (request: { href: WidgetExternalUrl }) => Promise<unknown>;
     };
   };
   const requestDisplayMode = host.openai?.requestDisplayMode;
+  const openExternal = host.openai?.openExternal;
   return {
     async callTool<T>(): Promise<T> {
       throw new Error("Подключение MCP App tools будет добавлено в CMC-09.");
@@ -53,6 +61,16 @@ export function createStandaloneBridge(): WidgetBridge {
       : {
           async requestDisplayMode(mode: "fullscreen"): Promise<void> {
             await requestDisplayMode.call(host.openai, { mode });
+          },
+        }),
+    ...(openExternal === undefined
+      ? {}
+      : {
+          async openExternal(url: WidgetExternalUrl): Promise<void> {
+            if (!isAllowedExternalUrl(url)) {
+              throw new Error("EXTERNAL_URL_NOT_ALLOWED");
+            }
+            await openExternal.call(host.openai, { href: url });
           },
         }),
   };
