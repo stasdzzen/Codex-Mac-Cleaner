@@ -285,34 +285,38 @@ export function AuditDashboard({ snapshot, bridge }: AuditDashboardProps) {
 
   return (
     <TooltipProvider>
-      <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-5 p-4 sm:p-6">
-      <header className="flex flex-col gap-2">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-sm text-muted-foreground">Codex Mac Cleaner</p>
-            <h1 className="text-2xl font-semibold tracking-tight">Audit Dashboard</h1>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={isFullscreenPending}
-              onClick={() => void requestFullscreen()}
-            >
-              {isFullscreenPending ? (
-                <LoaderCircleIcon className="animate-spin" data-icon="inline-start" />
-              ) : (
-                <Maximize2Icon data-icon="inline-start" />
-              )}
-              Развернуть
-            </Button>
-            <Badge variant="outline">stateVersion: {acceptedSnapshot.stateVersion}</Badge>
-          </div>
-        </div>
-        <p className="max-w-3xl text-sm text-muted-foreground">
-          Локальный read-only аудит. Решения, policy и показатели приходят с сервера;
-          интерфейс только показывает их и собирает поэлементные подтверждения.
-        </p>
+      <main className="dashboard-enter mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-5 p-4 sm:p-6">
+      <header>
+        <Card className="dashboard-hero [--card-spacing:--spacing(5)]">
+          <CardHeader>
+            <div>
+              <p className="text-sm text-muted-foreground">Codex Mac Cleaner</p>
+              <h1 className="text-2xl font-semibold tracking-tight">Audit Dashboard</h1>
+            </div>
+            <CardAction className="flex flex-wrap items-center gap-2 max-sm:col-start-1 max-sm:row-span-1 max-sm:row-start-3 max-sm:mt-3 max-sm:justify-self-start">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isFullscreenPending}
+                onClick={() => void requestFullscreen()}
+              >
+                {isFullscreenPending ? (
+                  <LoaderCircleIcon className="animate-spin" data-icon="inline-start" />
+                ) : (
+                  <Maximize2Icon data-icon="inline-start" />
+                )}
+                Развернуть
+              </Button>
+              <Badge variant="outline">stateVersion: {acceptedSnapshot.stateVersion}</Badge>
+            </CardAction>
+          </CardHeader>
+          <CardContent>
+            <p className="max-w-3xl text-sm text-muted-foreground">
+              Локальный read-only аудит. Решения, policy и показатели приходят с сервера;
+              интерфейс только показывает их и собирает поэлементные подтверждения.
+            </p>
+          </CardContent>
+        </Card>
       </header>
 
       {acceptedSnapshot.state === "failed" ? (
@@ -349,7 +353,11 @@ export function AuditDashboard({ snapshot, bridge }: AuditDashboardProps) {
           selectTab(value as DashboardTab);
         }}
       >
-        <TabsList className="max-w-full overflow-x-auto" aria-label="Разделы Audit Dashboard">
+        <TabsList
+          variant="line"
+          className="max-w-full overflow-x-auto"
+          aria-label="Разделы Audit Dashboard"
+        >
           {TAB_LABELS.map((tab) => (
             <TabsTrigger
               key={tab.value}

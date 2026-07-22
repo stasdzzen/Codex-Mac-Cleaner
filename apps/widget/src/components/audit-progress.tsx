@@ -34,11 +34,18 @@ export function AuditProgress({ snapshot, onCancel }: AuditProgressProps) {
   const value = totalSteps === 0 ? 0 : (completedSteps / totalSteps) * 100;
   const isActive = snapshot.state === "running" || snapshot.state === "queued";
   const isCancelling = snapshot.state === "cancelling";
+  const hasActiveMotion = isActive || isCancelling;
 
   return (
-    <Card>
+    <Card
+      data-audit-active={hasActiveMotion ? "true" : "false"}
+      aria-live={hasActiveMotion ? "polite" : "off"}
+    >
       <CardHeader>
-        <CardTitle>Аудит application_remnants</CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          <span className="audit-status-mark" aria-hidden="true" />
+          Аудит application_remnants
+        </CardTitle>
         <CardDescription>
           Этап: {PHASE_LABELS[snapshot.progress.phase]}. Выполнено шагов: {completedSteps} из {totalSteps}.
         </CardDescription>
@@ -60,16 +67,26 @@ export function AuditProgress({ snapshot, onCancel }: AuditProgressProps) {
           </CardAction>
         )}
       </CardHeader>
-      <CardContent className="flex flex-col gap-2">
-        {snapshot.progress.totalCandidates > 0 && (
-          <p className="text-sm text-muted-foreground">
-            Кандидатов обработано: {snapshot.progress.processedCandidates} из {snapshot.progress.totalCandidates}.
-          </p>
-        )}
+      <CardContent className="flex flex-col gap-4">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div className="flex flex-col gap-1">
+            <p className="text-sm text-muted-foreground">Общий прогресс</p>
+            <p className="audit-progress-value tabular-nums">{Math.round(value)}%</p>
+          </div>
+          {snapshot.progress.totalCandidates > 0 && (
+            <p className="text-sm text-muted-foreground">
+              Кандидатов обработано: {snapshot.progress.processedCandidates} из {snapshot.progress.totalCandidates}.
+            </p>
+          )}
+        </div>
         {totalSteps === 0 ? (
-          <Skeleton className="h-1 w-full" aria-label="Ожидание прогресса" />
+          <Skeleton className="h-2 w-full" aria-label="Ожидание прогресса" />
         ) : (
-          <Progress value={value} aria-label={`Прогресс аудита: ${Math.round(value)}%`} />
+          <Progress
+            className="audit-progress-track h-2"
+            value={value}
+            aria-label={`Прогресс аудита: ${Math.round(value)}%`}
+          />
         )}
       </CardContent>
     </Card>

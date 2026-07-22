@@ -229,7 +229,38 @@ describe("Audit Dashboard contract", () => {
     }
     expect(screen.getByText("Наблюдение диска: 2026-07-18T10:05:00.000Z")).toBeVisible();
     expect(screen.getByText("Источник: append-only journal")).toBeVisible();
+    expect(
+      screen.getByRole("img", {
+        name: /Относительное сравнение размеров.*1,57 МБ.*1,05 МБ.*0,52 МБ.*0,26 МБ/u,
+      }),
+    ).toBeVisible();
+    expect(document.querySelectorAll("[data-storage-bar]")).toHaveLength(4);
+    expect(screen.getByText(/Шкала сравнивает значения отдельно/u)).toBeVisible();
     expect(screen.queryByText(/освобождено после|прирост свободного места|APFS delta/i)).not.toBeInTheDocument();
+  });
+
+  it("анимирует только активный прогресс и оставляет terminal state статичным", () => {
+    const { bridge } = createBridge();
+    const { rerender } = render(
+      <AuditDashboard snapshot={runningFixture} bridge={bridge} />,
+    );
+
+    expect(screen.getByRole("progressbar").closest("[data-audit-active]")).toHaveAttribute(
+      "data-audit-active",
+      "true",
+    );
+
+    rerender(
+      <AuditDashboard
+        snapshot={{ ...dashboardFixture, stateVersion: runningFixture.stateVersion + 1 }}
+        bridge={bridge}
+      />,
+    );
+
+    expect(screen.getByRole("progressbar").closest("[data-audit-active]")).toHaveAttribute(
+      "data-audit-active",
+      "false",
+    );
   });
 
   it("отменяет running-аудит, блокирует повторную отмену и оставляет cancelled read-only", async () => {

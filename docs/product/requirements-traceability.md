@@ -36,7 +36,7 @@ date: 2026-07-22
 | `REQ-MCP-01` | Model/app visibility и точные schemas | [MCP contract](../contracts/mcp-tools.md) | `CMC-03`, `CMC-09` | D |
 | `REQ-PRIV-01` | Без сети, телеметрии и полных путей модели | [Threat model](../safety/threat-model.md) | `CMC-03`, `CMC-09`, `CMC-10` | G |
 | `REQ-CORR-PRIV-01` | Raw paths/inventory/bundle-package-signing identities/historical bindings/graph/tokens server-only; widget получает safe facts/actions | [Correlation contract](../contracts/correlation-identity.md) | `CMC-20`, `CMC-22`, `CMC-21`, `CMC-09`, `CMC-10` | D, G, H |
-| `REQ-UI-01` | Тёмный shadcn Audit Dashboard с пятью вкладками; «Расписание» в v0.1 только disabled/manual-run | [ADR-0006](../decisions/ADR-0006-dark-shadcn-dashboard.md), [ADR-0009](../decisions/ADR-0009-v01-safety-ux-completion.md), [ADR-0014](../decisions/ADR-0014-defer-host-automation-post-v01.md) | `CMC-08`, `CMC-09`, `CMC-12`, `CMC-10` | G |
+| `REQ-UI-01` | Тёмный shadcn Audit Dashboard с пятью вкладками; «Расписание» в v0.1 только disabled/manual-run | [ADR-0006](../decisions/ADR-0006-dark-shadcn-dashboard.md), [ADR-0009](../decisions/ADR-0009-v01-safety-ux-completion.md), [ADR-0014](../decisions/ADR-0014-defer-host-automation-post-v01.md) | `CMC-08`, `CMC-09`, `CMC-12`, `CMC-10`, `CMC-38` | G |
 | `REQ-UI-LIVE-01` | Dashboard v2 открывается сразу, показывает server-owned phase/counts и до integer revision не содержит findings/actions | [ADR-0015](../decisions/ADR-0015-live-audit-dashboard-and-shared-inventories.md) | `CMC-26` | G, H |
 | `REQ-UI-DISPLAY-01` | Dashboard остаётся inline по умолчанию; только fullscreen запрашивается кнопкой пользователя, PiP отсутствует, отказ хоста безопасен, правая панель не обещается | [ADR-0016](../decisions/ADR-0016-fullscreen-only-dashboard-display.md) | `CMC-32`, `CMC-35` | G, H |
 | `REQ-UI-COMMUNITY-01` | Footer содержит фиксированные GitHub/Ideas/developer/support действия; переходы user-triggered и host-mediated, CSP разрешает только GitHub и dzzen redirect origins | [ADR-0017](../decisions/ADR-0017-dashboard-community-footer.md) | `CMC-35` | G, H |
@@ -102,6 +102,7 @@ Issue и PR не могут объявить требование выполне
 | `CMC-34` | [#64 — выпуск v0.1.0-beta.6](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/64) | Закрыта |
 | `CMC-35` | [#66 — убрать режим мини-окна и добавить footer](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/66) | Закрыта |
 | `CMC-36` | [#68 — восстановить полезный Real-Mac аудит](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/68) | Закрыта |
-| `CMC-37` | [#70 — выпуск v0.1.0-beta.7](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/70) | `cto:in-progress`; release gate |
+| `CMC-37` | [#70 — выпуск v0.1.0-beta.7](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/70) | Закрыта |
+| `CMC-38` | [#72 — новая визуальная тема Audit Dashboard](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/72) | `cto:in-progress`; draft PR до правки текстов |
 
 Operational label не заменяет dependency validation. Источником текущего readiness остаётся GitHub и `issue_contract.py`.
