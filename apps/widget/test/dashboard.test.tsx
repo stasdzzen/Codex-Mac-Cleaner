@@ -16,6 +16,7 @@ import {
 function createBridge() {
   let lastViewState: WidgetViewState | null = null;
   const requestDisplayMode = vi.fn(async () => undefined);
+  const openExternal = vi.fn(async () => undefined);
   const callTool = vi.fn(async (name: string, _input: Record<string, unknown>) => {
     if (name === "quarantine_prepare_move") {
       return { previewToken: "preview-synthetic-001" };
@@ -33,11 +34,13 @@ function createBridge() {
       lastViewState = state;
     }),
     requestDisplayMode,
+    openExternal,
   };
   return {
     bridge,
     callTool,
     requestDisplayMode,
+    openExternal,
     getLastViewState: () => lastViewState,
   };
 }
@@ -48,17 +51,16 @@ afterEach(() => {
 });
 
 describe("Audit Dashboard contract", () => {
-  it("запрашивает fullscreen и PiP только после отдельного нажатия пользователя", async () => {
+  it("запрашивает только fullscreen после отдельного нажатия пользователя", async () => {
     const { bridge, requestDisplayMode } = createBridge();
     render(<AuditDashboard snapshot={dashboardFixture} bridge={bridge} />);
 
     expect(requestDisplayMode).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Мини-окно" })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Развернуть" }));
     await waitFor(() => expect(requestDisplayMode).toHaveBeenCalledWith("fullscreen"));
-
-    fireEvent.click(screen.getByRole("button", { name: "Мини-окно" }));
-    await waitFor(() => expect(requestDisplayMode).toHaveBeenCalledWith("pip"));
+    expect(requestDisplayMode).toHaveBeenCalledTimes(1);
   });
 
   it("сохраняет inline Dashboard и объясняет отсутствие display-mode capability", () => {
@@ -79,18 +81,64 @@ describe("Audit Dashboard contract", () => {
     );
   });
 
-  it("безопасно обрабатывает отказ хоста открыть PiP", async () => {
+  it("безопасно обрабатывает отказ хоста развернуть Dashboard", async () => {
     const errorToast = vi.spyOn(toast, "error");
     const { bridge, requestDisplayMode } = createBridge();
     vi.mocked(requestDisplayMode).mockRejectedValueOnce(new Error("HOST_REJECTED"));
 
     render(<AuditDashboard snapshot={dashboardFixture} bridge={bridge} />);
-    fireEvent.click(screen.getByRole("button", { name: "Мини-окно" }));
+    fireEvent.click(screen.getByRole("button", { name: "Развернуть" }));
 
     await waitFor(() =>
       expect(errorToast).toHaveBeenCalledWith(
-        "Codex не открыл мини-окно. Dashboard остаётся в текущем режиме.",
+        "Codex не развернул Dashboard. Он остаётся в текущем режиме.",
       ),
+    );
+    expect(screen.getByRole("heading", { name: "Audit Dashboard" })).toBeVisible();
+  });
+
+  it("показывает подвал и открывает только фиксированные ссылки по клику", async () => {
+    const { bridge, callTool, openExternal } = createBridge();
+    render(<AuditDashboard snapshot={dashboardFixture} bridge={bridge} />);
+
+    expect(screen.getByText("© 2026 Dzzen · Codex Mac Cleaner")).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Открыть GitHub проекта" }));
+    fireEvent.click(screen.getByRole("button", { name: "Поделиться идеей" }));
+    fireEvent.click(screen.getByRole("button", { name: "Разработчик" }));
+    fireEvent.click(screen.getByRole("button", { name: "Поддержать проект" }));
+
+    await waitFor(() =>
+      expect(openExternal).toHaveBeenNthCalledWith(
+        1,
+        "https://github.com/stasdzzen/Codex-Mac-Cleaner",
+      ),
+    );
+    expect(openExternal).toHaveBeenNthCalledWith(
+      2,
+      "https://github.com/stasdzzen/Codex-Mac-Cleaner/discussions/new?category=ideas",
+    );
+    expect(openExternal).toHaveBeenNthCalledWith(3, "https://dzzen.com");
+    expect(openExternal).toHaveBeenNthCalledWith(4, "https://dzzen.com/support");
+    expect(callTool).not.toHaveBeenCalled();
+  });
+
+  it("безопасно объясняет отсутствие host API для внешних ссылок", () => {
+    const errorToast = vi.spyOn(toast, "error");
+    const { bridge } = createBridge();
+    const bridgeWithoutExternal: WidgetBridge = {
+      callTool: bridge.callTool,
+      setViewState: bridge.setViewState,
+      ...(bridge.requestDisplayMode === undefined
+        ? {}
+        : { requestDisplayMode: bridge.requestDisplayMode }),
+    };
+
+    render(<AuditDashboard snapshot={dashboardFixture} bridge={bridgeWithoutExternal} />);
+    fireEvent.click(screen.getByRole("button", { name: "Поделиться идеей" }));
+
+    expect(errorToast).toHaveBeenCalledWith(
+      "Эта версия Codex не поддерживает открытие внешних ссылок.",
     );
     expect(screen.getByRole("heading", { name: "Audit Dashboard" })).toBeVisible();
   });

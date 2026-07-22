@@ -40,7 +40,12 @@ export function registerDashboardResource(
           mimeType: DASHBOARD_RESOURCE_MIME_TYPE,
           text: dashboardHtml ?? (await loadPackagedDashboard()),
           _meta: {
-            ui: { prefersBorder: true, csp: {} },
+            ui: {
+              prefersBorder: true,
+              csp: {
+                redirectDomains: ["https://github.com", "https://dzzen.com"],
+              },
+            },
             "openai/widgetDescription":
               "Audit Dashboard показывает серверный snapshot и принимает только поэлементные действия пользователя.",
           },

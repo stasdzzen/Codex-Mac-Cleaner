@@ -1,3 +1,20 @@
+type WidgetExternalUrl =
+  | "https://github.com/stasdzzen/Codex-Mac-Cleaner"
+  | "https://github.com/stasdzzen/Codex-Mac-Cleaner/discussions/new?category=ideas"
+  | "https://dzzen.com"
+  | "https://dzzen.com/support";
+
+const ALLOWED_EXTERNAL_URLS = new Set<WidgetExternalUrl>([
+  "https://github.com/stasdzzen/Codex-Mac-Cleaner",
+  "https://github.com/stasdzzen/Codex-Mac-Cleaner/discussions/new?category=ideas",
+  "https://dzzen.com",
+  "https://dzzen.com/support",
+]);
+
+function isAllowedExternalUrl(value: string): value is WidgetExternalUrl {
+  return ALLOWED_EXTERNAL_URLS.has(value as WidgetExternalUrl);
+}
+
 export type DashboardTab =
   | "overview"
   | "findings"
@@ -14,12 +31,11 @@ export interface WidgetViewState {
   readonly skippedFindingIds: readonly string[];
 }
 
-export type WidgetDisplayMode = "inline" | "fullscreen" | "pip";
-
 export interface WidgetBridge {
   callTool<T>(name: string, input: Record<string, unknown>): Promise<T>;
   setViewState(state: WidgetViewState): void;
-  requestDisplayMode?(mode: WidgetDisplayMode): Promise<void>;
+  requestDisplayMode?(mode: "fullscreen"): Promise<void>;
+  openExternal?(url: WidgetExternalUrl): Promise<void>;
 }
 
 interface JsonRpcResponse {
@@ -82,11 +98,13 @@ export function createStandaloneBridge(): WidgetBridge {
     openai?: {
       setWidgetState?: (value: WidgetViewState) => void;
       requestDisplayMode?: (request: {
-        mode: WidgetDisplayMode;
+        mode: "fullscreen";
       }) => Promise<unknown>;
+      openExternal?: (request: { href: WidgetExternalUrl }) => Promise<unknown>;
     };
   };
   const requestDisplayMode = host.openai?.requestDisplayMode;
+  const openExternal = host.openai?.openExternal;
   return {
     callTool<T>(name: string, input: Record<string, unknown>): Promise<T> {
       const id = ++nextRequestId;
@@ -117,8 +135,18 @@ export function createStandaloneBridge(): WidgetBridge {
     ...(requestDisplayMode === undefined
       ? {}
       : {
-          async requestDisplayMode(mode: WidgetDisplayMode): Promise<void> {
+          async requestDisplayMode(mode: "fullscreen"): Promise<void> {
             await requestDisplayMode.call(host.openai, { mode });
+          },
+        }),
+    ...(openExternal === undefined
+      ? {}
+      : {
+          async openExternal(url: WidgetExternalUrl): Promise<void> {
+            if (!isAllowedExternalUrl(url)) {
+              throw new Error("EXTERNAL_URL_NOT_ALLOWED");
+            }
+            await openExternal.call(host.openai, { href: url });
           },
         }),
   };

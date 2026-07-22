@@ -346,12 +346,16 @@ describe("полная интеграция MCP App", () => {
           mimeType: "text/html;profile=mcp-app",
           text: html,
           _meta: expect.objectContaining({
-            ui: expect.objectContaining({ csp: {} }),
+            ui: expect.objectContaining({
+              csp: {
+                redirectDomains: ["https://github.com", "https://dzzen.com"],
+              },
+            }),
           }),
         }),
       ]);
       expect(JSON.stringify(resource)).not.toMatch(
-        /connectDomains|resourceDomains|frameDomains|https?:\/\//i,
+        /connectDomains|resourceDomains|frameDomains/i,
       );
     } finally {
       await client.close();
@@ -484,10 +488,14 @@ describe("полная интеграция MCP App", () => {
     expect(html).toContain("ui/notifications/tool-result");
     expect(html).toContain("tools/call");
     expect(html).toContain("requestDisplayMode");
+    expect(html).toContain("openExternal");
     expect(html).toContain("fullscreen");
-    expect(html).toContain("pip");
     expect(html).toContain("Развернуть");
-    expect(html).toContain("Мини-окно");
+    expect(html).toContain("© 2026 Dzzen");
+    expect(html).toContain("https://github.com/stasdzzen/Codex-Mac-Cleaner");
+    expect(html).toContain("https://dzzen.com/support");
+    expect(html).not.toContain("Мини-окно");
+    expect(html).not.toMatch(/(?:["'`])pip(?:["'`])/u);
     expect(html.match(/<!doctype html>/giu)).toHaveLength(1);
     expect(html.match(/<script type="module">/giu)).toHaveLength(1);
     expect(html.match(/<\/script>/giu)).toHaveLength(1);

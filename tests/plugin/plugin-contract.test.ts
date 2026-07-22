@@ -130,4 +130,17 @@ describe("repository marketplace plugin", () => {
     expect(skill).toMatch(/не[^\n]*latest/i);
     expect(skill).toMatch(/не вызывает `codex plugin remove`/i);
   });
+
+  it("публикует единый адрес поддержки и GitHub Ideas", async () => {
+    const [funding, readme] = await Promise.all([
+      readFile(resolve(repositoryRoot, ".github/FUNDING.yml"), "utf8"),
+      readFile(resolve(repositoryRoot, "README.md"), "utf8"),
+    ]);
+
+    expect(funding.trim()).toBe('custom: ["https://dzzen.com/support"]');
+    expect(readme).toContain("https://dzzen.com/support");
+    expect(readme).toContain(
+      "https://github.com/stasdzzen/Codex-Mac-Cleaner/discussions/categories/ideas",
+    );
+  });
 });

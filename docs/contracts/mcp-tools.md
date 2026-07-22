@@ -116,7 +116,7 @@ date: 2026-07-21
 
 Текущий URI — `ui://codex-mac-cleaner/dashboard-v2.html`. Он вводит live progress и nullable pre-result revision. Breaking change HTML, JS или CSS снова повышает версию URI; v1 не переопределяется.
 
-CSP не содержит `connectDomains`, `resourceDomains` или `frameDomains`: bundle автономен и не загружает CDN.
+CSP не содержит `connectDomains`, `resourceDomains` или `frameDomains`: bundle автономен и не загружает CDN. `redirectDomains` содержит только `https://github.com` и `https://dzzen.com` для явных footer-переходов через host `openExternal`. Footer не вызывает MCP tool и не передаёт audit payload во внешние URL.
 
 # Host automation boundary
 

@@ -67,6 +67,8 @@ describe("repository marketplace bundle freshness", () => {
     expect(runtime).toContain("Объект кэша");
     expect(dashboard).toContain("Автоматическое расписание недоступно");
     expect(dashboard).toContain("Запустить аудит вручную");
+    expect(dashboard).toContain("Развернуть");
+    expect(dashboard).not.toContain("Мини-окно");
     expect(dashboard).toContain("audit_start");
     expect(dashboard).not.toMatch(/schedule_(?:request|state|intent)/u);
     expect(dashboard).not.toContain("Расписание read-only аудита появится");
