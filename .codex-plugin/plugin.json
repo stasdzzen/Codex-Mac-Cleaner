@@ -33,7 +33,10 @@
       "Проверь остатки удалённых приложений и открой Audit Dashboard.",
       "Покажи состояние последнего локального аудита."
     ],
-    "brandColor": "#111827",
+    "brandColor": "#1E9DF1",
+    "composerIcon": "./assets/icon.png",
+    "logo": "./assets/icon.png",
+    "logoDark": "./assets/icon.png",
     "screenshots": []
   }
 }

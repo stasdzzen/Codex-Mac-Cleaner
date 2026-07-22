@@ -1,4 +1,8 @@
-# Codex Mac Cleaner
+<p align="center">
+  <img src="assets/icon.png" width="112" height="112" alt="Логотип Codex Mac Cleaner">
+</p>
+
+<h1 align="center">Codex Mac Cleaner</h1>
 
 [![Проверки репозитория](https://github.com/stasdzzen/Codex-Mac-Cleaner/actions/workflows/repository.yml/badge.svg?branch=main)](https://github.com/stasdzzen/Codex-Mac-Cleaner/actions/workflows/repository.yml)
 ![Платформа](https://img.shields.io/badge/macOS-26%2B-000000?logo=apple&logoColor=white)

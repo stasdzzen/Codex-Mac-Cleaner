@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import pluginIconUrl from "@/assets/codex-mac-cleaner-icon.png?inline";
 import { ActionDialog } from "@/components/action-dialog";
 import { AuditProgress } from "@/components/audit-progress";
 import { ExclusionsTab } from "@/components/exclusions-tab";
@@ -289,9 +290,17 @@ export function AuditDashboard({ snapshot, bridge }: AuditDashboardProps) {
       <header>
         <Card className="dashboard-hero [--card-spacing:--spacing(5)]">
           <CardHeader>
-            <div>
-              <p className="text-sm text-muted-foreground">Codex Mac Cleaner</p>
-              <h1 className="text-2xl font-semibold tracking-tight">Audit Dashboard</h1>
+            <div className="flex items-center gap-3">
+              <img
+                src={pluginIconUrl}
+                alt=""
+                aria-hidden="true"
+                className="size-12 shrink-0 rounded-xl"
+              />
+              <div>
+                <p className="text-sm text-muted-foreground">Codex Mac Cleaner</p>
+                <h1 className="text-2xl font-semibold tracking-tight">Audit Dashboard</h1>
+              </div>
             </div>
             <CardAction className="flex flex-wrap items-center gap-2 max-sm:col-start-1 max-sm:row-span-1 max-sm:row-start-3 max-sm:mt-3 max-sm:justify-self-start">
               <Button
