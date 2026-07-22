@@ -484,7 +484,7 @@ describe("полная интеграция MCP App", () => {
       packagedPath(".codex-plugin", "assets", "dashboard-v2.html"),
       "utf8",
     );
-    expect(html).toContain("Audit Dashboard");
+    expect(html).toContain("Проверка Mac");
     expect(html).toContain("ui/notifications/tool-result");
     expect(html).toContain("tools/call");
     expect(html).toContain("requestDisplayMode");
