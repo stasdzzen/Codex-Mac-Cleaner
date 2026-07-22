@@ -32,7 +32,7 @@ date: 2026-07-22
 | `REQ-REST-01` | Restore только в исходный свободный путь | [Манифест](../contracts/quarantine-manifest.md) | `CMC-07` | E |
 | `REQ-PURGE-01` | Только ручной поэлементный purge | [Runtime flows](../architecture/runtime-flows.md) | `CMC-07` | F |
 | `REQ-QCTR-01` | Quarantine Center с поэлементным restore/purge | [ADR-0009](../decisions/ADR-0009-v01-safety-ux-completion.md) | `CMC-07`, `CMC-08`, `CMC-09` | E, F, G |
-| `REQ-SIZE-01` | Логический/физический размер, карантин, purge и DiskObservation без ложного APFS claim | [Доменная модель](../contracts/domain-model.md) | `CMC-03`, `CMC-07`, `CMC-08`, `CMC-09`, `CMC-10` | F, G, H |
+| `REQ-SIZE-01` | Логический/физический размер, карантин, purge и DiskObservation без ложного APFS claim; UI использует десятичные МБ/ГБ | [Доменная модель](../contracts/domain-model.md), [ADR-0018](../decisions/ADR-0018-real-mac-audit-throughput-and-diagnostics.md) | `CMC-03`, `CMC-07`, `CMC-08`, `CMC-09`, `CMC-10`, `CMC-36` | F, G, H |
 | `REQ-MCP-01` | Model/app visibility и точные schemas | [MCP contract](../contracts/mcp-tools.md) | `CMC-03`, `CMC-09` | D |
 | `REQ-PRIV-01` | Без сети, телеметрии и полных путей модели | [Threat model](../safety/threat-model.md) | `CMC-03`, `CMC-09`, `CMC-10` | G |
 | `REQ-CORR-PRIV-01` | Raw paths/inventory/bundle-package-signing identities/historical bindings/graph/tokens server-only; widget получает safe facts/actions | [Correlation contract](../contracts/correlation-identity.md) | `CMC-20`, `CMC-22`, `CMC-21`, `CMC-09`, `CMC-10` | D, G, H |
@@ -41,7 +41,8 @@ date: 2026-07-22
 | `REQ-UI-DISPLAY-01` | Dashboard остаётся inline по умолчанию; только fullscreen запрашивается кнопкой пользователя, PiP отсутствует, отказ хоста безопасен, правая панель не обещается | [ADR-0016](../decisions/ADR-0016-fullscreen-only-dashboard-display.md) | `CMC-32`, `CMC-35` | G, H |
 | `REQ-UI-COMMUNITY-01` | Footer содержит фиксированные GitHub/Ideas/developer/support действия; переходы user-triggered и host-mediated, CSP разрешает только GitHub и dzzen redirect origins | [ADR-0017](../decisions/ADR-0017-dashboard-community-footer.md) | `CMC-35` | G, H |
 | `REQ-AUDIT-PERF-01` | Global inventories снимаются один раз на Snapshot A/B фазу и не умножаются на число кандидатов | [ADR-0015](../decisions/ADR-0015-live-audit-dashboard-and-shared-inventories.md) | `CMC-26` | C, H |
-| `REQ-AUDIT-THROUGHPUT-01` | Package inventory переиспользуется A/B, candidate correlation ограничена concurrency четыре и сохраняет порядок без изменения пятиминутного deadline | [Runtime flows](../architecture/runtime-flows.md) | `CMC-33` | C, H |
+| `REQ-AUDIT-THROUGHPUT-01` | Package inventory переиспользуется A/B, candidate correlation ограничена измеренной concurrency восемь и сохраняет порядок без изменения пятиминутного deadline | [ADR-0018](../decisions/ADR-0018-real-mac-audit-throughput-and-diagnostics.md) | `CMC-33`, `CMC-36` | C, H |
+| `REQ-RUNTIME-DIAG-01` | Missing-target user LaunchAgent/process — `analysis_only`, системный LaunchAgent/LaunchDaemon/process — `unsupported_manual`; только inspect и generic model label | [ADR-0018](../decisions/ADR-0018-real-mac-audit-throughput-and-diagnostics.md) | `CMC-36` | C, D, G, H |
 | `REQ-SKIP-01` | «Пропустить сейчас» — session-local no-op текущей ревизии | [ADR-0011](../decisions/ADR-0011-public-plugin-exclusions-scheduling.md) | `CMC-08`, `CMC-09`, `CMC-10` | G, H |
 | `REQ-FIND-01` | Карточка FindingFacts и честный `ReclaimEstimate` | [Публичный дизайн](../superpowers/specs/2026-07-17-public-plugin-contract-design.md) | `CMC-03`, `CMC-04`, `CMC-08`, `CMC-10` | C, G, H |
 | `REQ-EXCL-01` | Versioned identity-based persistent exclusions и UI управления | [ADR-0011](../decisions/ADR-0011-public-plugin-exclusions-scheduling.md) | `CMC-03`, `CMC-05`, `CMC-12`, `CMC-10` | D, G, H |
@@ -99,5 +100,7 @@ Issue и PR не могут объявить требование выполне
 | `CMC-32` | [#60 — режимы отображения Dashboard](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/60) | Закрыта |
 | `CMC-33` | [#62 — тайм-аут больших аудитов](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/62) | Закрыта |
 | `CMC-34` | [#64 — выпуск v0.1.0-beta.6](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/64) | Закрыта |
+| `CMC-35` | [#66 — убрать режим мини-окна и добавить footer](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/66) | Draft PR #67; не слита |
+| `CMC-36` | [#68 — восстановить полезный Real-Mac аудит](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/68) | `cto:in-progress`; stacked на #66 |
 
 Operational label не заменяет dependency validation. Источником текущего readiness остаётся GitHub и `issue_contract.py`.

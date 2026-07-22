@@ -826,21 +826,25 @@ describe("полная интеграция MCP App", () => {
           restored.structuredContent,
         );
 
-        const publicResult = JSON.stringify({
+        const modelVisibleResult = JSON.stringify({
           revisionN1: revisionN1.results,
-          dashboard,
+          dashboard: {
+            content: dashboard.content,
+            structuredContent: dashboard.structuredContent,
+          },
           preview,
           moved,
           replayedMove,
           restored,
           replayedRestore,
         });
-        expect(publicResult).not.toContain(syntheticRoot);
-        expect(publicResult).not.toContain(seeded.bundleId);
-        expect(publicResult).not.toContain(candidateName);
-        expect(publicResult).not.toMatch(
+        expect(modelVisibleResult).not.toContain(syntheticRoot);
+        expect(modelVisibleResult).not.toContain(seeded.bundleId);
+        expect(modelVisibleResult).not.toContain(candidateName);
+        expect(modelVisibleResult).not.toMatch(
           /canonicalPath|bundleIdentifier|packageIdentifier|designatedRequirement|correlation graph/i,
         );
+        expect(JSON.stringify(dashboard._meta)).toContain(candidateName);
       } finally {
         await client.close();
         await rm(syntheticRoot, { recursive: true, force: true });

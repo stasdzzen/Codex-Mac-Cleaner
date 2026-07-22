@@ -5,9 +5,12 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "nod
 
 import {
   ALLOWLISTED_LIBRARY_ROOTS,
+  createAutostartAdapter,
+  createInspectionOnlyAdapter,
   createMacOSCandidateRegistry,
   createMacOSProductionCorrelationAdapter,
   createNodeCommandRunner,
+  createOrphanedProcessAdapter,
   createLibraryRootsAdapter,
   runAdapters,
   type AdapterFileEntry,
@@ -18,6 +21,7 @@ import {
   type MacOSOwnerBindingHistory,
   type Observation,
   type ProductionCorrelationAdapter,
+  type TargetedRecord,
 } from "@codex-mac-cleaner/adapters";
 import { classifyEvidence, type Classification } from "@codex-mac-cleaner/classifier";
 import {
@@ -28,6 +32,7 @@ import {
   DashboardOpenInputSchema,
   FindingInspectInputSchema,
   FindingRevealInputSchema,
+  ModelSafeTextSchema,
   type DiskObservation,
   type AuditProgressPhase,
   type FindingModelView,
@@ -84,11 +89,33 @@ const MAX_GIT_SCAN_DEPTH = 128;
 const MAX_GIT_SCAN_ENTRIES = 100_000;
 const MAX_EMPTY_ARTIFACT_ENTRIES = 4_096;
 const DEFAULT_AUDIT_TIMEOUT_MS = 5 * 60 * 1_000;
-const DEFAULT_CANDIDATE_CONCURRENCY = 4;
+const DEFAULT_CANDIDATE_CONCURRENCY = 8;
 const EMPTY_CACHE_LOG_RULE_ID = "EMPTY_CACHE_LOG_ARTIFACT_V1" as const;
 const EMPTY_CACHE_LOG_RULE_VERSION = 1 as const;
 
 type RuntimeProtectedScopeKind = ProtectedScopeKind;
+
+type RuntimeStartupKind = "launch_agent" | "launch_daemon";
+
+interface RuntimeDiagnostic {
+  readonly componentDisplayName: string;
+  readonly category: FindingCategory;
+  readonly startupKind: RuntimeStartupKind | null;
+  readonly activityState: "present" | "unknown";
+  readonly targetExecutableState: "absent" | "unknown";
+}
+
+function safeWidgetComponentDisplayName(
+  value: string,
+  fallback: string,
+): string {
+  const normalized = basename(value)
+    .replace(/[\u0000-\u001f\u007f]/gu, "")
+    .trim()
+    .slice(0, 160);
+  const parsed = ModelSafeTextSchema.safeParse(normalized);
+  return parsed.success ? parsed.data : fallback;
+}
 
 async function mapConcurrentOrdered<T, R>(
   values: readonly T[],
@@ -390,20 +417,28 @@ interface RuntimeCandidate {
 
 class RuntimeFileSystemFacade implements FileSystemFacade {
   private readonly candidates = new Map<string, RuntimeCandidate>();
+  private readonly diagnostics = new Map<string, RuntimeDiagnostic>();
   private readonly expectedUid = process.getuid?.() ?? -1;
 
   constructor(
     private readonly homeDirectory: string,
     private readonly stateRoot: string,
     private readonly currentProjectRoot: string,
+    private readonly commands: CommandRunner,
+    private readonly systemLibraryRoot: string,
   ) {}
 
   candidate(ref: string): RuntimeCandidate | undefined {
     return this.candidates.get(ref);
   }
 
+  diagnostic(ref: string): RuntimeDiagnostic | undefined {
+    return this.diagnostics.get(ref);
+  }
+
   clear(): void {
     this.candidates.clear();
+    this.diagnostics.clear();
   }
 
   private isWithinBoundary(boundary: string, path: string): boolean {
@@ -833,7 +868,215 @@ class RuntimeFileSystemFacade implements FileSystemFacade {
     return output;
   }
 
-  async listTargetedSource(): Promise<readonly []> {
+  private async launchExecutableState(
+    plistPath: string,
+    signal: AbortSignal,
+  ): Promise<"present" | "absent" | "unknown"> {
+    try {
+      const output = await this.commands.run(
+        "/usr/bin/plutil",
+        ["-convert", "json", "-o", "-", plistPath],
+        { signal },
+      );
+      if (output.exitCode !== 0) return "unknown";
+      const parsed: unknown = JSON.parse(output.stdout);
+      if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+        return "unknown";
+      }
+      const metadata = parsed as Readonly<Record<string, unknown>>;
+      const argumentsValue = metadata.ProgramArguments;
+      const executable =
+        typeof metadata.Program === "string"
+          ? metadata.Program
+          : Array.isArray(argumentsValue) && typeof argumentsValue[0] === "string"
+            ? argumentsValue[0]
+            : null;
+      if (executable === null || !isAbsolute(executable)) return "unknown";
+      try {
+        await lstat(executable);
+        return "present";
+      } catch (error) {
+        return (error as NodeJS.ErrnoException).code === "ENOENT"
+          ? "absent"
+          : "unknown";
+      }
+    } catch {
+      signal.throwIfAborted();
+      return "unknown";
+    }
+  }
+
+  private async missingLaunchTargets(
+    root: string,
+    startupKind: RuntimeStartupKind,
+    systemOwned: boolean,
+    signal: AbortSignal,
+  ): Promise<readonly TargetedRecord[]> {
+    let rootStats;
+    try {
+      rootStats = await lstat(root, { bigint: true });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+      throw error;
+    }
+    if (rootStats.isSymbolicLink() || !rootStats.isDirectory()) return [];
+    const entries = await readdir(root, { withFileTypes: true });
+    const records: TargetedRecord[] = [];
+    for (const entry of entries) {
+      signal.throwIfAborted();
+      if (
+        !entry.isFile() ||
+        entry.isSymbolicLink() ||
+        !entry.name.endsWith(".plist") ||
+        entry.name.includes(sep) ||
+        entry.name.includes("\0")
+      ) {
+        continue;
+      }
+      const path = join(root, entry.name);
+      const stats = await lstat(path, { bigint: true });
+      if (
+        stats.isSymbolicLink() ||
+        !stats.isFile() ||
+        (!systemOwned && this.expectedUid >= 0 && Number(stats.uid) !== this.expectedUid)
+      ) {
+        continue;
+      }
+      const targetState = await this.launchExecutableState(path, signal);
+      if (targetState !== "absent") continue;
+      const ref = `autostart-${sha256(path).slice(0, 24)}`;
+      const displayName = systemOwned
+        ? "Системная запись автозапуска с отсутствующим target"
+        : "Запись автозапуска с отсутствующим target";
+      this.diagnostics.set(ref, {
+        componentDisplayName: safeWidgetComponentDisplayName(
+          entry.name,
+          systemOwned ? "Системная запись автозапуска" : "Запись автозапуска",
+        ),
+        category: "autostart",
+        startupKind,
+        activityState: "unknown",
+        targetExecutableState: "absent",
+      });
+      records.push({
+        ref,
+        displayName,
+        kind: startupKind === "launch_daemon" ? "launch_daemon" : "launch_item",
+        modifiedAt: safeDate(stats.mtimeNs),
+        fingerprint: [
+          stats.dev,
+          stats.ino,
+          stats.mode,
+          stats.uid,
+          stats.gid,
+          stats.size,
+          stats.mtimeNs,
+          stats.ctimeNs,
+        ].join(":"),
+        executableState: "absent",
+        logicalSize: safeInteger(stats.size),
+        physicalSize: safeInteger(stats.blocks * 512n),
+        recommendedMethod: systemOwned ? "advanced_mode" : "inspect_only",
+      });
+    }
+    return records;
+  }
+
+  private async missingExecutableProcesses(
+    signal: AbortSignal,
+  ): Promise<readonly TargetedRecord[]> {
+    const output = await this.commands.run(
+      "/bin/ps",
+      ["-axo", "pid=,uid=,comm="],
+      { signal },
+    );
+    if (output.exitCode !== 0) return [];
+    const records: TargetedRecord[] = [];
+    const seenExecutables = new Set<string>();
+    const observedAt = new Date().toISOString();
+    for (const line of output.stdout.split(/\r?\n/u)) {
+      signal.throwIfAborted();
+      const match = line.trim().match(/^(\d+)\s+(\d+)\s+(.+)$/u);
+      if (match === null) continue;
+      const uid = Number(match[2]);
+      const executable = match[3]!;
+      if (
+        !Number.isSafeInteger(uid) ||
+        !isAbsolute(executable) ||
+        executable.includes("\0") ||
+        seenExecutables.has(executable)
+      ) {
+        continue;
+      }
+      seenExecutables.add(executable);
+      try {
+        await lstat(executable);
+        continue;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") continue;
+      }
+      const systemOwned = this.expectedUid >= 0 && uid !== this.expectedUid;
+      const ref = `process-${sha256(`${uid}:${executable}`).slice(0, 24)}`;
+      const displayName = systemOwned
+        ? "Системный активный процесс с отсутствующим executable"
+        : "Активный процесс с отсутствующим executable";
+      this.diagnostics.set(ref, {
+        componentDisplayName: safeWidgetComponentDisplayName(
+          executable,
+          systemOwned ? "Системный активный процесс" : "Активный процесс",
+        ),
+        category: "unknown",
+        startupKind: null,
+        activityState: "present",
+        targetExecutableState: "absent",
+      });
+      records.push({
+        ref,
+        displayName,
+        kind: "service",
+        modifiedAt: observedAt,
+        fingerprint: sha256(`${uid}:${executable}`),
+        executableState: "absent",
+        logicalSize: 0,
+        physicalSize: 0,
+        recommendedMethod: systemOwned ? "advanced_mode" : "inspect_only",
+      });
+    }
+    return records;
+  }
+
+  async listTargetedSource(
+    kind: string,
+    signal: AbortSignal,
+  ): Promise<readonly TargetedRecord[]> {
+    if (kind === "autostart") {
+      return this.missingLaunchTargets(
+        join(this.homeDirectory, "Library", "LaunchAgents"),
+        "launch_agent",
+        false,
+        signal,
+      );
+    }
+    if (kind === "inspection") {
+      const [launchAgents, launchDaemons] = await Promise.all([
+        this.missingLaunchTargets(
+          join(this.systemLibraryRoot, "LaunchAgents"),
+          "launch_agent",
+          true,
+          signal,
+        ),
+        this.missingLaunchTargets(
+          join(this.systemLibraryRoot, "LaunchDaemons"),
+          "launch_daemon",
+          true,
+          signal,
+        ),
+      ]);
+      return [...launchAgents, ...launchDaemons];
+    }
+    if (kind === "orphaned_processes") {
+      return this.missingExecutableProcesses(signal);
+    }
     return [];
   }
 }
@@ -855,14 +1098,16 @@ function sameIdentity(
 
 interface FindingRecord {
   readonly model: FindingModelView;
+  readonly componentDisplayName: string;
   readonly observation: Observation;
   readonly evidence: EvidenceSet;
   readonly classification: Classification;
   readonly policy: PolicyDecision;
   readonly correlation: CorrelationResolverResult | null;
   readonly regenerabilityProof: RuntimeRegenerabilityProof | null;
-  readonly candidate: RuntimeCandidate;
-  readonly identity: UserExclusionIdentity;
+  readonly candidate: RuntimeCandidate | null;
+  readonly identity: UserExclusionIdentity | null;
+  readonly diagnostic: RuntimeDiagnostic | null;
 }
 
 interface AuditRunRecord {
@@ -972,6 +1217,10 @@ export interface RuntimeServiceOptions {
     readonly filesystem?: MacOSCorrelationReadOnlyFileSystem;
     readonly ownerBindingHistory?: MacOSOwnerBindingHistory;
     readonly installationKey?: InstallationKey;
+  }>;
+  /** Test-only root override; packaged runtime inspects the real /Library read-only. */
+  readonly diagnostics?: Readonly<{
+    readonly systemLibraryRoot?: string;
   }>;
 }
 
@@ -1223,6 +1472,10 @@ class AuditRuntimeService implements AuditToolService {
     };
     return {
       model,
+      componentDisplayName: safeWidgetComponentDisplayName(
+        candidate.path,
+        model.displayName,
+      ),
       observation,
       evidence,
       classification,
@@ -1231,6 +1484,90 @@ class AuditRuntimeService implements AuditToolService {
       regenerabilityProof,
       candidate,
       identity,
+      diagnostic: null,
+    };
+  }
+
+  private buildDiagnosticFinding(
+    observation: Observation,
+    auditId: string,
+  ): FindingRecord | null {
+    const diagnostic = this.filesystem.diagnostic(observation.targetRef);
+    if (diagnostic === undefined) return null;
+    const evidence = normalizeEvidence([observation], [])[0]!;
+    const classification = classifyEvidence(evidence);
+    const fingerprintHash = sha256(observation.fingerprint);
+    const timestampNs = String(
+      Math.max(0, Date.parse(observation.observedAt)) * 1_000_000,
+    );
+    const fingerprint: SnapshotFingerprint = {
+      device: "diagnostic",
+      inode: fingerprintHash.slice(0, 16),
+      mode: 0,
+      uid: 0,
+      gid: 0,
+      size: observation.logicalSize,
+      mtimeNs: timestampNs,
+      ctimeNs: timestampNs,
+      fileType: "plist",
+      mountId: "diagnostic",
+      symbolicLink: false,
+      linkCount: 1,
+    };
+    const evaluated = evaluatePolicy({
+      classification,
+      evidenceSet: evidence,
+      supportLevel: observation.supportLevel,
+      category: diagnostic.category,
+      sensitivityFlags: observation.sensitivityFlags,
+      protectedScopeKinds:
+        observation.supportLevel === "unsupported_manual"
+          ? ["system_scope"]
+          : [],
+      exclusionMatch: { status: "none" },
+      officialUninstallerApplicable: false,
+      snapshotFingerprint: fingerprint,
+      currentFingerprint: fingerprint,
+      pathValidation: { ok: false, errorCode: "PATH_OUTSIDE_ALLOWLIST" },
+    });
+    const policy: PolicyDecision = {
+      ...evaluated,
+      allowedActions: evaluated.allowedActions.filter(
+        (action) => action === "inspect",
+      ),
+    };
+    const model: FindingModelView = {
+      findingId: this.findingId(auditId, observation.targetRef),
+      displayName: observation.displayName,
+      category: diagnostic.category,
+      supportLevel: observation.supportLevel,
+      logicalSize: observation.logicalSize,
+      physicalSize: observation.physicalSize,
+      label: classification.label,
+      confidence: classification.confidence,
+      risk: observation.supportLevel === "unsupported_manual" ? "high" : "medium",
+      allowedActions: [...policy.allowedActions],
+      safeMetadata: {
+        format: diagnostic.category === "autostart" ? "plist" : "unknown",
+        parseStatus: "parsed",
+        byteLength: observation.logicalSize,
+        modifiedAt: observation.observedAt,
+        sensitivityFlags: [...observation.sensitivityFlags],
+      },
+      blockingReasons: [...policy.blockingRuleIds],
+    };
+    return {
+      model,
+      componentDisplayName: diagnostic.componentDisplayName,
+      observation,
+      evidence,
+      classification,
+      policy,
+      correlation: null,
+      regenerabilityProof: null,
+      candidate: null,
+      identity: null,
+      diagnostic,
     };
   }
 
@@ -1246,9 +1583,15 @@ class AuditRuntimeService implements AuditToolService {
     run.stateVersion += 1;
     this.filesystem.clear();
     try {
-      const result = await runAdapters([createLibraryRootsAdapter(this.filesystem)], {
-        signal: run.controller.signal,
-      });
+      const result = await runAdapters(
+        [
+          createLibraryRootsAdapter(this.filesystem),
+          createAutostartAdapter(this.filesystem),
+          createInspectionOnlyAdapter(this.filesystem),
+          createOrphanedProcessAdapter(this.filesystem),
+        ],
+        { signal: run.controller.signal },
+      );
       // Coordinator может завершиться состоянием cancelled без исключения.
       // Повторно проверяем общий signal, чтобы server deadline всегда проходил
       // через единый failed/AUDIT_TIMEOUT путь, а явная отмена — через cancelled.
@@ -1293,11 +1636,18 @@ class AuditRuntimeService implements AuditToolService {
           run.controller.signal.throwIfAborted();
           const candidate = this.filesystem.candidate(observation.targetRef);
           if (candidate === undefined) {
+            const finding = this.buildDiagnosticFinding(
+              observation,
+              run.auditId,
+            );
             recordCandidateProgress();
             return {
-              finding: null,
+              finding,
               excluded: false,
-              warningCodes: ["CORRELATION_COVERAGE_INCOMPLETE"],
+              warningCodes:
+                finding === null
+                  ? ["CORRELATION_COVERAGE_INCOMPLETE"]
+                  : [],
             } as const;
           }
           let correlation: CorrelationResolverResult | null = null;
@@ -1334,9 +1684,11 @@ class AuditRuntimeService implements AuditToolService {
             run.auditId,
             exclusionState,
           );
-          const excluded = exclusionState.exclusions.some((exclusion) =>
-            sameIdentity(exclusion, finding.identity),
-          );
+          const excluded =
+            finding.identity !== null &&
+            exclusionState.exclusions.some((exclusion) =>
+              sameIdentity(exclusion, finding.identity!),
+            );
           recordCandidateProgress();
           return { finding, excluded, warningCodes } as const;
         },
@@ -1533,6 +1885,7 @@ class AuditRuntimeService implements AuditToolService {
       findings: actionable ? run.findings.map((finding) => {
         const safe = finding.correlation?.safeView;
         const facts = safe?.facts;
+        const diagnostic = finding.diagnostic;
         const receiptState =
           safe?.receiptLifecycle.lifecycle === "live" ||
           safe?.receiptLifecycle.lifecycle === "stale"
@@ -1542,7 +1895,7 @@ class AuditRuntimeService implements AuditToolService {
               : "unknown";
         return {
           ...finding.model,
-          componentDisplayName: finding.model.displayName,
+          componentDisplayName: finding.componentDisplayName,
           correlationRevisionId: safe?.correlationRevisionId ?? null,
           ownerBindingState: safe?.ownerBindingState ?? "missing",
           ownerBindingSourceClass: safe?.ownerBindingSourceClass ?? "none",
@@ -1553,22 +1906,38 @@ class AuditRuntimeService implements AuditToolService {
             reasonCode: "missing",
           },
           facts: facts ?? null,
-          coverageSummary: safe?.coverageSummary ?? {
-            completeSourceCount: 0,
-            gapCount: 1,
-            gapCodes: ["missing"],
-          },
-          staleDuringAudit: safe?.staleDuringAudit ?? true,
-          blockingReasonCodes: safe?.blockingReasonCodes ?? ["coverage_incomplete"],
+          coverageSummary: safe?.coverageSummary ??
+            (diagnostic === null
+              ? {
+                  completeSourceCount: 0,
+                  gapCount: 1,
+                  gapCodes: ["missing"],
+                }
+              : {
+                  completeSourceCount: 1,
+                  gapCount: 0,
+                  gapCodes: [],
+                }),
+          staleDuringAudit: safe?.staleDuringAudit ?? diagnostic === null,
+          blockingReasonCodes:
+            safe?.blockingReasonCodes ?? finding.policy.blockingRuleIds,
           findingFacts: {
             lastObservedAt: finding.observation.observedAt,
             temporalKind: finding.evidence.stale ? "stale" : "current",
             mainBundleState: facts?.ownerApplication.state ?? "unknown",
-            activityState: facts?.activity.state ?? "unknown",
+            activityState:
+              facts?.activity.state ?? diagnostic?.activityState ?? "unknown",
             openFileState: facts?.openFile.state ?? "unknown",
             startupKinds:
-              facts?.startupTarget.state === "present" ? ["unknown"] : [],
-            targetExecutableState: facts?.ownerExecutable.state ?? "unknown",
+              diagnostic !== null && diagnostic.startupKind !== null
+                ? [diagnostic.startupKind]
+                : facts?.startupTarget.state === "present"
+                  ? ["unknown"]
+                  : [],
+            targetExecutableState:
+              diagnostic?.targetExecutableState ??
+              facts?.ownerExecutable.state ??
+              "unknown",
             receiptState,
             dependencyState: facts?.dependency.state ?? "unknown",
             sensitivityFlags: finding.observation.sensitivityFlags,
@@ -1582,7 +1951,16 @@ class AuditRuntimeService implements AuditToolService {
             limitations: ["snapshot_estimate"],
             observedAt: finding.observation.observedAt,
           },
-          evidence: [],
+          evidence: diagnostic === null
+            ? []
+            : finding.evidence.items.map((item) => ({
+                evidenceId: item.evidenceId,
+                ruleInputType: item.ruleInputType,
+                sourceAdapter: item.sourceAdapter,
+                outcome: item.outcome,
+                observedAt: item.observedAt,
+                summary: item.summary,
+              })),
         };
       }) : [],
       quarantineEntries: manifests
@@ -1658,11 +2036,13 @@ class AuditRuntimeService implements AuditToolService {
   async storageSummary(): Promise<StorageSummary> {
     const run = this.latestAuditId === null ? undefined : this.runs.get(this.latestAuditId);
     const candidateLogicalBytes = run?.findings.reduce(
-      (total, finding) => total + finding.model.logicalSize,
+      (total, finding) =>
+        total + (finding.candidate === null ? 0 : finding.model.logicalSize),
       0,
     ) ?? 0;
     const candidatePhysicalBytes = run?.findings.reduce(
-      (total, finding) => total + finding.model.physicalSize,
+      (total, finding) =>
+        total + (finding.candidate === null ? 0 : finding.model.physicalSize),
       0,
     ) ?? 0;
     const controller = new QuarantineController({
@@ -1680,15 +2060,17 @@ class AuditRuntimeService implements AuditToolService {
 
   moveSubject(findingId: string, revision: number): MoveSubject {
     const { finding, run } = this.findingWithRun(findingId, revision);
+    const candidate = finding.candidate;
+    if (candidate === null) throw new Error("AUDIT_STALE");
     return {
       auditId: run.auditId,
       auditRevision: revision,
       findingId,
-      sourcePath: finding.candidate.path,
-      allowedRoot: finding.candidate.allowedRoot,
-      sourceFingerprint: finding.candidate.fingerprint,
-      sourceParentFingerprint: finding.candidate.parentFingerprint,
-      artifactKind: finding.candidate.kind,
+      sourcePath: candidate.path,
+      allowedRoot: candidate.allowedRoot,
+      sourceFingerprint: candidate.fingerprint,
+      sourceParentFingerprint: candidate.parentFingerprint,
+      artifactKind: candidate.kind,
       category: finding.model.category,
       physicalSize: finding.model.physicalSize,
       classificationRuleIds: finding.classification.ruleIds,
@@ -1704,12 +2086,14 @@ class AuditRuntimeService implements AuditToolService {
       subject.findingId,
       subject.auditRevision,
     );
-    const currentPath = await this.filesystem.revalidateCandidate(finding.candidate);
+    const candidate = finding.candidate;
+    if (candidate === null) throw new Error("AUDIT_STALE");
+    const currentPath = await this.filesystem.revalidateCandidate(candidate);
     const exclusionState = await this.exclusionSnapshot();
     let currentFinding: FindingRecord | null = null;
     try {
       const adapter = this.correlationAdapter(
-        new Map([[finding.observation.targetRef, finding.candidate.path]]),
+        new Map([[finding.observation.targetRef, candidate.path]]),
       );
       const correlation = await this.resolveCandidate(
         adapter,
@@ -1766,21 +2150,22 @@ class AuditRuntimeService implements AuditToolService {
               protectedScopeKinds: currentPath.protectedScopeEvaluation.kinds,
               exclusionMatch: exclusionState.invalid
                 ? { status: "invalid", errorCode: "EXCLUSION_STATE_INVALID" }
-                : exclusionState.exclusions.some((exclusion) =>
-                      sameIdentity(exclusion, currentFinding!.identity),
+                : currentFinding.identity !== null &&
+                    exclusionState.exclusions.some((exclusion) =>
+                      sameIdentity(exclusion, currentFinding.identity!),
                     )
                   ? {
                       status: "matched",
                       exclusionId:
                         exclusionState.exclusions.find((exclusion) =>
-                          sameIdentity(exclusion, currentFinding!.identity),
+                          sameIdentity(exclusion, currentFinding.identity!),
                         )!.exclusionId,
                     }
                   : { status: "none" },
               officialUninstallerApplicable:
                 currentCorrelation?.safeView.facts.officialUninstaller.state ===
                 "present",
-              snapshotFingerprint: finding.candidate.fingerprint,
+              snapshotFingerprint: candidate.fingerprint,
               currentFingerprint: observed.sourceFingerprint,
               pathValidation: currentPath.pathValidation,
             }),
@@ -2228,10 +2613,20 @@ export async function createRuntimeCore(
     options.currentProjectRoot ?? process.cwd(),
   );
   const currentProjectRoot = await realpath(requestedCurrentProjectRoot);
+  const correlationCommands =
+    options.correlation?.commands ?? createNodeCommandRunner();
+  const systemLibraryRoot = resolve(
+    options.diagnostics?.systemLibraryRoot ??
+      (homeDirectory === resolve(homedir())
+        ? "/Library"
+        : join(homeDirectory, ".cmc-system-library-unavailable")),
+  );
   const filesystem = new RuntimeFileSystemFacade(
     homeDirectory,
     stateRoot,
     currentProjectRoot,
+    correlationCommands,
+    systemLibraryRoot,
   );
   const auditService = new AuditRuntimeService(
     filesystem,
@@ -2239,7 +2634,7 @@ export async function createRuntimeCore(
     stateRoot,
     homeDirectory,
     options.correlation?.installationKey ?? installationKey,
-    options.correlation?.commands ?? createNodeCommandRunner(),
+    correlationCommands,
     options.correlation?.filesystem,
     options.correlation?.ownerBindingHistory,
     options.auditTimeoutMs ?? DEFAULT_AUDIT_TIMEOUT_MS,
