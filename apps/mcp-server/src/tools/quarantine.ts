@@ -16,7 +16,7 @@ const AppToolAnnotations = {
   idempotentHint: true,
 } as const;
 const LegacyOpaqueActionHandleSchema = OpaqueIdSchema.describe(
-  "Legacy transport field previewToken содержит opaque action handle; core token server-only, exact operationId replay идемпотентен.",
+  "Поле previewToken содержит непрозрачный идентификатор действия (opaque action handle); секрет остаётся только на сервере; повтор с тем же operationId возвращает прежний результат.",
 );
 
 export const QuarantineEntryModelSchema = z
@@ -101,7 +101,7 @@ export const APP_VISIBLE_QUARANTINE_TOOL_DEFINITIONS = {
   quarantine_prepare_move: {
     title: "Подготовить перемещение в карантин",
     description:
-      "Подготавливает preview одного объекта после клика пользователя в Dashboard.",
+      "Повторно проверяет один объект после нажатия пользователя в окне проверки.",
     inputSchema: QuarantinePrepareMoveInputSchema,
     outputSchema: QuarantinePrepareMoveOutputSchema,
     annotations: { ...AppToolAnnotations, readOnlyHint: false },
@@ -110,7 +110,7 @@ export const APP_VISIBLE_QUARANTINE_TOOL_DEFINITIONS = {
   quarantine_move: {
     title: "Переместить в карантин",
     description:
-      "Перемещает один объект по opaque action handle; exact operationId replay возвращает прежний результат.",
+      "Перемещает только один подтверждённый объект. Повтор того же запроса возвращает прежний результат.",
     inputSchema: QuarantineMoveInputSchema,
     outputSchema: QuarantineActionOutputSchema,
     annotations: {
@@ -130,7 +130,7 @@ export const APP_VISIBLE_QUARANTINE_TOOL_DEFINITIONS = {
   },
   quarantine_prepare_restore: {
     title: "Подготовить восстановление",
-    description: "Подготавливает preview восстановления одной записи карантина.",
+    description: "Повторно проверяет одну запись карантина перед восстановлением.",
     inputSchema: QuarantineEntryInputSchema,
     outputSchema: QuarantinePrepareEntryOutputSchema,
     annotations: { ...AppToolAnnotations, readOnlyHint: false },
@@ -146,7 +146,7 @@ export const APP_VISIBLE_QUARANTINE_TOOL_DEFINITIONS = {
   },
   quarantine_prepare_purge: {
     title: "Подготовить окончательное удаление",
-    description: "Подготавливает preview необратимого удаления одной записи.",
+    description: "Повторно проверяет одну запись перед необратимым удалением.",
     inputSchema: QuarantineEntryInputSchema,
     outputSchema: QuarantinePrepareEntryOutputSchema,
     annotations: { ...AppToolAnnotations, readOnlyHint: false },
@@ -154,7 +154,7 @@ export const APP_VISIBLE_QUARANTINE_TOOL_DEFINITIONS = {
   },
   quarantine_purge: {
     title: "Удалить из карантина навсегда",
-    description: "Необратимо удаляет один подтверждённый payload карантина.",
+    description: "Необратимо удаляет содержимое одной подтверждённой записи карантина.",
     inputSchema: QuarantineConfirmedEntryInputSchema,
     outputSchema: QuarantineActionOutputSchema,
     annotations: {

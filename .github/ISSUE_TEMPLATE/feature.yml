@@ -1,6 +1,6 @@
 name: Предложение
 description: Предложить ограниченное и проверяемое улучшение
-title: "[FEATURE] "
+title: "[ПРЕДЛОЖЕНИЕ] "
 labels:
   - enhancement
 body:

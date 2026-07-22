@@ -1,7 +1,7 @@
 const CATEGORY_LABELS: Readonly<Record<string, string>> = {
   cache: "кэш приложения",
   log: "журнал приложения",
-  webkit: "данные WebKit",
+  webkit: "веб-данные приложения",
   http_storage: "веб-хранилище приложения",
   saved_state: "сохранённое состояние приложения",
   application_support: "служебные данные приложения",
@@ -56,7 +56,7 @@ const PRESENCE_LABELS: Readonly<Record<string, string>> = {
 
 const REMOVAL_METHOD_LABELS: Readonly<Record<string, string>> = {
   quarantine: "переместить в карантин",
-  official_uninstaller: "использовать официальный деинсталлятор",
+  official_uninstaller: "использовать официальное средство удаления",
   close_and_recheck: "закрыть приложение и проверить снова",
   advanced_mode: "проверить вручную в расширенном режиме",
   inspect_only: "только просмотреть",
@@ -72,7 +72,7 @@ const STARTUP_KIND_LABELS: Readonly<Record<string, string>> = {
 
 const SENSITIVITY_LABELS: Readonly<Record<string, string>> = {
   credentials: "учётные данные",
-  tokens: "токены доступа",
+  tokens: "ключи доступа",
   subscription_url: "адрес подписки",
   personal_data: "личные данные",
   database: "база данных",
@@ -82,15 +82,15 @@ const SENSITIVITY_LABELS: Readonly<Record<string, string>> = {
 const RECLAIM_BASIS_LABELS: Readonly<Record<string, string>> = {
   observed_physical_size: "размер на диске во время проверки",
   allocated_blocks: "занятые блоки файловой системы",
-  metadata_only: "только метаданные",
+  metadata_only: "только сведения о файле",
   unknown: "недостаточно данных",
 };
 
 const RECLAIM_LIMITATION_LABELS: Readonly<Record<string, string>> = {
   snapshot_estimate: "оценка сделана по снимку состояния",
-  apfs_shared_blocks: "APFS может совместно использовать блоки",
+  apfs_shared_blocks: "файловая система macOS может совместно использовать место",
   stale_observation: "наблюдение могло устареть",
-  metadata_only: "доступны только метаданные",
+  metadata_only: "доступны только сведения о файле",
   unknown: "есть неизвестные ограничения",
 };
 
@@ -112,7 +112,7 @@ const EVIDENCE_SOURCE_LABELS: Readonly<Record<string, string>> = {
   startup_items: "элементы автозапуска",
   package_receipts: "сведения установщика macOS",
   protected_containers: "защищённые контейнеры",
-  filesystem_metadata: "метаданные файловой системы",
+  filesystem_metadata: "сведения файловой системы",
 };
 
 const EVIDENCE_OUTCOME_LABELS: Readonly<Record<string, string>> = {
@@ -168,8 +168,8 @@ const BLOCKING_REASON_LABELS: Readonly<Record<string, string>> = {
   POLICY_STARTUP_TARGET_UNKNOWN: "не удалось проверить автозапуск",
   POLICY_RECEIPT_PRESENT: "установщик macOS считает приложение установленным",
   POLICY_RECEIPT_UNKNOWN: "не удалось проверить сведения установщика",
-  POLICY_OFFICIAL_UNINSTALLER_REQUIRED: "нужно использовать официальный деинсталлятор",
-  POLICY_OFFICIAL_UNINSTALLER_UNKNOWN: "не удалось проверить официальный деинсталлятор",
+  POLICY_OFFICIAL_UNINSTALLER_REQUIRED: "нужно использовать официальное средство удаления",
+  POLICY_OFFICIAL_UNINSTALLER_UNKNOWN: "не удалось найти официальное средство удаления",
   POLICY_DEPENDENCY_PRESENT: "объект нужен другой установленной программе",
   POLICY_DEPENDENCY_UNKNOWN: "не удалось проверить зависимости",
   POLICY_STALE_EVIDENCE: "данные проверки устарели",
@@ -181,7 +181,7 @@ const BLOCKING_REASON_LABELS: Readonly<Record<string, string>> = {
   POLICY_NON_QUARANTINE_REMOVAL_METHOD: "для объекта нужен другой способ удаления",
   POLICY_STALE_FINGERPRINT: "объект изменился после проверки",
   PROTECTED_SCOPE: "объект находится в защищённой области",
-  SYMLINK_BOUNDARY: "путь проходит через символическую ссылку",
+  SYMLINK_BOUNDARY: "путь ведёт через ссылку на другую папку",
   PATH_OWNER_MISMATCH: "владелец файла изменился",
 };
 

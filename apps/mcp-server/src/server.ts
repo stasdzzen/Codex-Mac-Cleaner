@@ -104,36 +104,36 @@ interface AppToolDefinition {
 
 export const MODEL_VISIBLE_TOOL_DEFINITIONS = {
   audit_start: {
-    title: "Начать аудит",
-    description: "Запускает read-only аудит остатков приложений.",
+    title: "Начать проверку",
+    description: "Ищет остатки удалённых приложений, не изменяя файлы.",
     inputSchema: AuditStartInputSchema,
     outputSchema: AuditStartOutputSchema,
     annotations: { ...ModelToolAnnotations, readOnlyHint: false },
   },
   audit_status: {
-    title: "Статус аудита",
-    description: "Возвращает прогресс и безопасные предупреждения покрытия.",
+    title: "Состояние проверки",
+    description: "Показывает ход проверки и сообщает о недоступных областях.",
     inputSchema: AuditStatusInputSchema,
     outputSchema: AuditStatusOutputSchema,
     annotations: { ...ModelToolAnnotations, readOnlyHint: true },
   },
   audit_cancel: {
-    title: "Отменить аудит",
-    description: "Кооперативно отменяет read-only аудит без файловых изменений.",
+    title: "Остановить проверку",
+    description: "Безопасно останавливает проверку, не изменяя файлы.",
     inputSchema: AuditCancelInputSchema,
     outputSchema: AuditCancelOutputSchema,
     annotations: { ...ModelToolAnnotations, readOnlyHint: false },
   },
   audit_results: {
-    title: "Результаты аудита",
-    description: "Возвращает страницу обезличенных результатов завершённой ревизии.",
+    title: "Результаты проверки",
+    description: "Возвращает обезличенные результаты завершённой проверки.",
     inputSchema: AuditResultsInputSchema,
     outputSchema: AuditResultsOutputSchema,
     annotations: { ...ModelToolAnnotations, readOnlyHint: true },
   },
   dashboard_open: {
-    title: "Открыть Dashboard",
-    description: "Возвращает безопасный snapshot для Audit Dashboard.",
+    title: "Открыть окно проверки",
+    description: "Открывает безопасные результаты проверки Mac.",
     inputSchema: DashboardOpenInputSchema,
     outputSchema: DashboardOpenOutputSchema,
     annotations: { ...ModelToolAnnotations, readOnlyHint: true },
@@ -148,8 +148,8 @@ export const MODEL_VISIBLE_TOOL_DEFINITIONS = {
     },
   },
   finding_inspect: {
-    title: "Проверить находку",
-    description: "Повторно проверяет безопасные evidence и stale-состояние находки.",
+    title: "Подробнее о находке",
+    description: "Повторно проверяет сведения о находке и их актуальность.",
     inputSchema: FindingInspectInputSchema,
     outputSchema: FindingInspectOutputSchema,
     annotations: { ...ModelToolAnnotations, readOnlyHint: true },
@@ -176,16 +176,16 @@ const AppOnlyMeta = { ui: { visibility: ["app"] } } as const;
 
 export const APP_VISIBLE_EXCLUSION_TOOL_DEFINITIONS = {
   exclusion_create: {
-    title: "Исключить находку",
-    description: "Сохраняет server-owned identity находки в локальном состоянии.",
+    title: "Оставить объект",
+    description: "Сохраняет выбор пользователя, не раскрывая путь к объекту.",
     inputSchema: ExclusionCreateInputSchema,
     outputSchema: ExclusionCreateOutputSchema,
     annotations: { ...AppToolAnnotations, readOnlyHint: false },
     _meta: AppOnlyMeta,
   },
   exclusion_list: {
-    title: "Список исключений",
-    description: "Возвращает безопасный список пользовательских исключений.",
+    title: "Оставленные объекты",
+    description: "Возвращает безопасный список объектов, которые пользователь решил оставить.",
     inputSchema: ExclusionListInputSchema,
     outputSchema: ExclusionListOutputSchema,
     annotations: { ...AppToolAnnotations, readOnlyHint: true },
@@ -193,23 +193,23 @@ export const APP_VISIBLE_EXCLUSION_TOOL_DEFINITIONS = {
   },
   exclusion_remove: {
     title: "Снова проверять",
-    description: "Удаляет одну запись исключения по server-generated ID.",
+    description: "Возвращает один оставленный объект в следующую проверку.",
     inputSchema: ExclusionRemoveInputSchema,
     outputSchema: ExclusionRemoveOutputSchema,
     annotations: { ...AppToolAnnotations, readOnlyHint: false },
     _meta: AppOnlyMeta,
   },
   exclusion_reset_prepare: {
-    title: "Подготовить сброс исключений",
-    description: "Создаёт одноразовый token для отдельного подтверждения.",
+    title: "Подготовить повторную проверку всех объектов",
+    description: "Готовит отдельное подтверждение повторной проверки всех оставленных объектов.",
     inputSchema: ExclusionResetPrepareInputSchema,
     outputSchema: ExclusionResetPrepareOutputSchema,
     annotations: { ...AppToolAnnotations, readOnlyHint: false },
     _meta: AppOnlyMeta,
   },
   exclusion_reset: {
-    title: "Сбросить исключения",
-    description: "Удаляет все записи исключений после проверки одноразового token.",
+    title: "Снова проверять все объекты",
+    description: "Возвращает все оставленные объекты в следующую проверку после подтверждения.",
     inputSchema: ExclusionResetInputSchema,
     outputSchema: ExclusionResetOutputSchema,
     annotations: { ...AppToolAnnotations, readOnlyHint: false },
@@ -593,7 +593,7 @@ function skeletonUnavailableResult(): CallToolResult {
     content: [
       {
         type: "text",
-        text: "Runtime-координатор этого инструмента ещё не подключён.",
+        text: "Служба этого инструмента ещё не подключена.",
       },
     ],
     isError: true,
@@ -627,13 +627,13 @@ function exclusionErrorResult(error: unknown): CallToolResult {
   const message =
     error instanceof ExclusionToolError
       ? error.errorCode === "EXCLUDED_FINDING"
-        ? "Находка исключена. Destructive token не создан."
+        ? "Пользователь решил оставить объект. Изменение файлов недоступно."
         : error.errorCode === "EXCLUSION_STATE_INVALID"
           ? "Состояние исключений повреждено. Изменяющие действия заблокированы."
           : error.errorCode === "PREVIEW_EXPIRED"
             ? "Подтверждение сброса недействительно. Подготовьте новое."
-            : "Ревизия аудита устарела. Повторите проверку."
-      : "Операция с исключениями безопасно остановлена.";
+            : "Результаты устарели. Запустите проверку ещё раз."
+      : "Изменение списка оставленных объектов безопасно остановлено.";
   return {
     content: [{ type: "text", text: ModelSafeTextSchema.parse(message) }],
     isError: true,
@@ -651,31 +651,31 @@ async function callExclusionTool(
         return buildAppToolResult(
           toolName,
           await service.create(rawInput as ExclusionCreateInput),
-          "Пользовательское исключение сохранено.",
+          "Объект оставлен и больше не будет предлагаться для очистки.",
         );
       case "exclusion_list":
         return buildAppToolResult(
           toolName,
           await service.list(rawInput as ExclusionListInput),
-          "Список пользовательских исключений обновлён.",
+          "Список оставленных объектов обновлён.",
         );
       case "exclusion_remove":
         return buildAppToolResult(
           toolName,
           await service.remove(rawInput as ExclusionRemoveInput),
-          "Исключение удалено. Объект снова будет проверяться.",
+          "Объект снова будет проверяться.",
         );
       case "exclusion_reset_prepare":
         return buildAppToolResult(
           toolName,
           await service.resetPrepare(rawInput as ExclusionResetPrepareInput),
-          "Подготовлено отдельное подтверждение сброса исключений.",
+          "Подготовлено отдельное подтверждение повторной проверки всех объектов.",
         );
       case "exclusion_reset":
         return buildAppToolResult(
           toolName,
           await service.reset(rawInput as ExclusionResetInput),
-          "Пользовательские исключения сброшены.",
+          "Все оставленные объекты снова будут проверяться.",
         );
     }
   } catch (error) {
@@ -730,7 +730,7 @@ async function callQuarantineTool(
         return buildAppToolResult(
           toolName,
           await service.purge(rawInput as never),
-          "Один payload карантина удалён навсегда.",
+          "Один объект удалён из карантина навсегда.",
         );
     }
   } catch {
@@ -770,32 +770,32 @@ async function callAuditModelTool(
         return buildToolResult(
           toolName,
           await service.start(rawInput),
-          "Read-only аудит поставлен в очередь.",
+          "Проверка поставлена в очередь. Файлы не изменяются.",
         );
       case "audit_status":
         return buildToolResult(
           toolName,
           await service.status(rawInput),
-          "Безопасный статус аудита обновлён.",
+          "Состояние проверки обновлено.",
         );
       case "audit_cancel":
         return buildToolResult(
           toolName,
           await service.cancel(rawInput),
-          "Запрос кооперативной отмены обработан.",
+          "Запрос на остановку проверки обработан.",
         );
       case "audit_results":
         return buildToolResult(
           toolName,
           await service.results(rawInput),
-          "Безопасные результаты аудита получены.",
+          "Безопасные результаты проверки получены.",
         );
       case "dashboard_open": {
         const dashboard = await service.dashboard(rawInput);
         return buildToolResult(
           toolName,
           dashboard.output,
-          "Dashboard готов к открытию.",
+          "Окно проверки готово к открытию.",
           {
             ...dashboard.meta,
             "openai/outputTemplate": DASHBOARD_RESOURCE_URI,
@@ -806,7 +806,7 @@ async function callAuditModelTool(
         return buildToolResult(
           toolName,
           await service.inspect(rawInput),
-          "Evidence находки безопасно перепроверены.",
+          "Сведения о находке безопасно перепроверены.",
         );
       case "finding_reveal":
         return buildToolResult(
@@ -816,7 +816,7 @@ async function callAuditModelTool(
         );
     }
   } catch {
-    return safeServiceError("Операция аудита безопасно остановлена.");
+    return safeServiceError("Проверка безопасно остановлена.");
   }
 }
 
@@ -836,10 +836,10 @@ async function callScheduleModelTool(
     return buildToolResult(
       toolName,
       await service.complete(rawInput as never),
-      "Инертный schedule endpoint не выполняет host action в v0.1.",
+      "Автоматическая проверка недоступна в этой версии.",
     );
   } catch {
-    return safeServiceError("Schedule intent недоступен или уже завершён.");
+    return safeServiceError("Запрос автоматической проверки недоступен или уже завершён.");
   }
 }
 
@@ -853,16 +853,16 @@ async function callScheduleAppTool(
       return buildAppToolResult(
         toolName,
         await service.request(rawInput as never),
-        "Автоматическое расписание недоступно в v0.1; используйте ручной read-only аудит.",
+        "Автоматическая проверка недоступна в этой версии. Запустите обычную проверку вручную.",
       );
     }
     return buildAppToolResult(
       toolName,
       await service.state(rawInput as never),
-      "Расписание отключено в v0.1; host/system scheduler отсутствует.",
+      "Автоматическая проверка отключена в этой версии.",
     );
   } catch {
-    return safeServiceError("Schedule intent безопасно остановлен.");
+    return safeServiceError("Запрос автоматической проверки безопасно остановлен.");
   }
 }
 

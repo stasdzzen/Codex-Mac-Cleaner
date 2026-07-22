@@ -416,7 +416,7 @@ describe("полная интеграция MCP App", () => {
           action: "pause",
         },
       });
-      expect(JSON.stringify(unavailable.content)).toContain("недоступно");
+      expect(JSON.stringify(unavailable.content)).toMatch(/недоступн[ао]/u);
       expect(JSON.stringify(unavailable.content)).not.toMatch(
         /требуется отдельная host capability|подтверждени/iu,
       );

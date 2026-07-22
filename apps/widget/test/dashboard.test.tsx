@@ -147,12 +147,12 @@ describe("интерфейс проверки Mac", () => {
     const { bridge, callTool } = createBridge();
     render(<AuditDashboard snapshot={dashboardFixture} bridge={bridge} />);
 
-    for (const name of ["Обзор", "Найдено", "Карантин", "Исключения", "Автопроверка"]) {
+    for (const name of ["Обзор", "Найдено", "Карантин", "Оставленные", "Автопроверка"]) {
       expect(screen.getByRole("tab", { name })).toBeVisible();
     }
 
-    fireEvent.click(screen.getByRole("tab", { name: "Исключения" }));
-    expect(await screen.findByText("Пользовательских исключений нет.")).toBeVisible();
+    fireEvent.click(screen.getByRole("tab", { name: "Оставленные" }));
+    expect(await screen.findByText("Оставленных объектов нет")).toBeVisible();
 
     fireEvent.click(screen.getByRole("tab", { name: "Автопроверка" }));
     expect(
@@ -202,8 +202,8 @@ describe("интерфейс проверки Mac", () => {
     expect(within(sheet).getByText("Открытые файлы: не удалось проверить")).toBeVisible();
     expect(within(sheet).getByText("Сведения установщика: не удалось проверить")).toBeVisible();
     expect(within(sheet).getByText("Чувствительные данные: база данных, личные данные")).toBeVisible();
-    expect(within(sheet).getByText("Вывод: назначение не определено")).toBeVisible();
-    expect(within(sheet).getByText("Уверенность: низкая")).toBeVisible();
+    expect(within(sheet).getByText("Что это: назначение не определено")).toBeVisible();
+    expect(within(sheet).getByText("Насколько надёжен вывод: низкая")).toBeVisible();
     expect(within(sheet).getByText("Риск: высокий")).toBeVisible();
     expect(within(sheet).getByText("Причина: категория требует ручной проверки")).toBeVisible();
     expect(within(sheet).getByText("Проверено: тип данных.")).toBeVisible();
@@ -400,7 +400,7 @@ describe("интерфейс проверки Mac", () => {
     fireEvent.click(trigger);
 
     const dialog = await screen.findByRole("alertdialog", {
-      name: "Переместить в карантин: Synthetic Cache",
+      name: "Переместить «Synthetic Cache» в карантин?",
     });
     expect(within(dialog).getByText(/ровно один объект/i)).toBeVisible();
     expect(within(dialog).getByText(/будет перемещён в карантин/i)).toBeVisible();

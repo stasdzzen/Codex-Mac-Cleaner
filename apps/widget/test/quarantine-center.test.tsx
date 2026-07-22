@@ -40,7 +40,7 @@ describe("Quarantine Center contract", () => {
     fireEvent.click(screen.getByRole("button", { name: "Восстановить: Synthetic Old Cache" }));
 
     const dialog = screen.getByRole("alertdialog", {
-      name: "Восстановить: Synthetic Old Cache",
+      name: "Восстановить «Synthetic Old Cache»?",
     });
     await waitFor(() => expect(callTool).toHaveBeenCalledOnce());
     expect(callTool.mock.calls).toEqual([
@@ -50,7 +50,7 @@ describe("Quarantine Center contract", () => {
       ],
     ]);
 
-    fireEvent.click(within(dialog).getByRole("button", { name: "Восстановить одну запись" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Восстановить этот объект" }));
     await waitFor(() => expect(callTool).toHaveBeenCalledTimes(2));
     expect(callTool.mock.calls).toEqual([
       [
@@ -74,7 +74,7 @@ describe("Quarantine Center contract", () => {
     fireEvent.click(screen.getByRole("button", { name: "Удалить навсегда: Synthetic Old Cache" }));
 
     const dialog = screen.getByRole("alertdialog", {
-      name: "Удалить навсегда: Synthetic Old Cache",
+      name: "Удалить навсегда «Synthetic Old Cache»?",
     });
     expect(within(dialog).getByText(/необратимо/i)).toBeVisible();
     expect(within(dialog).getByText(/один объект из карантина/i)).toBeVisible();
@@ -87,7 +87,7 @@ describe("Quarantine Center contract", () => {
       ],
     ]);
 
-    fireEvent.click(within(dialog).getByRole("button", { name: "Удалить одну запись" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Удалить этот объект" }));
     await waitFor(() => expect(callTool).toHaveBeenCalledTimes(2));
     expect(callTool.mock.calls).toEqual([
       [
