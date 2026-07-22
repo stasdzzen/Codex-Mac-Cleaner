@@ -84,10 +84,32 @@ const MAX_GIT_SCAN_DEPTH = 128;
 const MAX_GIT_SCAN_ENTRIES = 100_000;
 const MAX_EMPTY_ARTIFACT_ENTRIES = 4_096;
 const DEFAULT_AUDIT_TIMEOUT_MS = 5 * 60 * 1_000;
+const DEFAULT_CANDIDATE_CONCURRENCY = 4;
 const EMPTY_CACHE_LOG_RULE_ID = "EMPTY_CACHE_LOG_ARTIFACT_V1" as const;
 const EMPTY_CACHE_LOG_RULE_VERSION = 1 as const;
 
 type RuntimeProtectedScopeKind = ProtectedScopeKind;
+
+async function mapConcurrentOrdered<T, R>(
+  values: readonly T[],
+  concurrency: number,
+  worker: (value: T, index: number) => Promise<R>,
+): Promise<readonly R[]> {
+  const output = new Array<R>(values.length);
+  let nextIndex = 0;
+  const runners = Array.from(
+    { length: Math.min(concurrency, values.length) },
+    async () => {
+      while (nextIndex < values.length) {
+        const index = nextIndex;
+        nextIndex += 1;
+        output[index] = await worker(values[index]!, index);
+      }
+    },
+  );
+  await Promise.all(runners);
+  return output;
+}
 
 const PROTECTED_SCOPE_ORDER: readonly RuntimeProtectedScopeKind[] =
   PROTECTED_SCOPE_REGISTRY.map((rule) => rule.kind);
@@ -938,6 +960,8 @@ export interface RuntimeServiceOptions {
   readonly createId?: (prefix: string) => string;
   /** Deterministic tests могут уменьшить deadline; packaged runtime использует 5 минут. */
   readonly auditTimeoutMs?: number;
+  /** Deterministic tests могут переопределить bounded concurrency; packaged runtime использует 4. */
+  readonly candidateConcurrency?: number;
   /**
    * Низкоуровневые production boundaries для in-process проверки composition.
    * Они не доступны через MCP, env или plugin manifest; packaged runtime всегда
@@ -973,6 +997,7 @@ class AuditRuntimeService implements AuditToolService {
     private readonly correlationFilesystem: MacOSCorrelationReadOnlyFileSystem | undefined,
     private readonly ownerBindingHistory: MacOSOwnerBindingHistory | undefined,
     private readonly auditTimeoutMs: number,
+    private readonly candidateConcurrency: number,
     private readonly now: () => Date,
     private readonly createId: (prefix: string) => string,
   ) {}
@@ -1252,54 +1277,7 @@ class AuditRuntimeService implements AuditToolService {
         }),
       );
       const correlationAdapter = this.correlationAdapter(candidatePaths);
-      const findings: FindingRecord[] = [];
-      const correlationWarningCodes = new Set<string>();
-      for (const observation of result.observations) {
-        run.controller.signal.throwIfAborted();
-        const candidate = this.filesystem.candidate(observation.targetRef);
-        if (candidate === undefined) continue;
-        let correlation: CorrelationResolverResult | null = null;
-        try {
-          correlation = await this.resolveCandidate(
-            correlationAdapter,
-            observation,
-            run.auditId,
-            1,
-            exclusionState.stateVersion,
-            run.controller.signal,
-            "audit",
-          );
-          if (correlation.safeView.coverageSummary.gapCount > 0) {
-            correlationWarningCodes.add("CORRELATION_COVERAGE_INCOMPLETE");
-          }
-          if (correlation.safeView.ownerBindingState === "ambiguous") {
-            correlationWarningCodes.add("CORRELATION_AMBIGUOUS");
-          } else if (correlation.safeView.ownerBindingState === "mismatch") {
-            correlationWarningCodes.add("CORRELATION_MISMATCH");
-          }
-          if (correlation.safeView.staleDuringAudit) {
-            correlationWarningCodes.add("CORRELATION_SNAPSHOT_STALE");
-          }
-        } catch {
-          run.controller.signal.throwIfAborted();
-          correlationWarningCodes.add("CORRELATION_COVERAGE_INCOMPLETE");
-        }
-        const finding = this.buildFinding(
-          observation,
-          candidate,
-          correlation,
-          run.auditId,
-          exclusionState,
-        );
-        if (
-          !exclusionState.exclusions.some((exclusion) =>
-            sameIdentity(exclusion, finding.identity),
-          )
-        ) {
-          findings.push(finding);
-        } else {
-          run.excludedCount += 1;
-        }
+      const recordCandidateProgress = () => {
         run.processedCandidates += 1;
         run.completedSteps = 1 + run.processedCandidates;
         run.progressPhase =
@@ -1307,8 +1285,69 @@ class AuditRuntimeService implements AuditToolService {
             ? "correlating_candidates"
             : "finalizing";
         run.stateVersion += 1;
-      }
-      run.findings = findings;
+      };
+      const outcomes = await mapConcurrentOrdered(
+        result.observations,
+        this.candidateConcurrency,
+        async (observation) => {
+          run.controller.signal.throwIfAborted();
+          const candidate = this.filesystem.candidate(observation.targetRef);
+          if (candidate === undefined) {
+            recordCandidateProgress();
+            return {
+              finding: null,
+              excluded: false,
+              warningCodes: ["CORRELATION_COVERAGE_INCOMPLETE"],
+            } as const;
+          }
+          let correlation: CorrelationResolverResult | null = null;
+          const warningCodes: string[] = [];
+          try {
+            correlation = await this.resolveCandidate(
+              correlationAdapter,
+              observation,
+              run.auditId,
+              1,
+              exclusionState.stateVersion,
+              run.controller.signal,
+              "audit",
+            );
+            if (correlation.safeView.coverageSummary.gapCount > 0) {
+              warningCodes.push("CORRELATION_COVERAGE_INCOMPLETE");
+            }
+            if (correlation.safeView.ownerBindingState === "ambiguous") {
+              warningCodes.push("CORRELATION_AMBIGUOUS");
+            } else if (correlation.safeView.ownerBindingState === "mismatch") {
+              warningCodes.push("CORRELATION_MISMATCH");
+            }
+            if (correlation.safeView.staleDuringAudit) {
+              warningCodes.push("CORRELATION_SNAPSHOT_STALE");
+            }
+          } catch {
+            run.controller.signal.throwIfAborted();
+            warningCodes.push("CORRELATION_COVERAGE_INCOMPLETE");
+          }
+          const finding = this.buildFinding(
+            observation,
+            candidate,
+            correlation,
+            run.auditId,
+            exclusionState,
+          );
+          const excluded = exclusionState.exclusions.some((exclusion) =>
+            sameIdentity(exclusion, finding.identity),
+          );
+          recordCandidateProgress();
+          return { finding, excluded, warningCodes } as const;
+        },
+      );
+      const correlationWarningCodes = new Set(
+        outcomes.flatMap(({ warningCodes }) => warningCodes),
+      );
+      run.findings = outcomes.flatMap(({ finding, excluded }) =>
+        finding === null || excluded ? [] : [finding],
+      );
+      run.excludedCount = outcomes.filter(({ excluded }) => excluded).length;
       run.coverageWarningCodes = [
         ...new Set([...run.coverageWarningCodes, ...correlationWarningCodes]),
       ];
@@ -2168,6 +2207,11 @@ export interface RuntimeCore {
 export async function createRuntimeCore(
   options: RuntimeServiceOptions = {},
 ): Promise<RuntimeCore> {
+  const candidateConcurrency =
+    options.candidateConcurrency ?? DEFAULT_CANDIDATE_CONCURRENCY;
+  if (!Number.isSafeInteger(candidateConcurrency) || candidateConcurrency < 1) {
+    throw new Error("RUNTIME_CONFIGURATION_INVALID");
+  }
   const requestedHomeDirectory = resolve(options.homeDirectory ?? homedir());
   const homeDirectory = await realpath(requestedHomeDirectory);
   const requestedStateRoot = resolve(
@@ -2199,6 +2243,7 @@ export async function createRuntimeCore(
     options.correlation?.filesystem,
     options.correlation?.ownerBindingHistory,
     options.auditTimeoutMs ?? DEFAULT_AUDIT_TIMEOUT_MS,
+    candidateConcurrency,
     options.now ?? (() => new Date()),
     options.createId ?? ((prefix) => `${prefix}-${randomUUID()}`),
   );

@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -425,6 +425,228 @@ describe("production runtime services", () => {
       coverageWarningCodes: ["AUDIT_TIMEOUT"],
       progress: { phase: "failed" },
     });
+  });
+
+  it("обрабатывает большой snapshot с bounded concurrency и сохраняет порядок findings", async () => {
+    const root = await mkdtemp(join(tmpdir(), "cmc-runtime-bounded-audit-"));
+    roots.push(root);
+    const homeDirectory = join(root, "home");
+    const cacheRoot = join(homeDirectory, "Library", "Caches");
+    await Promise.all(
+      Array.from({ length: 8 }, (_, index) =>
+        mkdir(join(cacheRoot, `Synthetic Candidate ${index}`), { recursive: true }),
+      ),
+    );
+    const discoveredNames = await readdir(cacheRoot);
+    const canonicalCacheRoot = await realpath(cacheRoot);
+    let packageInventoryCount = 0;
+    let fileInfoCount = 0;
+    let activeFileInfo = 0;
+    let maxActiveFileInfo = 0;
+    let releaseInitialFileInfo: (() => void) | undefined;
+    const initialFileInfoGate = new Promise<void>((resolve) => {
+      releaseInitialFileInfo = resolve;
+    });
+    const executor: ArgvExecutor = async (executable, argv, { signal }) => {
+      signal.throwIfAborted();
+      if (executable === "/usr/sbin/pkgutil" && argv[0] === "--pkgs") {
+        packageInventoryCount += 1;
+        return { stdout: "", stderr: "", exitCode: 0 };
+      }
+      if (executable === "/usr/sbin/pkgutil" && argv[0] === "--file-info") {
+        fileInfoCount += 1;
+        activeFileInfo += 1;
+        maxActiveFileInfo = Math.max(maxActiveFileInfo, activeFileInfo);
+        try {
+          if (fileInfoCount <= 2) {
+            if (fileInfoCount === 2) releaseInitialFileInfo?.();
+            await initialFileInfoGate;
+          }
+          signal.throwIfAborted();
+          return { stdout: "", stderr: "", exitCode: 0 };
+        } finally {
+          activeFileInfo -= 1;
+        }
+      }
+      return { stdout: "", stderr: "", exitCode: 0 };
+    };
+    const filesystem: MacOSCorrelationReadOnlyFileSystem = {
+      async canonicalize(path, signal) {
+        signal.throwIfAborted();
+        return path;
+      },
+      async stat(path, signal) {
+        signal.throwIfAborted();
+        return {
+          device: "device-bounded",
+          inode: inode(path),
+          fileType: "directory",
+          uid: process.getuid?.() ?? 501,
+          gid: process.getgid?.() ?? 20,
+          size: 0,
+          modifiedAtMs: 1,
+        };
+      },
+      async readDirectory() {
+        return [];
+      },
+    };
+    const services = await createDefaultRuntimeServices({
+      homeDirectory,
+      stateRoot: join(root, "state"),
+      auditTimeoutMs: 2_000,
+      candidateConcurrency: 4,
+      correlation: {
+        commands: createCommandRunner(executor),
+        filesystem,
+      },
+    });
+    const started = (await services.auditService?.start({
+      requestId: "bounded-audit-request",
+      profile: "application_remnants",
+    })) as { auditId: string };
+
+    let state = "queued";
+    for (let attempt = 0; attempt < 400; attempt += 1) {
+      const status = (await services.auditService?.status({
+        auditId: started.auditId,
+      })) as {
+        state: string;
+        progress: { processedCandidates: number; totalCandidates: number };
+      };
+      state = status.state;
+      if (state === "completed" || state === "completed_with_warnings") {
+        expect(status.progress).toMatchObject({
+          processedCandidates: 8,
+          totalCandidates: 8,
+        });
+        break;
+      }
+      if (state === "failed" || state === "cancelled") break;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+
+    expect(state).toMatch(/^completed(?:_with_warnings)?$/u);
+    expect(maxActiveFileInfo).toBeGreaterThanOrEqual(2);
+    expect(maxActiveFileInfo).toBeLessThanOrEqual(4);
+    expect(packageInventoryCount).toBe(2);
+    expect(fileInfoCount).toBe(16);
+    const results = await services.auditService?.results({
+      auditId: started.auditId,
+      revision: 1,
+      cursor: null,
+      filters: {},
+    });
+    const displayNames = (results as {
+      findings: Array<{ displayName: string }>;
+    }).findings.map(({ displayName }) => displayName);
+    expect(displayNames).toEqual(
+      discoveredNames.map((name) => {
+        const candidatePath = join(canonicalCacheRoot, name);
+        const publicSuffix = createHash("sha256")
+          .update(candidatePath)
+          .digest("hex")
+          .slice(16, 24);
+        return `Объект кэша ${publicSuffix}`;
+      }),
+    );
+  });
+
+  it("отменяет все concurrent candidate workers общим audit signal", async () => {
+    const root = await mkdtemp(join(tmpdir(), "cmc-runtime-concurrent-cancel-"));
+    roots.push(root);
+    const homeDirectory = join(root, "home");
+    const cacheRoot = join(homeDirectory, "Library", "Caches");
+    await Promise.all(
+      Array.from({ length: 8 }, (_, index) =>
+        mkdir(join(cacheRoot, `Cancel Candidate ${index}`), { recursive: true }),
+      ),
+    );
+    let activeFileInfo = 0;
+    let maxActiveFileInfo = 0;
+    let abortedFileInfo = 0;
+    let markWorkersStarted: (() => void) | undefined;
+    const workersStarted = new Promise<void>((resolve) => {
+      markWorkersStarted = resolve;
+    });
+    const executor: ArgvExecutor = async (executable, argv, { signal }) => {
+      signal.throwIfAborted();
+      if (executable === "/usr/sbin/pkgutil" && argv[0] === "--file-info") {
+        activeFileInfo += 1;
+        maxActiveFileInfo = Math.max(maxActiveFileInfo, activeFileInfo);
+        if (activeFileInfo >= 2) markWorkersStarted?.();
+        try {
+          await new Promise<void>((_resolve, reject) => {
+            const abort = () => {
+              abortedFileInfo += 1;
+              reject(Object.assign(new Error("aborted"), { name: "AbortError" }));
+            };
+            if (signal.aborted) abort();
+            else signal.addEventListener("abort", abort, { once: true });
+          });
+        } finally {
+          activeFileInfo -= 1;
+        }
+      }
+      return { stdout: "", stderr: "", exitCode: 0 };
+    };
+    const filesystem: MacOSCorrelationReadOnlyFileSystem = {
+      async canonicalize(path, signal) {
+        signal.throwIfAborted();
+        return path;
+      },
+      async stat(path, signal) {
+        signal.throwIfAborted();
+        return {
+          device: "device-cancel",
+          inode: inode(path),
+          fileType: "directory",
+          uid: process.getuid?.() ?? 501,
+          gid: process.getgid?.() ?? 20,
+          size: 0,
+          modifiedAtMs: 1,
+        };
+      },
+      async readDirectory() {
+        return [];
+      },
+    };
+    const services = await createDefaultRuntimeServices({
+      homeDirectory,
+      stateRoot: join(root, "state"),
+      auditTimeoutMs: 2_000,
+      candidateConcurrency: 4,
+      correlation: {
+        commands: createCommandRunner(executor),
+        filesystem,
+      },
+    });
+    const requestId = "concurrent-cancel-request";
+    const started = (await services.auditService?.start({
+      requestId,
+      profile: "application_remnants",
+    })) as { auditId: string };
+    await Promise.race([
+      workersStarted,
+      new Promise((_resolve, reject) =>
+        setTimeout(() => reject(new Error("Concurrent workers did not start")), 1_000),
+      ),
+    ]);
+    await services.auditService?.cancel({ auditId: started.auditId, requestId });
+
+    let state = "cancelling";
+    for (let attempt = 0; attempt < 200; attempt += 1) {
+      state = ((await services.auditService?.status({ auditId: started.auditId })) as {
+        state: string;
+      }).state;
+      if (state === "cancelled") break;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    expect(state).toBe("cancelled");
+    expect(maxActiveFileInfo).toBeGreaterThanOrEqual(2);
+    expect(maxActiveFileInfo).toBeLessThanOrEqual(4);
+    expect(abortedFileInfo).toBe(maxActiveFileInfo);
+    expect(activeFileInfo).toBe(0);
   });
 
   it.each(["directory", "file"] as const)(

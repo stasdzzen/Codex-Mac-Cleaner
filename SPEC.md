@@ -62,3 +62,13 @@ server-owned выводы, но не классифицирует файлы и 
 - Доступ: локальная установка через repository/personal marketplace.
 - Безопасность: server-owned policy, protected scopes, приватный карантин,
   поэлементное подтверждение и отсутствие автоматического удаления.
+
+## Производительность аудита
+
+- Пятиминутный server-owned deadline остаётся fail-closed границей всего запуска.
+- Глобальные inventories, включая package inventory, снимаются не более одного раза
+  для Snapshot A и одного раза для Snapshot B.
+- Candidate-specific evidence повторно проверяется в обеих фазах с фиксированной
+  bounded concurrency четыре; порядок итоговых findings остаётся детерминированным.
+- Оптимизация не обрезает список кандидатов, не превращает partial coverage в
+  complete и не создаёт actionable revision после timeout или cancellation.
