@@ -1,7 +1,7 @@
 {
   "name": "codex-mac-cleaner",
   "version": "0.1.0-beta.7",
-  "description": "Локальный read-only аудит остатков приложений с поэлементным карантином и Audit Dashboard.",
+  "description": "Проверяет Mac на остатки удалённых приложений и помогает безопасно убрать их через карантин.",
   "author": {
     "name": "Codex Mac Cleaner contributors"
   },
@@ -19,8 +19,8 @@
   "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "Codex Mac Cleaner",
-    "shortDescription": "Безопасный локальный аудит остатков приложений",
-    "longDescription": "Плагин выполняет read-only аудит на поддерживаемом Mac, показывает серверные доказательства и оставляет каждое изменяющее действие отдельной кнопке с подтверждением одного объекта.",
+    "shortDescription": "Проверка Mac и безопасный карантин",
+    "longDescription": "Плагин локально ищет остатки удалённых приложений, объясняет каждую находку и позволяет по одному перемещать объекты в карантин. Ничего не удаляется автоматически.",
     "developerName": "Codex Mac Cleaner contributors",
     "category": "Productivity",
     "capabilities": [
@@ -30,8 +30,8 @@
     ],
     "websiteURL": "https://github.com/stasdzzen/Codex-Mac-Cleaner",
     "defaultPrompt": [
-      "Проверь остатки удалённых приложений и открой Audit Dashboard.",
-      "Покажи состояние последнего локального аудита."
+      "Проверь Mac на остатки удалённых приложений и открой результаты.",
+      "Покажи состояние последней проверки Mac."
     ],
     "brandColor": "#1E9DF1",
     "composerIcon": "./assets/icon.png",
