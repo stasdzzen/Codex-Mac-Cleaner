@@ -17,7 +17,7 @@ describe("repository marketplace plugin", () => {
     const manifest = await readJson(".codex-plugin/plugin.json");
     expect(manifest).toMatchObject({
       name: "codex-mac-cleaner",
-      version: "0.1.0-beta.10",
+      version: "0.1.0-beta.11",
       license: "Apache-2.0",
       skills: "./skills/",
       mcpServers: "./.mcp.json",
