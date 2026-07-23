@@ -237,13 +237,17 @@ describe("интерфейс проверки Mac", () => {
     expect(screen.queryByText(/освобождено после|прирост свободного места|APFS delta/i)).not.toBeInTheDocument();
   });
 
-  it("анимирует только активный прогресс и оставляет terminal state статичным", () => {
+  it("показывает доступный прогресс без зависимости от декоративной анимации", () => {
     const { bridge } = createBridge();
     const { rerender } = render(
       <AuditDashboard snapshot={runningFixture} bridge={bridge} />,
     );
 
-    expect(screen.getByRole("progressbar").closest("[data-audit-active]")).toHaveAttribute(
+    const runningProgress = screen.getByRole("progressbar", {
+      name: "Прогресс проверки: 38%",
+    });
+    expect(runningProgress).toHaveAttribute("aria-valuenow", "37.5");
+    expect(runningProgress.closest("[data-audit-active]")).toHaveAttribute(
       "data-audit-active",
       "true",
     );

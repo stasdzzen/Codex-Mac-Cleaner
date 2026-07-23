@@ -44,15 +44,21 @@ describe("CMC-38: тема shadcn на Base UI", () => {
     expect(html).toContain('<meta name="color-scheme" content="dark" />');
   });
 
-  it("ограничивает motion и не добавляет внешние визуальные ресурсы", async () => {
-    const styles = await readFile(
-      resolve(repositoryRoot, "apps/widget/src/styles.css"),
-      "utf8",
-    );
+  it("не показывает бегущую полосу и не добавляет внешние визуальные ресурсы", async () => {
+    const [styles, bundle] = await Promise.all([
+      readFile(resolve(repositoryRoot, "apps/widget/src/styles.css"), "utf8"),
+      readFile(
+        resolve(repositoryRoot, ".codex-plugin/assets/dashboard-v2.html"),
+        "utf8",
+      ),
+    ]);
 
     expect(styles).toContain("@media (prefers-reduced-motion: reduce)");
     expect(styles).toContain('[data-audit-active="true"]');
     expect(styles).toContain(".storage-comparison-bar");
+    expect(styles).not.toContain("audit-scan");
+    expect(styles).not.toContain(".audit-progress-track::after");
+    expect(bundle).not.toContain("audit-scan");
     expect(styles).not.toMatch(/@import\s+url|https?:\/\//u);
     expect(styles).not.toContain("dark:");
   });
