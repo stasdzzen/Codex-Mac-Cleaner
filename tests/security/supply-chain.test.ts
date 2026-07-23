@@ -20,6 +20,15 @@ const approvedLicenses = new Set([
   "MPL-2.0",
 ]);
 
+const pinnedRuntimeDependencyVersions = new Map([
+  ["fast-uri", "3.1.4"],
+  ["@hono/node-server", "2.0.10"],
+]);
+
+function isPinnedRuntimeDependencyVersion(name: string, version: string): boolean {
+  return pinnedRuntimeDependencyVersions.get(name) === version;
+}
+
 function readTarEntries(archive: Buffer): Map<string, Buffer> {
   const entries = new Map<string, Buffer>();
   for (let offset = 0; offset + 512 <= archive.length; ) {
@@ -41,6 +50,36 @@ function readTarEntries(archive: Buffer): Map<string, Buffer> {
 }
 
 describe("CMC-10: supply-chain and public package boundary", () => {
+  it.each(["4.0.0", "4.1.0"])(
+    "отклоняет уязвимый fast-uri@%s по GHSA-v2hh-gcrm-f6hx",
+    (version) => {
+      expect(isPinnedRuntimeDependencyVersion("fast-uri", version)).toBe(false);
+    },
+  );
+
+  it("разрешает только исправленные runtime-зависимости CMC-44", async () => {
+    const { stdout } = await execFileAsync(
+      "pnpm",
+      ["why", "fast-uri", "@hono/node-server", "-r", "--json"],
+      { cwd: repositoryRoot, encoding: "utf8" },
+    );
+    const resolutions = JSON.parse(stdout) as Array<{
+      name: string;
+      version: string;
+    }>;
+
+    for (const [name, pinnedVersion] of pinnedRuntimeDependencyVersions) {
+      const versions = resolutions
+        .filter((resolution) => resolution.name === name)
+        .map((resolution) => resolution.version);
+      expect(versions, `${name} должен иметь одно pinned-разрешение`).toHaveLength(1);
+      expect(
+        versions.every((version) => isPinnedRuntimeDependencyVersion(name, version)),
+        `${name} должен разрешаться ровно как ${pinnedVersion}`,
+      ).toBe(true);
+    }
+  });
+
   it("полностью декодирует package path separators в CycloneDX purl", async () => {
     const source = await readFile(
       resolve(repositoryRoot, "scripts/release-license-metadata.mjs"),
