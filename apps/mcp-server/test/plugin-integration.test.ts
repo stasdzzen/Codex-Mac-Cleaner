@@ -498,7 +498,7 @@ describe("полная интеграция MCP App", () => {
 
   it("скомпилированный Dashboard package автономен", async () => {
     const html = await readFile(
-      packagedPath(".codex-plugin", "assets", "dashboard-v3.html"),
+      packagedPath(".codex-plugin", "assets", "dashboard-v4.html"),
       "utf8",
     );
     expect(html).toContain("Очистка MacBook от мусора");

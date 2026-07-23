@@ -68,6 +68,12 @@ describe("контракты аудита", () => {
     expect(
       DashboardOpenInputSchema.parse({ auditId: "audit-live-1", revision: null }),
     ).toEqual({ auditId: "audit-live-1", revision: null });
+    expect(
+      DashboardOpenInputSchema.parse({ auditId: null, revision: null }),
+    ).toEqual({ auditId: null, revision: null });
+    expect(() =>
+      DashboardOpenInputSchema.parse({ auditId: null, revision: 1 }),
+    ).toThrow();
     expect(() =>
       DashboardOpenInputSchema.parse({
         auditId: "audit-live-1",
@@ -129,7 +135,7 @@ describe("контракты аудита", () => {
         revision: null,
         state: "running",
         stateVersion: 1,
-        resourceUri: "ui://codex-mac-cleaner/dashboard-v3.html",
+        resourceUri: "ui://codex-mac-cleaner/dashboard-v4.html",
         storageSummary: {
           candidateLogicalBytes: 0,
           candidatePhysicalBytes: 0,

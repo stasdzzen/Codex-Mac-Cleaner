@@ -81,8 +81,8 @@ describe("probe поверхности плагина", () => {
       ),
       copyFile(resolve(repositoryRoot, ".mcp.json"), join(root, ".mcp.json")),
       copyFile(
-        resolve(repositoryRoot, ".codex-plugin/assets/dashboard-v3.html"),
-        join(root, ".codex-plugin/assets/dashboard-v3.html"),
+        resolve(repositoryRoot, ".codex-plugin/assets/dashboard-v4.html"),
+        join(root, ".codex-plugin/assets/dashboard-v4.html"),
       ),
     ]);
     const runtime = await readFile(

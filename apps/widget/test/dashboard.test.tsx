@@ -13,9 +13,15 @@ import {
   runningFixture,
 } from "./fixtures";
 
-function createBridge() {
+function createBridge(initialDisplayMode: "inline" | "fullscreen" = "inline") {
   let lastViewState: WidgetViewState | null = null;
-  const requestDisplayMode = vi.fn(async () => undefined);
+  let displayMode: "inline" | "fullscreen" = initialDisplayMode;
+  const requestDisplayMode = vi.fn(
+    async (mode: "inline" | "fullscreen") => {
+      displayMode = mode;
+      return mode;
+    },
+  );
   const openExternal = vi.fn(async () => undefined);
   const callTool = vi.fn(async (name: string, _input: Record<string, unknown>) => {
     if (name === "quarantine_prepare_move") {
@@ -33,6 +39,7 @@ function createBridge() {
     setViewState: vi.fn((state: WidgetViewState) => {
       lastViewState = state;
     }),
+    getDisplayMode: () => displayMode,
     requestDisplayMode,
     openExternal,
   };
@@ -45,13 +52,19 @@ function createBridge() {
   };
 }
 
+function expandFindingGroup(title: string): void {
+  const row = screen.getByText(title).closest("tr");
+  expect(row).not.toBeNull();
+  fireEvent.click(within(row!).getByRole("button", { name: "Показать объекты" }));
+}
+
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
 describe("интерфейс проверки Mac", () => {
-  it("запрашивает только fullscreen после отдельного нажатия пользователя", async () => {
+  it("переключает fullscreen только после отдельного нажатия пользователя", async () => {
     const { bridge, requestDisplayMode } = createBridge();
     render(<AuditDashboard snapshot={dashboardFixture} bridge={bridge} />);
 
@@ -60,7 +73,34 @@ describe("интерфейс проверки Mac", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Развернуть" }));
     await waitFor(() => expect(requestDisplayMode).toHaveBeenCalledWith("fullscreen"));
-    expect(requestDisplayMode).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "Свернуть" })).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Свернуть" }));
+    await waitFor(() => expect(requestDisplayMode).toHaveBeenLastCalledWith("inline"));
+    expect(screen.getByRole("button", { name: "Развернуть" })).toBeVisible();
+    expect(requestDisplayMode).toHaveBeenCalledTimes(2);
+  });
+
+  it("не сворачивает fullscreen при завершении диагностики", () => {
+    const { bridge, requestDisplayMode } = createBridge("fullscreen");
+    const { rerender } = render(
+      <AuditDashboard snapshot={runningFixture} bridge={bridge} />,
+    );
+
+    expect(screen.getByRole("button", { name: "Свернуть" })).toBeVisible();
+    rerender(
+      <AuditDashboard
+        snapshot={{
+          ...dashboardFixture,
+          auditId: runningFixture.auditId,
+          stateVersion: runningFixture.stateVersion + 1,
+        }}
+        bridge={bridge}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Свернуть" })).toBeVisible();
+    expect(requestDisplayMode).not.toHaveBeenCalled();
   });
 
   it("сохраняет интерфейс в чате и объясняет отсутствие полноэкранного режима", () => {
@@ -147,13 +187,15 @@ describe("интерфейс проверки Mac", () => {
     ).toBeVisible();
   });
 
-  it("показывает пять вкладок, исключения и запуск проверки пользователем", async () => {
+  it("показывает четыре вкладки, находки на Обзоре и запуск проверки пользователем", async () => {
     const { bridge, callTool } = createBridge();
     render(<AuditDashboard snapshot={dashboardFixture} bridge={bridge} />);
 
-    for (const name of ["Обзор", "Найдено", "Карантин", "Оставленные", "Автопроверка"]) {
+    for (const name of ["Обзор", "Карантин", "Оставленные", "Автопроверка"]) {
       expect(screen.getByRole("tab", { name })).toBeVisible();
     }
+    expect(screen.queryByRole("tab", { name: "Найдено" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Найденный мусор" })).toBeVisible();
 
     fireEvent.click(screen.getByRole("tab", { name: "Оставленные" }));
     expect(await screen.findByText("Оставленных объектов нет")).toBeVisible();
@@ -224,7 +266,6 @@ describe("интерфейс проверки Mac", () => {
     expect(
       state.callTool.mock.calls.filter(([name]) => name === "dashboard_page"),
     ).toHaveLength(0);
-    fireEvent.click(screen.getByRole("tab", { name: "Найдено" }));
     expect(screen.getByText("Показано 1 из 2767")).toBeVisible();
 
     fireEvent.click(screen.getByRole("button", { name: "Показать ещё" }));
@@ -238,6 +279,7 @@ describe("интерфейс проверки Mac", () => {
     );
     expect(await screen.findByText("Показано 2 из 2767")).toBeVisible();
     expect(screen.queryByRole("button", { name: "Показать ещё" })).not.toBeInTheDocument();
+    expandFindingGroup("Example Notes");
     expect(screen.getAllByText(nextFinding.displayName)).toHaveLength(1);
 
     rerender(
@@ -272,7 +314,7 @@ describe("интерфейс проверки Mac", () => {
     overviewTab.focus();
     fireEvent.keyDown(overviewTab, { key: "ArrowRight" });
 
-    expect(screen.getByRole("tab", { name: "Найдено" })).toHaveFocus();
+    expect(screen.getByRole("tab", { name: "Карантин" })).toHaveFocus();
   });
 
   it("понятно показывает полноту проверки, доказательства и причины запрета", () => {
@@ -280,7 +322,9 @@ describe("интерфейс проверки Mac", () => {
     render(<AuditDashboard snapshot={dashboardFixture} bridge={bridge} />);
 
     expect(screen.getByRole("alert")).toHaveTextContent("Часть областей не проверена");
-    fireEvent.click(screen.getByRole("tab", { name: "Найдено" }));
+    expandFindingGroup("Кеши приложений");
+    expandFindingGroup("Example Notes");
+    expandFindingGroup("Example Network Tool");
 
     expect(screen.getByText("можно проверить и переместить в карантин")).toBeVisible();
     expect(screen.getByText("только просмотр")).toBeVisible();
@@ -308,7 +352,7 @@ describe("интерфейс проверки Mac", () => {
     expect(within(sheet).getByText("Проверка: тип данных")).toBeVisible();
   });
 
-  it("показывает пять показателей места без обещания точного прироста", () => {
+  it("переносит свободное место в шапку и сохраняет честную сводку", () => {
     const { bridge } = createBridge();
     render(<AuditDashboard snapshot={dashboardFixture} bridge={bridge} />);
 
@@ -317,11 +361,11 @@ describe("интерфейс проверки Mac", () => {
       "Занимают на диске",
       "Хранится в карантине",
       "Удалено из карантина",
-      "Свободно на диске",
     ]) {
       expect(screen.getByText(label)).toBeVisible();
     }
-    expect(screen.getByText(/^Проверено:/)).toBeVisible();
+    expect(screen.getByText("Свободно")).toBeVisible();
+    expect(screen.getByText("80 ГБ")).toBeVisible();
     expect(
       screen.getByRole("img", {
         name: /Относительное сравнение размеров.*1,57 МБ.*1,05 МБ.*0,52 МБ.*0,26 МБ/u,
@@ -330,6 +374,14 @@ describe("интерфейс проверки Mac", () => {
     expect(document.querySelectorAll("[data-storage-bar]")).toHaveLength(4);
     expect(screen.getByText(/Показатели не нужно складывать/u)).toBeVisible();
     expect(screen.queryByText(/освобождено после|прирост свободного места|APFS delta/i)).not.toBeInTheDocument();
+  });
+
+  it("скрывает отдельный блок места на диске во время диагностики", () => {
+    const { bridge } = createBridge();
+    render(<AuditDashboard snapshot={runningFixture} bridge={bridge} />);
+
+    expect(screen.getByText("Свободно")).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "Место на диске" })).not.toBeInTheDocument();
   });
 
   it("показывает доступный прогресс без зависимости от декоративной анимации", () => {
@@ -384,8 +436,7 @@ describe("интерфейс проверки Mac", () => {
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Результаты неполные, поэтому перемещение в карантин недоступно. Начните новую проверку",
     );
-    fireEvent.click(screen.getByRole("tab", { name: "Найдено" }));
-    expect(screen.queryByRole("button", { name: "В карантин" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Удалить:/ })).not.toBeInTheDocument();
   });
 
   it("сам обновляет живой прогресс через audit_status", async () => {
@@ -439,7 +490,7 @@ describe("интерфейс проверки Mac", () => {
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Файлы не изменялись. Действия над найденными объектами недоступны",
     );
-    expect(screen.queryByRole("button", { name: "В карантин" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Удалить:/ })).not.toBeInTheDocument();
   });
 
   it("пропускает finding только в view state текущей ревизии и не вызывает tool", () => {
@@ -447,17 +498,15 @@ describe("интерфейс проверки Mac", () => {
     const { rerender } = render(
       <AuditDashboard snapshot={dashboardFixture} bridge={state.bridge} />,
     );
-    fireEvent.click(screen.getByRole("tab", { name: "Найдено" }));
-    fireEvent.click(screen.getByRole("button", { name: "Пропустить сейчас" }));
+    expandFindingGroup("Кеши приложений");
+    fireEvent.click(screen.getByRole("button", { name: "Пропустить" }));
 
     expect(state.callTool).not.toHaveBeenCalled();
     expect(state.getLastViewState()?.skippedFindingIds).toEqual(["finding-synthetic-cache"]);
     expect(Object.keys(state.getLastViewState() ?? {}).sort()).toEqual([
       "activeTab",
-      "filter",
       "panel",
       "selectedFindingId",
-      "selectedQuarantineEntryId",
       "skippedFindingIds",
     ]);
     expect(JSON.stringify(state.getLastViewState())).not.toMatch(/path|token|policy/i);
@@ -476,7 +525,7 @@ describe("интерфейс проверки Mac", () => {
     const { rerender } = render(
       <AuditDashboard snapshot={dashboardFixture} bridge={bridge} />,
     );
-    fireEvent.click(screen.getByRole("tab", { name: "Найдено" }));
+    expandFindingGroup("Кеши приложений");
     expect(screen.getByText("Synthetic Cache")).toBeVisible();
 
     rerender(
@@ -493,17 +542,17 @@ describe("интерфейс проверки Mac", () => {
   it("открывает отдельное подтверждение карантина одного объекта и возвращает focus", async () => {
     const state = createBridge();
     render(<AuditDashboard snapshot={dashboardFixture} bridge={state.bridge} />);
-    fireEvent.click(screen.getByRole("tab", { name: "Найдено" }));
+    expandFindingGroup("Кеши приложений");
 
-    const trigger = screen.getByRole("button", { name: "В карантин" });
+    const trigger = screen.getByRole("button", { name: "Удалить: Synthetic Cache" });
     trigger.focus();
     fireEvent.click(trigger);
 
     const dialog = await screen.findByRole("alertdialog", {
-      name: "Переместить «Synthetic Cache» в карантин?",
+      name: "Удалить «Synthetic Cache»?",
     });
     expect(within(dialog).getByText(/ровно один объект/i)).toBeVisible();
-    expect(within(dialog).getByText(/будет перемещён в карантин/i)).toBeVisible();
+    expect(within(dialog).getByText(/будет безопасно перемещён в карантин/i)).toBeVisible();
     expect(within(dialog).getByText(/можно восстановить в исходное место/i)).toBeVisible();
     expect(state.callTool).toHaveBeenCalledWith("quarantine_prepare_move", {
       findingId: "finding-synthetic-cache",
@@ -514,5 +563,78 @@ describe("интерфейс проверки Mac", () => {
     fireEvent.keyDown(dialog, { key: "Escape" });
     await waitFor(() => expect(dialog).not.toBeInTheDocument());
     expect(trigger).toHaveFocus();
+  });
+
+  it("сразу переносит успешно перемещённый объект из находок в карантин", async () => {
+    const state = createBridge();
+    state.callTool.mockImplementation(async (name) => {
+      if (name === "quarantine_prepare_move") {
+        return { previewToken: "preview-synthetic-001" };
+      }
+      if (name === "quarantine_move") {
+        return {
+          quarantineEntry: {
+            quarantineEntryId: "move-synthetic-001",
+            displayName: "Synthetic Cache",
+            physicalBytes: 1_048_576,
+            movedAt: "2026-07-23T10:00:00.000Z",
+            state: "moved",
+          },
+          storageSummary: {
+            ...dashboardFixture.storageSummary,
+            candidateLogicalBytes: 524_288,
+            candidatePhysicalBytes: 262_144,
+            quarantinePhysicalBytes: 1_572_864,
+            stateVersion:
+              dashboardFixture.storageSummary.stateVersion + 1,
+          },
+          diskObservation: dashboardFixture.diskObservation,
+          stateVersion: dashboardFixture.stateVersion + 1,
+        };
+      }
+      if (name === "exclusion_list") {
+        return { exclusions: [], stateVersion: 20 };
+      }
+      return { stateVersion: 20 };
+    });
+    render(<AuditDashboard snapshot={dashboardFixture} bridge={state.bridge} />);
+    expandFindingGroup("Кеши приложений");
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Удалить: Synthetic Cache" }),
+    );
+    const dialog = await screen.findByRole("alertdialog", {
+      name: "Удалить «Synthetic Cache»?",
+    });
+    await waitFor(() =>
+      expect(
+        within(dialog).getByRole("button", {
+          name: "Переместить в карантин",
+        }),
+      ).toBeEnabled(),
+    );
+    fireEvent.click(
+      within(dialog).getByRole("button", {
+        name: "Переместить в карантин",
+      }),
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", {
+          name: "Удалить: Synthetic Cache",
+        }),
+      ).not.toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByRole("tab", { name: "Карантин" }));
+    expect(
+      screen.getByRole("button", {
+        name: "Восстановить: Synthetic Cache",
+      }),
+    ).toBeVisible();
+    expect(state.callTool).toHaveBeenCalledWith("quarantine_move", {
+      previewToken: "preview-synthetic-001",
+      operationId: expect.stringMatching(/^move-/u),
+    });
   });
 });

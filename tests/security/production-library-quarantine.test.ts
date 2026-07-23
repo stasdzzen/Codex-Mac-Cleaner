@@ -181,8 +181,8 @@ describe("security: production Library audit → quarantine → restore", () => 
       },
       proof: {
         schemaVersion: 1,
-        ruleId: "EMPTY_CACHE_LOG_ARTIFACT_V1",
-        ruleVersion: 1,
+        ruleId: "BOUNDED_CACHE_LOG_REGENERABILITY_V2",
+        ruleVersion: 2,
         targetFingerprint,
         correlationRevisionId: resolverResult.revision.correlationRevisionId,
       },

@@ -8,7 +8,7 @@ import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 export const DASHBOARD_RESOURCE_URI =
-  "ui://codex-mac-cleaner/dashboard-v3.html";
+  "ui://codex-mac-cleaner/dashboard-v4.html";
 export const DASHBOARD_MIME_TYPE = "text/html;profile=mcp-app";
 
 export const EXPECTED_MODEL_TOOLS = Object.freeze([

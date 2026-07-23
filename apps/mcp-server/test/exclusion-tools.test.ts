@@ -4,7 +4,13 @@ import { join } from "node:path";
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { ExclusionStateStore } from "@codex-mac-cleaner/storage";
+import type { UserExclusionIdentity } from "@codex-mac-cleaner/contracts";
+import {
+  deriveKeyedUserExclusion,
+  InstallationKeyStore,
+  KeyedExclusionStateStore,
+  type KeyedExclusionMetadata,
+} from "@codex-mac-cleaner/storage";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -19,8 +25,53 @@ const now = () => new Date("2026-07-18T01:00:00.000Z");
 async function serviceFixture() {
   const stateRoot = join(await mkdtemp(join(tmpdir(), "cmc-server-exclusions-")), "state");
   let sequence = 0;
+  const keyedStore = new KeyedExclusionStateStore({ stateRoot, now });
+  const installationKey = await new InstallationKeyStore({ stateRoot }).loadOrCreate();
+  const rawIdentity = (value: UserExclusionIdentity) => ({
+    targetIdentity: value.normalizedTargetIdentity,
+    ownerTypeFingerprint: value.ownerTypeFingerprint,
+    ...(value.bundleId == null ? {} : { bundleIdentifier: value.bundleId }),
+    ...(value.packageId == null ? {} : { packageIdentifier: value.packageId }),
+    ...(value.signingIdentity == null
+      ? {}
+      : { signingRequirement: value.signingIdentity }),
+  });
+  const store = {
+    list: () => keyedStore.list(),
+    async create(
+      metadata: KeyedExclusionMetadata,
+      value: UserExclusionIdentity,
+    ) {
+      await keyedStore.createFromIdentity(metadata, rawIdentity(value));
+      return keyedStore.list();
+    },
+    remove: (exclusionId: string) => keyedStore.remove(exclusionId),
+    reset: (stateVersion: number) => keyedStore.reset(stateVersion),
+    readForAudit: () => keyedStore.readForAudit(),
+    deriveIdentity(value: UserExclusionIdentity) {
+      const keyed = deriveKeyedUserExclusion(
+        installationKey,
+        {
+          exclusionId: "exclusion-identity-probe",
+          ruleId: value.ruleId,
+          artifactKind: value.artifactKind,
+          createdAt: "1970-01-01T00:00:00.000Z",
+          reasonCategory: "other",
+        },
+        rawIdentity(value),
+      );
+      return {
+        ruleId: keyed.ruleId,
+        artifactKind: keyed.artifactKind,
+        keyId: keyed.keyId,
+        derivationVersion: keyed.derivationVersion,
+        subjectDigest: keyed.subjectDigest,
+        claimDigests: keyed.claimDigests,
+      };
+    },
+  };
   const service = new ExclusionService({
-    store: new ExclusionStateStore({ stateRoot, now }),
+    store,
     now,
     createId: (prefix) => `${prefix}-synthetic-${++sequence}`,
     findings: {

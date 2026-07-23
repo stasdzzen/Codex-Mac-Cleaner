@@ -49,10 +49,12 @@ function EntryActionDialog({
   entry,
   bridge,
   action,
+  onComplete,
 }: {
   entry: QuarantineEntry;
   bridge: WidgetBridge;
   action: "restore" | "purge";
+  onComplete: (entryId: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [preparing, setPreparing] = useState(false);
@@ -80,15 +82,21 @@ function EntryActionDialog({
     if (previewToken === null) {
       return;
     }
+    setPreparing(true);
+    setPreviewToken(null);
     try {
       await bridge.callTool(`quarantine_${action}`, {
         previewToken,
         operationId: entry.entryId,
       });
       toast.success(isPurge ? "Объект удалён из карантина навсегда." : "Объект восстановлен.");
+      onComplete(entry.entryId);
       setOpen(false);
     } catch {
       toast.error("Действие не выполнено. Закройте окно и откройте карантин снова.");
+      setOpen(false);
+    } finally {
+      setPreparing(false);
     }
   }
 
@@ -158,8 +166,153 @@ function EntryActionDialog({
   );
 }
 
+function SequentialPurgeDialog({
+  entries,
+  bridge,
+  onComplete,
+}: {
+  readonly entries: readonly QuarantineEntry[];
+  readonly bridge: WidgetBridge;
+  readonly onComplete: (entryId: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [index, setIndex] = useState(0);
+  const [queue, setQueue] = useState<readonly QuarantineEntry[]>([]);
+  const [previewToken, setPreviewToken] = useState<string | null>(null);
+  const [preparing, setPreparing] = useState(false);
+  const current = queue[index];
+
+  async function prepare(entry: QuarantineEntry): Promise<void> {
+    setPreparing(true);
+    setPreviewToken(null);
+    try {
+      const preview = await bridge.callTool<PreviewResult>(
+        "quarantine_prepare_purge",
+        { operationId: entry.entryId },
+      );
+      setPreviewToken(preview.previewToken);
+    } catch {
+      toast.error(
+        "Не удалось проверить текущую запись. Уже удалённые записи не изменились.",
+      );
+      setOpen(false);
+    } finally {
+      setPreparing(false);
+    }
+  }
+
+  async function confirmCurrent(): Promise<void> {
+    if (current === undefined || previewToken === null) return;
+    setPreparing(true);
+    setPreviewToken(null);
+    try {
+      await bridge.callTool("quarantine_purge", {
+        previewToken,
+        operationId: current.entryId,
+      });
+      onComplete(current.entryId);
+      const nextIndex = index + 1;
+      const next = queue[nextIndex];
+      if (next === undefined) {
+        toast.success("Все подтверждённые записи удалены из карантина.");
+        setOpen(false);
+        return;
+      }
+      setIndex(nextIndex);
+      await prepare(next);
+    } catch {
+      toast.error(
+        "Текущая запись не удалена. Очистка остановлена, остальные записи сохранены.",
+      );
+      setOpen(false);
+    } finally {
+      setPreparing(false);
+    }
+  }
+
+  return (
+    <AlertDialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        if (!nextOpen) {
+          setIndex(0);
+          setQueue([]);
+          setPreviewToken(null);
+          setPreparing(false);
+        }
+      }}
+    >
+      <AlertDialogTrigger
+        render={
+          <Button
+            variant="destructive"
+            onClick={() => {
+              const first = entries[0];
+              if (first !== undefined) {
+                setQueue(entries);
+                setIndex(0);
+                void prepare(first);
+              }
+            }}
+          />
+        }
+      >
+        <Trash2Icon data-icon="inline-start" />
+        Очистить карантин
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogMedia>
+            <ShieldAlertIcon aria-hidden="true" />
+          </AlertDialogMedia>
+          <AlertDialogTitle>
+            Очистить карантин: объект {index + 1} из {queue.length}?
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            Каждая запись подтверждается отдельно. Сейчас будет необратимо удалён
+            только «{current?.displayName ?? "объект"}». Закройте окно, чтобы
+            остановить последовательность и сохранить остальные записи.
+            {preparing && " Проверяем текущее состояние записи."}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Остановить очистку</AlertDialogCancel>
+          <AlertDialogAction
+            variant="destructive"
+            disabled={previewToken === null}
+            onClick={(event) => {
+              event.preventDefault();
+              void confirmCurrent();
+            }}
+          >
+            {preparing ? (
+              <LoaderCircleIcon
+                data-icon="inline-start"
+                className="animate-spin"
+              />
+            ) : null}
+            Удалить этот объект
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
 export function QuarantineCenter({ entries, bridge }: QuarantineCenterProps) {
-  if (entries.length === 0) {
+  const [completedEntryIds, setCompletedEntryIds] = useState<readonly string[]>(
+    [],
+  );
+  const visibleEntries = entries.filter(
+    (entry) => !completedEntryIds.includes(entry.entryId),
+  );
+  const complete = (entryId: string) =>
+    setCompletedEntryIds((current) =>
+      Array.from(new Set([...current, entryId])),
+    );
+
+  if (visibleEntries.length === 0) {
     return (
       <Alert>
         <ArchiveRestoreIcon aria-hidden="true" />
@@ -171,16 +324,24 @@ export function QuarantineCenter({ entries, bridge }: QuarantineCenterProps) {
 
   return (
     <section aria-labelledby="quarantine-center-title" className="flex flex-col gap-3">
-      <div>
-        <h2 id="quarantine-center-title" className="text-base font-medium">
-          Карантин
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          Каждое действие относится только к одной записи и подтверждается отдельно.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 id="quarantine-center-title" className="text-base font-medium">
+            Карантин
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            Каждое действие относится только к одной записи и подтверждается
+            отдельно.
+          </p>
+        </div>
+        <SequentialPurgeDialog
+          entries={visibleEntries}
+          bridge={bridge}
+          onComplete={complete}
+        />
       </div>
       <div className="grid gap-3 lg:grid-cols-2">
-        {entries.map((entry) => (
+        {visibleEntries.map((entry) => (
           <Card key={entry.entryId}>
             <CardHeader>
               <CardTitle>{entry.displayName}</CardTitle>
@@ -193,8 +354,18 @@ export function QuarantineCenter({ entries, bridge }: QuarantineCenterProps) {
               <p>Занимает на диске: {formatBytes(entry.physicalBytes)}</p>
             </CardContent>
             <CardFooter className="flex flex-wrap gap-2">
-              <EntryActionDialog entry={entry} bridge={bridge} action="restore" />
-              <EntryActionDialog entry={entry} bridge={bridge} action="purge" />
+              <EntryActionDialog
+                entry={entry}
+                bridge={bridge}
+                action="restore"
+                onComplete={complete}
+              />
+              <EntryActionDialog
+                entry={entry}
+                bridge={bridge}
+                action="purge"
+                onComplete={complete}
+              />
             </CardFooter>
           </Card>
         ))}

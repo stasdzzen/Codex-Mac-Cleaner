@@ -26,7 +26,7 @@ date: 2026-07-23
 | `audit_start`, `audit_status`, `audit_results` или `dashboard_open` не видны в задаче | Task-scoped registry Codex ещё не предоставил обязательную поверхность | Один штатный host discovery по точным именам; если инструменты не появились — остановиться и честно сообщить, что аудит не начат | Запуск runtime через Terminal/direct stdio, локальный HTML, утверждение об открытом Dashboard |
 | `state=queued|running|cancelling`, `revision=null` | Успешной immutable revision ещё нет | Сохранять Dashboard live, показывать server-owned phase/counts и продолжать штатный `audit_status` | Угадывать revision `1`, вызывать `audit_results` или объявлять проверку завершённой |
 | `state=completed|completed_with_warnings`, `revision=<integer>` | Полный проход опубликовал точную immutable revision | Передать именно этот номер в `audit_results` и финальный `dashboard_open` | Подставлять локальный счётчик или revision предыдущего запуска |
-| `AUDIT_STALE` после перезапуска или потери MCP-процесса | In-memory run больше недоступен либо cursor относится к другому процессу/каналу/revision | Объяснить, что прошлый запуск нельзя безопасно продолжить; новый аудит возможен только после отдельного явного запроса пользователя | Автоматически повторять аудит, восстанавливать raw identities с диска или использовать старый cursor |
+| `AUDIT_STALE` при `dashboard_open(null/null)` либо после потери cursor | Валидной сохранённой completed revision нет либо cursor относится к другому процессу/каналу/revision | Объяснить, что завершённый результат недоступен; новый аудит возможен только после отдельного явного запроса пользователя | Автоматически повторять аудит, угадывать revision, подменять persisted state или использовать старый cursor |
 | Находок больше одной страницы | Полная revision сохранена на сервере, а ответ ограничен безопасным размером | Показывать server-owned total и загружать следующую widget-страницу только по кнопке «Показать ещё» | Возвращать весь список одним ответом, менять итог по числу загруженных строк или передавать model cursor в Widget |
 | Tool вернул Dashboard resource, но host его не отобразил | Host не смонтировал публичный MCP App resource | Сообщить об отсутствии отображения, сохранить audit state и разрешить повторное штатное открытие той же revision | Запускать сайт, создавать file URL, обещать правую панель или начинать новый аудит |
 | Read-only source завершился timeout/permission gap | Один источник не дал полного evidence | Записать typed coverage warning, оставить зависимые факты `unknown`, продолжить остальные кандидаты | Отменять весь audit run, рекомендовать `sudo` или обход TCC |
@@ -48,6 +48,17 @@ date: 2026-07-23
 
 `failed`, `cancelled` и `AUDIT_STALE` не создают actionable revision. Отмена
 выполняется только по явному запросу пользователя.
+
+# Повторное открытие завершённого результата
+
+1. Только по явному запросу открыть или продолжить последний результат Skill
+   вызывает `dashboard_open` с `auditId=null` и `revision=null`.
+2. Сервер проверяет versioned HMAC-envelope последней completed revision и
+   возвращает её точные `auditId`/`revision`; новый аудит не запускается.
+3. Widget получает новую первую bounded-страницу и новые cursors. Старые cursors
+   и preview handles не восстанавливаются.
+4. Любое файловое действие начинается с нового preview и полной server-side
+   revalidation. Сохранённый `allowedActions` сам по себе не является authority.
 
 # Разрешённые диагностические данные
 
@@ -79,7 +90,7 @@ Probe обязан подтвердить:
 
 * точные 9 model-visible и 15 app-only tools;
 * app-only видимость mutation и pagination tools;
-* `ui://codex-mac-cleaner/dashboard-v3.html`;
+* `ui://codex-mac-cleaner/dashboard-v4.html`;
 * MIME `text/html;profile=mcp-app`;
 * закрытый CSP без connect/resource/frame domains;
 * plugin-relative Node stdio launch без HTTP/terminal fallback;
@@ -95,4 +106,5 @@ Probe обязан подтвердить:
 2. [Runtime-потоки](../architecture/runtime-flows.md)
 3. [ADR-0019](../decisions/ADR-0019-complete-audit-without-overall-deadline.md)
 4. [ADR-0020](../decisions/ADR-0020-bounded-dashboard-pagination.md)
-5. [CMC-46](../../.github/issue-specs/CMC-46.md)
+5. [ADR-0021](../decisions/ADR-0021-persistent-grouped-dashboard-v4.md)
+6. [CMC-46](../../.github/issue-specs/CMC-46.md)

@@ -2,6 +2,7 @@
 
 ## 2026-07-23
 
+* **Сохраняемый Dashboard**: ADR-0021 и CMC-53 ввели Dashboard v4, HMAC-protected последнюю completed revision, keyed production exclusions, grouped-таблицу на «Обзоре», переключатель «Развернуть»/«Свернуть» и последовательную поэлементную очистку карантина.
 * **Полный аудит**: ADR-0019 удалил общий hard/soft/progress-aware deadline; отдельный timeout источника создаёт coverage gap, но не отменяет обработку остальных кандидатов.
 * **Bounded Dashboard**: ADR-0020 и CMC-47 ввели Dashboard v3, независимые model/widget cursors, лимиты 100 findings и 512 КиБ на страницу и app-only `dashboard_page`.
 * **Native tool flow**: CMC-46 закрепил один штатный host discovery, exact terminal revision и fail-closed `AUDIT_STALE` без Terminal, direct stdio, local HTML и автоматического повторного аудита.

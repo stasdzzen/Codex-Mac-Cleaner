@@ -35,14 +35,14 @@ if (outputDirectoryIndex >= 0 && outputDirectoryArgument === undefined) {
 const releaseVersion = "0.1.0-beta.12";
 const artifactName = `codex-mac-cleaner-v${releaseVersion}.tar`;
 const builtEntries = new Set([
-  ".codex-plugin/assets/dashboard-v3.html",
+  ".codex-plugin/assets/dashboard-v4.html",
   ".codex-plugin/package-allowlist.json",
   ".codex-plugin/runtime/server.js",
   thirdPartyNoticesPath,
 ]);
 const productionEntries = [
   "assets/icon.png",
-  ".codex-plugin/assets/dashboard-v3.html",
+  ".codex-plugin/assets/dashboard-v4.html",
   ".codex-plugin/package-allowlist.json",
   ".codex-plugin/plugin.json",
   ".codex-plugin/runtime/server.js",

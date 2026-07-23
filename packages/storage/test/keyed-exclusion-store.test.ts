@@ -255,6 +255,29 @@ describe("installation-local HMAC и keyed exclusion store", () => {
     },
   );
 
+  it("удаляет один exclusion и сбрасывает все только при актуальной версии", async () => {
+    const stateRoot = await tempStateRoot();
+    const store = new KeyedExclusionStateStore({ stateRoot, now });
+    const first = await store.createFromIdentity(metadata, rawIdentity);
+    const second = await store.createFromIdentity(
+      { ...metadata, exclusionId: "exclusion-synthetic-b" },
+      { ...rawIdentity, targetIdentity: `${rawIdentity.targetIdentity}-b` },
+    );
+
+    const afterRemove = await store.remove(first.exclusionId);
+    expect(afterRemove.exclusions).toEqual([second]);
+    await expect(store.remove("exclusion-missing")).rejects.toMatchObject({
+      code: "EXCLUSION_NOT_FOUND",
+    });
+    await expect(store.reset(afterRemove.stateVersion - 1)).resolves.toEqual({
+      status: "stale",
+      stateVersion: afterRemove.stateVersion,
+    });
+    const reset = await store.reset(afterRemove.stateVersion);
+    expect(reset).toMatchObject({ status: "reset", removedCount: 1 });
+    expect((await store.list()).exclusions).toEqual([]);
+  });
+
   it("rekey меняет namespace/digests и переживает restart", async () => {
     const stateRoot = await tempStateRoot();
     const store = new KeyedExclusionStateStore({ stateRoot, now });

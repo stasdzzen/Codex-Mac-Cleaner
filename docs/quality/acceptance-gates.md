@@ -87,7 +87,8 @@ date: 2026-07-23
 * В основном пользовательском сценарии нет сетевых запросов и телеметрии.
 * Dashboard использует semantic tokens, тёмную тему и утверждённые shadcn/ui components.
 * Coverage warning, риск, уверенность и причина запрета действия различимы без опоры только на цвет.
-* Dashboard имеет пять вкладок; Quarantine Center показывает поэлементные restore/purge без bulk action.
+* Dashboard v4 имеет четыре вкладки и grouped-таблицу на «Обзоре»; Quarantine Center выполняет последовательные поэлементные restore/purge без bulk token.
+* Последняя completed revision переживает restart в versioned HMAC-envelope, открывается через `dashboard_open(null/null)` и не переиспользует mutation authority без revalidation.
 * UI показывает `candidateLogicalBytes`, `candidatePhysicalBytes`, `quarantinePhysicalBytes`, `purgedPhysicalBytes` и timestamped `DiskObservation` без самостоятельного пересчёта и причинного APFS delta.
 * «Пропустить сейчас» — session-local no-op без tool call; «Исключить» создаёт versioned local state, а «Переместить в карантин» означает подтверждённый quarantine одного объекта.
 * Вкладка «Исключения» поддерживает persistence, search/filter, «Снова проверять», поэлементное удаление и подтверждаемый reset all.
@@ -101,7 +102,7 @@ date: 2026-07-23
 
 * Clean-room установка из repository marketplace работает по опубликованной инструкции.
 * `.codex-plugin/plugin.json`, `.mcp.json` и `SKILL.md` проходят schema и smoke checks.
-* Packaged surface probe на синтетическом `HOME` подтверждает точные 9 model-visible и 15 app-only tools, их visibility metadata, Dashboard v3 URI/MIME/CSP и plugin-relative Node stdio без HTTP/terminal fallback.
+* Packaged surface probe на синтетическом `HOME` подтверждает точные 9 model-visible и 15 app-only tools, их visibility metadata, Dashboard v4 URI/MIME/CSP и plugin-relative Node stdio без HTTP/terminal fallback.
 * Capability matrix совпадает с probe; tool/resource/visibility drift даёт ненулевой exit code, а stderr не раскрывает абсолютные локальные пути.
 * GitHub Release содержит checksum, SBOM и provenance, связанные с tag и commit.
 * Clean-room запуск в новой задаче Codex открывает аудит и Dashboard без копирования команд в терминал.

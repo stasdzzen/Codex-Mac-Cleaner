@@ -1,5 +1,14 @@
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, mkdtemp, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  realpath,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -277,7 +286,7 @@ async function connectedRuntime(
   const client = new Client({ name: "runtime-production-correlation", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
-  return { server, client };
+  return { server, client, services };
 }
 
 afterEach(async () => {
@@ -308,7 +317,7 @@ describe("production runtime services", () => {
       auditId: started.auditId,
       revision: null,
       state: expect.stringMatching(/^(?:queued|running)$/u),
-      resourceUri: "ui://codex-mac-cleaner/dashboard-v3.html",
+      resourceUri: "ui://codex-mac-cleaner/dashboard-v4.html",
       findings: [],
     });
     expect(live?.meta).toMatchObject({
@@ -353,6 +362,530 @@ describe("production runtime services", () => {
         findings: [],
       },
     });
+  });
+
+  it("восстанавливает последний завершённый аудит после restart и заново проверяет mutation", async () => {
+    const root = await mkdtemp(join(tmpdir(), "cmc-runtime-persisted-audit-"));
+    roots.push(root);
+    const homeDirectory = join(root, "home");
+    const stateRoot = join(root, "state");
+    const candidatePath = join(
+      homeDirectory,
+      "Library",
+      "Caches",
+      "Persisted Synthetic Remnant",
+    );
+    await mkdir(candidatePath, { recursive: true });
+    const harness = await productionCorrelationHarness(homeDirectory, candidatePath);
+    harness.removeOwner();
+
+    const first = await connectedRuntime(
+      homeDirectory,
+      stateRoot,
+      harness.correlation,
+      harness.fixedNow,
+    );
+    let auditId: string;
+    let findingId: string;
+    try {
+      const results = await completedAudit(first.client, "persisted-audit-request");
+      const content = results.structuredContent as {
+        auditId: string;
+        findings: Array<{ findingId: string; allowedActions: string[] }>;
+      };
+      auditId = content.auditId;
+      findingId = content.findings[0]!.findingId;
+      expect(content.findings[0]!.allowedActions).toContain("prepare_move");
+    } finally {
+      await first.client.close();
+      await first.server.close();
+    }
+    expect((await stat(join(stateRoot, "audits"))).mode & 0o777).toBe(0o700);
+    expect((await stat(join(stateRoot, "audits", "latest.json"))).mode & 0o777).toBe(
+      0o600,
+    );
+    const persisted = await readFile(
+      join(stateRoot, "audits", "latest.json"),
+      "utf8",
+    );
+    expect(persisted).not.toMatch(/previewToken|action-handle|cursor-/u);
+    const persistedEnvelope = JSON.parse(persisted) as {
+      payload: {
+        findings: Array<{
+          correlation: Record<string, unknown> | null;
+          candidate: Record<string, unknown> | null;
+        }>;
+      };
+    };
+    const persistedFinding = persistedEnvelope.payload.findings[0]!;
+    expect(persistedFinding).not.toHaveProperty("identity");
+    expect(Object.keys(persistedFinding.correlation ?? {}).sort()).toEqual([
+      "candidateSubjectId",
+      "revision",
+      "safeView",
+    ]);
+    expect(Object.keys(persistedFinding.candidate ?? {}).sort()).toEqual([
+      "allowedRoot",
+      "fingerprint",
+      "kind",
+      "parentFingerprint",
+      "path",
+      "ref",
+      "root",
+    ]);
+    for (const forbiddenKey of [
+      "subjects",
+      "edges",
+      "ownerBindings",
+      "provenance",
+      "certificates",
+      "resolutionStates",
+      "ownerResolutionState",
+      "bundleId",
+      "packageId",
+      "signingIdentity",
+    ]) {
+      expect(persisted).not.toContain(`"${forbiddenKey}":`);
+    }
+
+    const second = await connectedRuntime(
+      homeDirectory,
+      stateRoot,
+      harness.correlation,
+      harness.fixedNow,
+    );
+    try {
+      const dashboard = await second.client.callTool({
+        name: "dashboard_open",
+        arguments: { auditId: null, revision: null },
+      });
+      expect(dashboard.isError).not.toBe(true);
+      expect(dashboard.structuredContent).toMatchObject({
+        auditId,
+        revision: 1,
+        state: expect.stringMatching(/^completed(?:_with_warnings)?$/u),
+      });
+      expect(
+        (dashboard._meta as { dashboard?: { findings?: unknown[] } } | undefined)
+          ?.dashboard?.findings,
+      ).toHaveLength(1);
+
+      const preview = await second.client.callTool({
+        name: "quarantine_prepare_move",
+        arguments: { findingId, auditRevision: 1 },
+      });
+      expect(preview.isError).not.toBe(true);
+      expect(preview.structuredContent).toMatchObject({
+        previewToken: expect.stringMatching(/^action-handle-/u),
+      });
+      await expect(stat(candidatePath)).resolves.toBeDefined();
+    } finally {
+      await second.client.close();
+      await second.server.close();
+    }
+  });
+
+  it("игнорирует повреждённый persisted audit и не открывает stale authority", async () => {
+    const root = await mkdtemp(join(tmpdir(), "cmc-runtime-corrupt-audit-"));
+    roots.push(root);
+    const homeDirectory = join(root, "home");
+    const stateRoot = join(root, "state");
+    await mkdir(join(homeDirectory, "Library", "Caches"), { recursive: true });
+    const first = await createDefaultRuntimeServices({ homeDirectory, stateRoot });
+    const started = (await first.auditService?.start({
+      requestId: "corrupt-persisted-audit-request",
+      profile: "application_remnants",
+    })) as { auditId: string };
+    for (let attempt = 0; attempt < 200; attempt += 1) {
+      const status = (await first.auditService?.status({
+        auditId: started.auditId,
+      })) as { state: string };
+      if (/^completed(?:_with_warnings)?$/u.test(status.state)) break;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+
+    const persistedPath = join(stateRoot, "audits", "latest.json");
+    const envelope = JSON.parse(await readFile(persistedPath, "utf8")) as {
+      integrity: string;
+    };
+    envelope.integrity = `${envelope.integrity.slice(0, -1)}${
+      envelope.integrity.endsWith("0") ? "1" : "0"
+    }`;
+    await writeFile(persistedPath, JSON.stringify(envelope), { mode: 0o600 });
+
+    const second = await createDefaultRuntimeServices({ homeDirectory, stateRoot });
+    await expect(
+      second.auditService?.dashboard({ auditId: null, revision: null }),
+    ).rejects.toThrow("AUDIT_STALE");
+  });
+
+  it("сохраняет доступ к последнему completed-аудиту после отмены более нового", async () => {
+    const root = await mkdtemp(join(tmpdir(), "cmc-runtime-latest-completed-"));
+    roots.push(root);
+    const homeDirectory = join(root, "home");
+    const stateRoot = join(root, "state");
+    const candidatePath = join(
+      homeDirectory,
+      "Library",
+      "Caches",
+      "Last Completed Remnant",
+    );
+    await mkdir(candidatePath, { recursive: true });
+    const harness = await productionCorrelationHarness(homeDirectory, candidatePath);
+    harness.removeOwner();
+    const runtime = await connectedRuntime(
+      homeDirectory,
+      stateRoot,
+      harness.correlation,
+      harness.fixedNow,
+    );
+    try {
+      const completed = await completedAudit(
+        runtime.client,
+        "last-completed-request",
+      );
+      const completedAuditId = (
+        completed.structuredContent as { auditId: string }
+      ).auditId;
+      const completedStorageSummary = (
+        completed.structuredContent as {
+          findings: Array<{ findingId: string }>;
+          storageSummary: {
+            candidateLogicalBytes: number;
+            candidatePhysicalBytes: number;
+          };
+        }
+      ).storageSummary;
+      expect(completedStorageSummary.candidateLogicalBytes).toBeGreaterThan(0);
+      const newer = (await runtime.services.auditService?.start({
+        requestId: "newer-cancelled-request",
+        profile: "application_remnants",
+      })) as { auditId: string };
+      await runtime.services.auditService?.cancel({
+        auditId: newer.auditId,
+        requestId: "cancel-newer-request",
+      });
+      for (let attempt = 0; attempt < 200; attempt += 1) {
+        const status = (await runtime.services.auditService?.status({
+          auditId: newer.auditId,
+        })) as { state: string };
+        if (status.state === "cancelled") break;
+        await new Promise((resolve) => setTimeout(resolve, 5));
+      }
+
+      const dashboard = await runtime.services.auditService?.dashboard({
+        auditId: null,
+        revision: null,
+      });
+      expect(dashboard?.output).toMatchObject({
+        auditId: completedAuditId,
+        revision: 1,
+        storageSummary: completedStorageSummary,
+      });
+
+      const findingId = (
+        completed.structuredContent as {
+          findings: Array<{ findingId: string }>;
+        }
+      ).findings[0]!.findingId;
+      const preview = await runtime.client.callTool({
+        name: "quarantine_prepare_move",
+        arguments: {
+          findingId,
+          auditRevision: 1,
+        },
+      });
+      expect(preview.isError).not.toBe(true);
+      const moved = await runtime.client.callTool({
+        name: "quarantine_move",
+        arguments: {
+          previewToken: (
+            preview.structuredContent as { previewToken: string }
+          ).previewToken,
+          operationId: `move-after-cancel-${randomUUID()}`,
+        },
+      });
+      expect(moved.isError).not.toBe(true);
+      expect(
+        (
+          moved.structuredContent as {
+            storageSummary: {
+              candidateLogicalBytes: number;
+              candidatePhysicalBytes: number;
+            };
+          }
+        ).storageSummary,
+      ).toMatchObject({
+        candidateLogicalBytes:
+          completedStorageSummary.candidateLogicalBytes,
+        candidatePhysicalBytes:
+          completedStorageSummary.candidatePhysicalBytes,
+      });
+    } finally {
+      await runtime.client.close();
+      await runtime.server.close();
+    }
+  });
+
+  it("сериализует разные audit_start и после restart восстанавливает последний", async () => {
+    const root = await mkdtemp(join(tmpdir(), "cmc-runtime-serialized-audits-"));
+    roots.push(root);
+    const homeDirectory = join(root, "home");
+    const stateRoot = join(root, "state");
+    const candidatePath = join(
+      homeDirectory,
+      "Library",
+      "Caches",
+      "Serialized Audit Remnant",
+    );
+    await mkdir(candidatePath, { recursive: true });
+    const harness = await productionCorrelationHarness(homeDirectory, candidatePath);
+    harness.removeOwner();
+    const originalCommands = harness.correlation.commands;
+    let releaseFirstCommand: (() => void) | undefined;
+    let markFirstCommandStarted: (() => void) | undefined;
+    const firstCommandStarted = new Promise<void>((resolve) => {
+      markFirstCommandStarted = resolve;
+    });
+    const firstCommandGate = new Promise<void>((resolve) => {
+      releaseFirstCommand = resolve;
+    });
+    let firstCommandBlocked = false;
+    const correlation = {
+      ...harness.correlation,
+      commands: {
+        async run(
+          executable: string,
+          argv: readonly string[],
+          options: Readonly<{ signal: AbortSignal }>,
+        ) {
+          if (!firstCommandBlocked) {
+            firstCommandBlocked = true;
+            markFirstCommandStarted?.();
+            await firstCommandGate;
+          }
+          return originalCommands.run(executable, argv, options);
+        },
+      },
+    };
+    const services = await createDefaultRuntimeServices({
+      homeDirectory,
+      stateRoot,
+      correlation,
+      now: () => new Date(harness.fixedNow),
+    });
+    const first = (await services.auditService?.start({
+      requestId: "serialized-audit-first",
+      profile: "application_remnants",
+    })) as { auditId: string };
+    await firstCommandStarted;
+    const second = (await services.auditService?.start({
+      requestId: "serialized-audit-second",
+      profile: "application_remnants",
+    })) as { auditId: string };
+    const cancelled = (await services.auditService?.start({
+      requestId: "serialized-audit-cancelled",
+      profile: "application_remnants",
+    })) as { auditId: string };
+    const runs = Reflect.get(
+      services.auditService as object,
+      "runs",
+    ) as Map<string, { state: string }>;
+    const cancelledRun = runs.get(cancelled.auditId)!;
+    let cancelledState = cancelledRun.state;
+    const cancelledTransitions = [cancelledState];
+    Object.defineProperty(cancelledRun, "state", {
+      configurable: true,
+      enumerable: true,
+      get: () => cancelledState,
+      set: (state: string) => {
+        cancelledState = state;
+        cancelledTransitions.push(state);
+      },
+    });
+    await services.auditService?.cancel({
+      auditId: cancelled.auditId,
+      requestId: "cancel-serialized-queued-audit",
+    });
+
+    expect(
+      (await services.auditService?.status({
+        auditId: second.auditId,
+      })) as { state: string },
+    ).toMatchObject({ state: "queued" });
+    expect(cancelledTransitions).toEqual(["queued", "cancelling"]);
+    releaseFirstCommand?.();
+
+    for (const auditId of [first.auditId, second.auditId]) {
+      let terminalState = "";
+      for (let attempt = 0; attempt < 500; attempt += 1) {
+        terminalState = (
+          (await services.auditService?.status({ auditId })) as {
+            state: string;
+          }
+        ).state;
+        if (/^completed(?:_with_warnings)?$/u.test(terminalState)) break;
+        await new Promise((resolve) => setTimeout(resolve, 5));
+      }
+      expect(terminalState).toMatch(/^completed(?:_with_warnings)?$/u);
+    }
+    for (let attempt = 0; attempt < 500; attempt += 1) {
+      const status = (await services.auditService?.status({
+        auditId: cancelled.auditId,
+      })) as { state: string };
+      if (status.state === "cancelled") break;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    expect(cancelledTransitions).toEqual([
+      "queued",
+      "cancelling",
+      "cancelled",
+    ]);
+
+    const liveDashboard = await services.auditService?.dashboard({
+      auditId: null,
+      revision: null,
+    });
+    expect(liveDashboard?.output).toMatchObject({
+      auditId: second.auditId,
+      revision: 1,
+    });
+
+    const restored = await createDefaultRuntimeServices({
+      homeDirectory,
+      stateRoot,
+      correlation: harness.correlation,
+      now: () => new Date(harness.fixedNow),
+    });
+    const restoredDashboard = await restored.auditService?.dashboard({
+      auditId: null,
+      revision: null,
+    });
+    expect(restoredDashboard?.output).toMatchObject({
+      auditId: second.auditId,
+      revision: 1,
+    });
+  });
+
+  it("оставляет findings видимыми при corrupt exclusion state и блокирует mutation", async () => {
+    const root = await mkdtemp(join(tmpdir(), "cmc-runtime-corrupt-exclusion-"));
+    roots.push(root);
+    const homeDirectory = join(root, "home");
+    const stateRoot = join(root, "state");
+    const candidatePath = join(
+      homeDirectory,
+      "Library",
+      "Caches",
+      "Corrupt Exclusion Remnant",
+    );
+    await mkdir(candidatePath, { recursive: true });
+    const harness = await productionCorrelationHarness(homeDirectory, candidatePath);
+    harness.removeOwner();
+    const runtime = await connectedRuntime(
+      homeDirectory,
+      stateRoot,
+      harness.correlation,
+      harness.fixedNow,
+    );
+    try {
+      await writeFile(
+        join(stateRoot, "exclusions", "exclusions.json"),
+        "{\"schemaVersion\":999}\n",
+        { mode: 0o600 },
+      );
+      const results = await completedAudit(
+        runtime.client,
+        "corrupt-exclusion-audit-request",
+      );
+      const finding = (results.structuredContent as {
+        findings: Array<{ findingId: string; allowedActions: string[] }>;
+      }).findings[0]!;
+      expect(finding.allowedActions).not.toContain("prepare_move");
+
+      const dashboard = await runtime.client.callTool({
+        name: "dashboard_open",
+        arguments: {
+          auditId: (results.structuredContent as { auditId: string }).auditId,
+          revision: 1,
+        },
+      });
+      expect(dashboard.isError).not.toBe(true);
+      expect(
+        (dashboard._meta as { dashboard?: { findings?: unknown[] } } | undefined)
+          ?.dashboard?.findings,
+      ).toHaveLength(1);
+
+      const preview = await runtime.client.callTool({
+        name: "quarantine_prepare_move",
+        arguments: { findingId: finding.findingId, auditRevision: 1 },
+      });
+      expect(preview.isError).toBe(true);
+    } finally {
+      await runtime.client.close();
+      await runtime.server.close();
+    }
+  });
+
+  it("стартует fail-closed с повреждённым exclusion key", async () => {
+    const root = await mkdtemp(join(tmpdir(), "cmc-runtime-corrupt-exclusion-key-"));
+    roots.push(root);
+    const homeDirectory = join(root, "home");
+    const stateRoot = join(root, "state");
+    const candidatePath = join(
+      homeDirectory,
+      "Library",
+      "Caches",
+      "Corrupt Exclusion Key Remnant",
+    );
+    await mkdir(candidatePath, { recursive: true });
+    const harness = await productionCorrelationHarness(homeDirectory, candidatePath);
+    harness.removeOwner();
+    await createDefaultRuntimeServices({
+      homeDirectory,
+      stateRoot,
+      correlation: harness.correlation,
+      now: () => new Date(harness.fixedNow),
+    });
+    await writeFile(
+      join(
+        stateRoot,
+        "exclusions",
+        "keys",
+        "exclusion-hmac-key.json",
+      ),
+      "{\"schemaVersion\":999}\n",
+      { mode: 0o600 },
+    );
+
+    const runtime = await connectedRuntime(
+      homeDirectory,
+      stateRoot,
+      harness.correlation,
+      harness.fixedNow,
+    );
+    try {
+      const results = await completedAudit(
+        runtime.client,
+        "corrupt-exclusion-key-audit",
+      );
+      const finding = (results.structuredContent as {
+        findings: Array<{ findingId: string; allowedActions: string[] }>;
+      }).findings[0]!;
+      expect(finding).toBeDefined();
+      expect(finding.allowedActions).not.toContain("prepare_move");
+
+      const preview = await runtime.client.callTool({
+        name: "quarantine_prepare_move",
+        arguments: {
+          findingId: finding.findingId,
+          auditRevision: 1,
+        },
+      });
+      expect(preview.isError).toBe(true);
+    } finally {
+      await runtime.client.close();
+      await runtime.server.close();
+    }
   });
 
   it("не прерывает долгий аудит по времени и завершает его после продолжения источника", async () => {
@@ -1475,9 +2008,12 @@ describe("production runtime services", () => {
     },
   );
 
-  it.each(["Caches", "Logs"] as const)(
-    "оставляет непустой %s artifact inspect-only с POLICY_DATA_KIND_UNKNOWN",
-    async (libraryRoot) => {
+  it.each([
+    ["Caches", true],
+    ["Logs", false],
+  ] as const)(
+    "применяет bounded regenerability rule к непустому %s artifact",
+    async (libraryRoot, actionable) => {
       const root = await mkdtemp(join(tmpdir(), `cmc-runtime-nonempty-${libraryRoot}-`));
       roots.push(root);
       const homeDirectory = join(root, "home");
@@ -1505,8 +2041,13 @@ describe("production runtime services", () => {
         const finding = (results.structuredContent as {
           findings: Array<{ allowedActions: string[]; blockingReasons: string[] }>;
         }).findings[0];
-        expect(finding?.allowedActions).not.toContain("prepare_move");
-        expect(finding?.blockingReasons).toContain("POLICY_DATA_KIND_UNKNOWN");
+        if (actionable) {
+          expect(finding?.allowedActions).toContain("prepare_move");
+          expect(finding?.blockingReasons).not.toContain("POLICY_DATA_KIND_UNKNOWN");
+        } else {
+          expect(finding?.allowedActions).not.toContain("prepare_move");
+          expect(finding?.blockingReasons).toContain("POLICY_DATA_KIND_UNKNOWN");
+        }
       } finally {
         await client.close();
         await server.close();
@@ -1514,44 +2055,130 @@ describe("production runtime services", () => {
     },
   );
 
-  it("пересчитывает empty proof перед preview и блокирует появившийся payload", async () => {
-    const root = await mkdtemp(join(tmpdir(), "cmc-runtime-proof-race-"));
-    roots.push(root);
-    const homeDirectory = join(root, "home");
-    const candidatePath = join(
-      homeDirectory,
-      "Library",
-      "Caches",
-      "Proof Race",
-    );
-    await mkdir(candidatePath, { recursive: true });
-    const harness = await productionCorrelationHarness(homeDirectory, candidatePath);
-    harness.removeOwner();
-    const { server, client } = await connectedRuntime(
-      homeDirectory,
-      join(root, "state"),
-      harness.correlation,
-      harness.fixedNow,
-    );
-    try {
-      const results = await completedAudit(client, "proof-race-audit");
-      const finding = (results.structuredContent as {
-        findings: Array<{ findingId: string; allowedActions: string[] }>;
-      }).findings[0];
-      expect(finding?.allowedActions).toContain("prepare_move");
+  it.each([
+    "credentials.db",
+    "Cookies",
+    "sync-state",
+    "cache.db",
+    "index.sqlite",
+    "Web Data",
+    "Local State",
+  ])(
+    "пересчитывает cache proof перед preview и блокирует появившееся имя %s",
+    async (sensitiveName) => {
+      const root = await mkdtemp(join(tmpdir(), "cmc-runtime-proof-race-"));
+      roots.push(root);
+      const homeDirectory = join(root, "home");
+      const candidatePath = join(
+        homeDirectory,
+        "Library",
+        "Caches",
+        "Proof Race",
+      );
+      await mkdir(candidatePath, { recursive: true });
+      const harness = await productionCorrelationHarness(
+        homeDirectory,
+        candidatePath,
+      );
+      harness.removeOwner();
+      const { server, client } = await connectedRuntime(
+        homeDirectory,
+        join(root, "state"),
+        harness.correlation,
+        harness.fixedNow,
+      );
+      try {
+        const results = await completedAudit(client, "proof-race-audit");
+        const finding = (results.structuredContent as {
+          findings: Array<{ findingId: string; allowedActions: string[] }>;
+        }).findings[0];
+        expect(finding?.allowedActions).toContain("prepare_move");
 
-      await writeFile(join(candidatePath, "payload.bin"), "late-payload", "utf8");
-      const preview = await client.callTool({
-        name: "quarantine_prepare_move",
-        arguments: { findingId: finding?.findingId, auditRevision: 1 },
-      });
-      expect(preview.isError).toBe(true);
-      expect(preview.structuredContent ?? {}).not.toHaveProperty("previewToken");
-    } finally {
-      await client.close();
-      await server.close();
-    }
-  });
+        await writeFile(
+          join(candidatePath, sensitiveName),
+          "late-sensitive-payload",
+          "utf8",
+        );
+        const preview = await client.callTool({
+          name: "quarantine_prepare_move",
+          arguments: { findingId: finding?.findingId, auditRevision: 1 },
+        });
+        expect(preview.isError).toBe(true);
+        expect(preview.structuredContent ?? {}).not.toHaveProperty(
+          "previewToken",
+        );
+      } finally {
+        await client.close();
+        await server.close();
+      }
+    },
+  );
+
+  it.each([
+    "Cookies",
+    "Bookmarks",
+    "session-store",
+    "oauth-token",
+    "sync-state",
+    "vpn-profile",
+    "Saved Games",
+    "cache.db",
+    "index.sqlite",
+    "Web Data",
+    "Local State",
+  ])(
+    "не выдаёт prepare_move для cache с чувствительным вложенным именем %s",
+    async (sensitiveName) => {
+      const root = await mkdtemp(join(tmpdir(), "cmc-runtime-sensitive-cache-"));
+      roots.push(root);
+      const homeDirectory = join(root, "home");
+      const candidatePath = join(
+        homeDirectory,
+        "Library",
+        "Caches",
+        "Sensitive Cache",
+      );
+      await mkdir(candidatePath, { recursive: true });
+      await writeFile(
+        join(candidatePath, sensitiveName),
+        "synthetic-sensitive-payload",
+        "utf8",
+      );
+      const harness = await productionCorrelationHarness(
+        homeDirectory,
+        candidatePath,
+      );
+      harness.removeOwner();
+      const { server, client } = await connectedRuntime(
+        homeDirectory,
+        join(root, "state"),
+        harness.correlation,
+        harness.fixedNow,
+      );
+      try {
+        const results = await completedAudit(
+          client,
+          `sensitive-cache-${createHash("sha256")
+            .update(sensitiveName)
+            .digest("hex")
+            .slice(0, 16)}`,
+        );
+        const finding = (results.structuredContent as {
+          findings: Array<{
+            allowedActions: string[];
+            blockingReasons: string[];
+          }>;
+        }).findings[0];
+        expect(finding?.allowedActions).not.toContain("prepare_move");
+        expect(finding?.blockingReasons).toContain(
+          "POLICY_DATA_KIND_UNKNOWN",
+        );
+      } finally {
+        await client.close();
+        await server.close();
+      }
+    },
+  );
 
   it("возвращает exact purge replay без второй filesystem mutation", async () => {
     const root = await mkdtemp(join(tmpdir(), "cmc-runtime-purge-replay-"));

@@ -37,7 +37,7 @@ date: 2026-07-19
 15. Документация — OKF bundle, зафиксированный на Google knowledge-catalog commit `d44368c15e38e7c92481c5992e4f9b5b421a801d`.
 16. Канал v0.1 — GitHub Releases и repository marketplace; публичная Plugin Directory отложена.
 17. Лицензия — Apache-2.0; существующий MIT `LICENSE` нужно заменить до первого implementation commit.
-18. Dashboard имеет пять вкладок; Quarantine Center даёт только поэлементные restore/purge.
+18. Dashboard v4 имеет четыре вкладки и grouped-таблицу на «Обзоре»; Quarantine Center даёт последовательные поэлементные restore/purge без bulk token.
 19. `audit_cancel` кооперативно останавливает read-only аудит; partial report не разрешает mutation.
 20. Сводка разделяет найденный, карантинный и окончательно удалённый объём без обещания точного свободного места APFS.
 21. Built-in protected scopes используют только универсальные system/credential/browser-profile/personal/project/plugin/Codex classes; `~/.codex` и любой локальный Git-проект защищены, а персональные app/path rules отсутствуют.

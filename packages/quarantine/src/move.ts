@@ -81,7 +81,12 @@ export interface ResolveSubjectInput {
 
 export interface QuarantineControllerOptions {
   readonly storeRoot: string;
-  readonly candidateStorage?: () => Promise<CandidateStorage>;
+  readonly candidateStorage?: (
+    binding?: Readonly<{
+      auditId: string;
+      auditRevision: number;
+    }>,
+  ) => Promise<CandidateStorage>;
   readonly resolveSubject: (input: ResolveSubjectInput) => Promise<MoveSubject>;
   readonly revalidate: (
     subject: MoveSubject,
@@ -265,7 +270,10 @@ export class QuarantineController {
   private async buildActionResult(
     manifest: QuarantineManifest,
   ): Promise<QuarantineActionResult> {
-    const summary = await this.readStorageSummary();
+    const summary = await this.readStorageSummary({
+      auditId: manifest.auditId,
+      auditRevision: manifest.auditRevision,
+    });
     const diskObservation = await observeDisk(this.options.storeRoot, {
       now: this.now,
     });
@@ -277,12 +285,20 @@ export class QuarantineController {
     };
   }
 
-  async readStorageSummary(): Promise<StorageSummary> {
+  async readStorageSummary(
+    binding?: Readonly<{
+      auditId: string;
+      auditRevision: number;
+    }>,
+  ): Promise<StorageSummary> {
     return readStorageSummarySnapshot({
       storeRoot: this.options.storeRoot,
       ...(this.options.candidateStorage === undefined
         ? {}
-        : { candidateStorage: this.options.candidateStorage }),
+        : {
+            candidateStorage: () =>
+              this.options.candidateStorage!(binding),
+          }),
     });
   }
 

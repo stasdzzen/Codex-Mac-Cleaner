@@ -64,7 +64,7 @@ describe("CMC-38: единый знак плагина", () => {
         "utf8",
       ),
       readFile(
-        resolve(repositoryRoot, ".codex-plugin/assets/dashboard-v3.html"),
+        resolve(repositoryRoot, ".codex-plugin/assets/dashboard-v4.html"),
         "utf8",
       ),
       readFile(resolve(repositoryRoot, "README.md"), "utf8"),

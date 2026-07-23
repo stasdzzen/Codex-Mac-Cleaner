@@ -189,10 +189,19 @@ export const AuditResultsInputSchema = z
 
 export const DashboardOpenInputSchema = z
   .object({
-    auditId: OpaqueIdSchema,
+    auditId: OpaqueIdSchema.nullable(),
     revision: SafeIntegerSchema.min(1).nullable(),
   })
-  .strict();
+  .strict()
+  .superRefine((input, context) => {
+    if (input.auditId === null && input.revision !== null) {
+      context.addIssue({
+        code: "custom",
+        path: ["revision"],
+        message: "Последний сохранённый аудит открывается без клиентской revision",
+      });
+    }
+  });
 
 export const DashboardPageInputSchema = z
   .object({

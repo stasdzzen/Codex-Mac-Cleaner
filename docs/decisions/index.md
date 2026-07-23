@@ -24,6 +24,7 @@
 * [ADR-0018: пропускная способность Real-Mac аудита и безопасная диагностика автозапуска](ADR-0018-real-mac-audit-throughput-and-diagnostics.md)
 * [ADR-0019: полный аудит без общего лимита времени](ADR-0019-complete-audit-without-overall-deadline.md)
 * [ADR-0020: ограниченная пагинация результатов и Dashboard v3](ADR-0020-bounded-dashboard-pagination.md)
+* [ADR-0021: сохраняемый сгруппированный Dashboard v4](ADR-0021-persistent-grouped-dashboard-v4.md)
 
 ## Правило изменения
 

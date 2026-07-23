@@ -36,20 +36,21 @@ React/Vite widget использует shadcn/ui на примитивах Base 
 * `Sheet` для доказательств;
 * `Alert` для coverage gaps и предупреждений;
 * `AlertDialog` для карантина, восстановления и очистки;
-* `Tabs` для «Обзора», «Находок», «Карантина», «Исключений» и «Расписания»;
+* `Tabs` для «Обзора», «Карантина», «Оставленных» и «Автопроверки»;
 * `Button` и `Tooltip` для действий и кратких пояснений;
 * `Skeleton` для загрузки;
 * `Separator` и компактные `Button` для подвала проекта;
 * `sonner` для короткой обратной связи.
 
-Тема использует semantic tokens shadcn/ui и утверждённые OKLCH-значения светлого и тёмного режима. Прямые цвета в компонентах, ручные `dark:` overrides и внешние CDN запрещены. Пользовательские подписи переводят внутренние enum и policy-коды в понятный русский текст; неизвестный код не показывается напрямую. Bounded pagination, live progress и nullable pre-result revision используют `ui://codex-mac-cleaner/dashboard-v3.html`; опубликованные v1 и v2 URI не переопределяются.
+Тема использует semantic tokens shadcn/ui и утверждённые OKLCH-значения светлого и тёмного режима. Прямые цвета в компонентах, ручные `dark:` overrides и внешние CDN запрещены. Пользовательские подписи переводят внутренние enum и policy-коды в понятный русский текст; неизвестный код не показывается напрямую. Bounded pagination, live progress, reopen последней ревизии и nullable pre-result revision используют `ui://codex-mac-cleaner/dashboard-v4.html`; опубликованные v1–v3 URI не переопределяются.
 
 Widget получает начальный snapshot из ответа `dashboard_open`, в активном состоянии раз в секунду опрашивает `audit_status`, а app-only actions вызывает через MCP Apps bridge. Первая страница содержит максимум 100 findings; следующая загружается через app-only `dashboard_page` только после отдельного нажатия «Показать ещё». Модель и Widget имеют независимые opaque cursors, а UI показывает server-owned total/support-level counts и число загруженных строк, не пересчитывая итог из текущей страницы. `stateVersion` монотонен: ответ со старой версией, другим `auditId` или revision отбрасывается. Pre-result snapshot имеет `revision=null`, пустые findings/actions и только server-owned phase/counts. Widget state хранит только представление — фильтр, выделенную строку, открытую панель и `skippedFindingIds` текущей ревизии. Raw paths, inventory, bundle/package/signing claims, correlation graph, coverage certificates, destructive token material и решения policy в widget не копируются. «Пропустить сейчас» добавляет ID в session-local список, не вызывает tool и не влияет на новый аудит. «Исключить» вызывает app-visible state action по `findingId`/revision, а не сохраняет identity в browser state.
 
 Dashboard отображается `inline` по умолчанию. Только отдельное нажатие пользователя
-может запросить у Codex режим `fullscreen`; режим `pip` продукт не предлагает.
-Автоматическое переключение запрещено, а отказ либо отсутствие host capability
-сохраняют текущий вид и не меняют состояние аудита. Публичный MCP Apps контракт не
+может запросить у Codex режим `fullscreen`; повторное нажатие «Свернуть»
+возвращает `inline`, режим `pip` продукт не предлагает. Завершение аудита не
+меняет display mode. Отказ либо отсутствие host capability сохраняют текущий
+вид и не меняют состояние аудита. Публичный MCP Apps контракт не
 гарантирует размещение в правой панели, поэтому плагин не заявляет такой режим и не
 использует недокументированные metadata для его имитации.
 Внизу Dashboard расположен адаптивный footer с `© 2026 Dzzen`, доступной иконкой
@@ -139,7 +140,7 @@ Resolver формирует immutable `CorrelationRevision`, `SafeCorrelationVie
 
 ## Local Store
 
-Хранит immutable safe reports, append-only journal, operation manifests, versioned keyed exclusions, keyed historical owner bindings и инертный schedule compatibility state без базы данных. Raw identity graph, paths, inventory и tokens в audit report не сохраняются. Historical binding сохраняет только versioned keyed digests и validation metadata.
+Хранит последнюю immutable audit revision, append-only journal, operation manifests, versioned keyed exclusions, keyed historical owner bindings и инертный schedule compatibility state без базы данных. Последняя ревизия записывается в versioned HMAC-envelope атомарно с правами `0600`; raw path остаётся только в этом локальном server-owned state для последующей revalidation и не попадает в MCP output. Preview tokens, action handles, cursors, UI state, raw identity graph и inventory не сохраняются. Historical binding сохраняет только versioned keyed digests и validation metadata.
 
 # Исключённые компоненты
 

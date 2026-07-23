@@ -164,7 +164,7 @@ export const DashboardOpenOutputSchema = z
     revision: SafeIntegerSchema.min(1).nullable(),
     state: AuditRunStateSchema,
     stateVersion: SafeIntegerSchema,
-    resourceUri: z.literal("ui://codex-mac-cleaner/dashboard-v3.html"),
+    resourceUri: z.literal("ui://codex-mac-cleaner/dashboard-v4.html"),
     storageSummary: StorageSummarySchema,
     diskObservation: DiskObservationSchema,
     excludedCount: SafeIntegerSchema,

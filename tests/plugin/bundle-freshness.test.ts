@@ -11,7 +11,7 @@ const execFileAsync = promisify(execFile);
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const shippedArtifacts = [
   ".codex-plugin/runtime/server.js",
-  ".codex-plugin/assets/dashboard-v3.html",
+  ".codex-plugin/assets/dashboard-v4.html",
   ".codex-plugin/package-allowlist.json",
   "docs/release/third-party-notices.json",
 ] as const;
@@ -63,7 +63,7 @@ describe("repository marketplace bundle freshness", () => {
       readFile(resolve(repositoryRoot, shippedArtifacts[1]), "utf8"),
     ]);
 
-    expect(runtime).toContain("EMPTY_CACHE_LOG_ARTIFACT_V1");
+    expect(runtime).toContain("BOUNDED_CACHE_LOG_REGENERABILITY_V2");
     expect(runtime).toContain("Объект кэша");
     expect(dashboard).toContain("Автопроверка появится позже");
     expect(dashboard).toContain("Проверить сейчас");

@@ -27,7 +27,7 @@ state, и постраничная загрузка Dashboard остаются a
 | `audit_status` | `model` | Получить server-owned progress и nullable/exact revision |
 | `audit_cancel` | `model` | Запросить кооперативную отмену только по явному запросу |
 | `audit_results` | `model` | Получить bounded model-safe страницу точной revision |
-| `dashboard_open` | `model` | Открыть live или immutable Dashboard v3 |
+| `dashboard_open` | `model` | Открыть live, exact immutable либо последнюю сохранённую revision Dashboard v4 |
 | `finding_inspect` | `model` | Получить безопасное объяснение одной находки |
 | `finding_reveal` | `model` | Запросить host-mediated reveal без раскрытия пути модели |
 | `schedule_intent_get` | `model` | Прочитать инертный schedule intent v0.1 |
@@ -57,7 +57,7 @@ state, и постраничная загрузка Dashboard остаются a
 
 | Свойство | Каноническое значение |
 |---|---|
-| URI | `ui://codex-mac-cleaner/dashboard-v3.html` |
+| URI | `ui://codex-mac-cleaner/dashboard-v4.html` |
 | MIME | `text/html;profile=mcp-app` |
 | Tool binding | `dashboard_open` |
 | App bridge | включён |

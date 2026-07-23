@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { lstat, readdir, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -32,14 +32,18 @@ import {
   AuditStatusInputSchema,
   DashboardOpenInputSchema,
   DashboardPageInputSchema,
+  CorrelationRevisionSchema,
+  FindingModelViewSchema,
   FindingInspectInputSchema,
   FindingRevealInputSchema,
   ModelSafeTextSchema,
+  SafeCorrelationViewSchema,
   type DiskObservation,
   type AuditProgressPhase,
   type FindingModelView,
+  type KeyedUserExclusion,
+  type KeyedUserExclusionIdentity,
   type StorageSummary,
-  type UserExclusion,
   type UserExclusionIdentity,
 } from "@codex-mac-cleaner/contracts";
 import {
@@ -52,6 +56,7 @@ import {
 import {
   PROTECTED_SCOPE_REGISTRY,
   evaluatePolicy,
+  matchKeyedUserExclusions,
   type FindingCategory,
   type PathValidationResult,
   type PolicyDecision,
@@ -70,16 +75,20 @@ import {
   type RevalidationResult,
 } from "@codex-mac-cleaner/quarantine";
 import {
-  ExclusionStateStore,
+  deriveKeyedUserExclusion,
+  KeyedExclusionStateStore,
   InstallationKeyStore,
   JsonStore,
   type InstallationKey,
+  type KeyedExclusionMetadata,
+  type RawUserExclusionIdentity,
+  type RuntimeSchema,
 } from "@codex-mac-cleaner/storage";
 
 import type { AuditToolService } from "./server.js";
 import type { QuarantineToolService } from "./tools/quarantine.js";
 
-const DASHBOARD_RESOURCE_URI = "ui://codex-mac-cleaner/dashboard-v3.html" as const;
+const DASHBOARD_RESOURCE_URI = "ui://codex-mac-cleaner/dashboard-v4.html" as const;
 const DASHBOARD_PAGE_SIZE = 100;
 const DASHBOARD_PAGE_MAX_BYTES = 512 * 1024;
 
@@ -91,11 +100,13 @@ const TERMINAL_STATES = new Set([
 ]);
 const MAX_GIT_SCAN_DEPTH = 128;
 const MAX_GIT_SCAN_ENTRIES = 100_000;
-const MAX_EMPTY_ARTIFACT_ENTRIES = 4_096;
+const MAX_REGENERABLE_ARTIFACT_ENTRIES = 4_096;
 const DEFAULT_CANDIDATE_CONCURRENCY = 8;
 const DEFAULT_COMMAND_TIMEOUT_MS = 30_000;
-const EMPTY_CACHE_LOG_RULE_ID = "EMPTY_CACHE_LOG_ARTIFACT_V1" as const;
-const EMPTY_CACHE_LOG_RULE_VERSION = 1 as const;
+const CACHE_LOG_REGENERABILITY_RULE_ID =
+  "BOUNDED_CACHE_LOG_REGENERABILITY_V2" as const;
+const CACHE_LOG_REGENERABILITY_RULE_VERSION = 2 as const;
+const LATEST_AUDIT_STATE_PATH = "audits/latest.json";
 
 type RuntimeProtectedScopeKind = ProtectedScopeKind;
 
@@ -151,11 +162,11 @@ const PROTECTED_SCOPE_NAME_PATTERNS: Readonly<
   system_scope:
     /(?:^|[._ -])(?:system|launchagent|launchdaemon|autostart)(?:$|[._ -])/iu,
   credential_store:
-    /(?:^|[._ -])(?:credential|keychain|password|secret|token|wallet|private[_-]?key|authorization)(?:$|[._ -])/iu,
+    /(?:^|[._ -])(?:credentials?|keychains?|passwords?|secrets?|tokens?|wallets?|private[_-]?keys?|authori[sz]ations?|auth|oauth|sessions?|cookies?|logins?)(?:$|[._ -])/iu,
   browser_profile:
-    /(?:^|[._ -])(?:safari|chrome|firefox|browser)(?:$|[._ -])/iu,
+    /(?:^|[._ -])(?:safari|chrome|firefox|browsers?|bookmarks?|history|profiles?)(?:$|[._ -])/iu,
   personal_data:
-    /(?:^|[._ -])(?:personal|mail|message|photo|contact|calendar|database)(?:$|[._ -])/iu,
+    /(?:^|[._ -])(?:personal|mails?|messages?|photos?|contacts?|calendars?|databases?|db|sqlite3?|documents?|save(?:d|s)?|savegames?|sync|vpn|web[._ -]+data|local[._ -]+state|settings?|preferences?|configs?|configuration)(?:$|[._ -])/iu,
 });
 
 function isWithinBoundary(boundary: string, path: string): boolean {
@@ -331,18 +342,18 @@ interface RuntimeCorrelationProfileProof {
 
 export interface RuntimeRegenerabilityProof {
   readonly schemaVersion: 1;
-  readonly ruleId: typeof EMPTY_CACHE_LOG_RULE_ID;
-  readonly ruleVersion: typeof EMPTY_CACHE_LOG_RULE_VERSION;
+  readonly ruleId: typeof CACHE_LOG_REGENERABILITY_RULE_ID;
+  readonly ruleVersion: typeof CACHE_LOG_REGENERABILITY_RULE_VERSION;
   readonly targetFingerprint: string;
   readonly correlationRevisionId: string;
 }
 
 interface RuntimeRegenerabilityProbe {
   readonly schemaVersion: 1;
-  readonly ruleId: typeof EMPTY_CACHE_LOG_RULE_ID;
-  readonly ruleVersion: typeof EMPTY_CACHE_LOG_RULE_VERSION;
+  readonly ruleId: typeof CACHE_LOG_REGENERABILITY_RULE_ID;
+  readonly ruleVersion: typeof CACHE_LOG_REGENERABILITY_RULE_VERSION;
   readonly complete: boolean;
-  readonly empty: boolean;
+  readonly regenerable: boolean;
   readonly targetFingerprint: string;
 }
 
@@ -368,8 +379,8 @@ export function deriveRuntimeDataKind(input: Readonly<{
   const proofIsCurrent =
     proof !== null &&
     proof.schemaVersion === 1 &&
-    proof.ruleId === EMPTY_CACHE_LOG_RULE_ID &&
-    proof.ruleVersion === EMPTY_CACHE_LOG_RULE_VERSION &&
+    proof.ruleId === CACHE_LOG_REGENERABILITY_RULE_ID &&
+    proof.ruleVersion === CACHE_LOG_REGENERABILITY_RULE_VERSION &&
     proof.targetFingerprint === input.targetFingerprint &&
     proof.correlationRevisionId === correlation?.correlationRevisionId;
   return profileIsComplete && proofIsCurrent ? "known" : "unknown";
@@ -379,7 +390,7 @@ function createRuntimeRegenerabilityProof(
   probe: RuntimeRegenerabilityProbe,
   correlation: CorrelationResolverResult | null,
 ): RuntimeRegenerabilityProof | null {
-  if (!probe.complete || !probe.empty || correlation === null) return null;
+  if (!probe.complete || !probe.regenerable || correlation === null) return null;
   return Object.freeze({
     schemaVersion: 1,
     ruleId: probe.ruleId,
@@ -574,15 +585,15 @@ class RuntimeFileSystemFacade implements FileSystemFacade {
   ): RuntimeRegenerabilityProbe {
     return Object.freeze({
       schemaVersion: 1,
-      ruleId: EMPTY_CACHE_LOG_RULE_ID,
-      ruleVersion: EMPTY_CACHE_LOG_RULE_VERSION,
+      ruleId: CACHE_LOG_REGENERABILITY_RULE_ID,
+      ruleVersion: CACHE_LOG_REGENERABILITY_RULE_VERSION,
       complete: false,
-      empty: false,
+      regenerable: false,
       targetFingerprint: fingerprintDigest(fingerprint),
     });
   }
 
-  private async probeEmptyCacheLogArtifact(input: Readonly<{
+  private async probeCacheLogArtifact(input: Readonly<{
     path: string;
     allowedRoot: string;
     root: LibraryRoot;
@@ -609,35 +620,51 @@ class RuntimeFileSystemFacade implements FileSystemFacade {
       if (fingerprintDigest(before) !== fingerprintDigest(input.fingerprint)) {
         return incomplete;
       }
-      let empty = false;
+      let regenerable = false;
       if (before.fileType === "file") {
-        empty = before.size === 0 && before.linkCount === 1;
+        regenerable =
+          before.linkCount === 1 &&
+          (input.root === "Caches" || before.size === 0);
       } else if (before.fileType === "directory") {
-        const entries = await readdir(input.path, { withFileTypes: true });
-        if (entries.length > MAX_EMPTY_ARTIFACT_ENTRIES) return incomplete;
-        for (const entry of entries) {
-          input.signal?.throwIfAborted();
-          if (
-            entry.name === "" ||
-            entry.name === "." ||
-            entry.name === ".." ||
-            entry.name.includes(sep) ||
-            entry.name.includes("\0")
-          ) {
-            return incomplete;
-          }
-          const childPath = join(input.path, entry.name);
-          if (!this.isWithinBoundary(input.path, childPath)) return incomplete;
-          const child = await lstat(childPath, { bigint: true });
-          if (
-            child.isSymbolicLink() ||
-            child.dev.toString() !== before.device ||
-            (this.expectedUid >= 0 && Number(child.uid) !== this.expectedUid)
-          ) {
-            return incomplete;
+        const pending = [input.path];
+        let entryCount = 0;
+        while (pending.length > 0) {
+          const directory = pending.pop()!;
+          const entries = await readdir(directory, { withFileTypes: true });
+          entryCount += entries.length;
+          if (entryCount > MAX_REGENERABLE_ARTIFACT_ENTRIES) return incomplete;
+          for (const entry of entries) {
+            input.signal?.throwIfAborted();
+            if (
+              entry.name === "" ||
+              entry.name === "." ||
+              entry.name === ".." ||
+              entry.name.includes(sep) ||
+              entry.name.includes("\0") ||
+              Object.values(PROTECTED_SCOPE_NAME_PATTERNS).some((pattern) =>
+                pattern?.test(entry.name),
+              )
+            ) {
+              return incomplete;
+            }
+            const childPath = join(directory, entry.name);
+            if (!this.isWithinBoundary(input.path, childPath)) return incomplete;
+            const child = await lstat(childPath, { bigint: true });
+            if (
+              child.isSymbolicLink() ||
+              child.dev.toString() !== before.device ||
+              (this.expectedUid >= 0 && Number(child.uid) !== this.expectedUid)
+            ) {
+              return incomplete;
+            }
+            if (child.isDirectory()) {
+              pending.push(childPath);
+            } else if (!child.isFile() || child.nlink !== 1n) {
+              return incomplete;
+            }
           }
         }
-        empty = entries.length === 0;
+        regenerable = input.root === "Caches" || entryCount === 0;
       } else {
         return incomplete;
       }
@@ -645,10 +672,10 @@ class RuntimeFileSystemFacade implements FileSystemFacade {
       if (fingerprintDigest(after) !== fingerprintDigest(before)) return incomplete;
       return Object.freeze({
         schemaVersion: 1,
-        ruleId: EMPTY_CACHE_LOG_RULE_ID,
-        ruleVersion: EMPTY_CACHE_LOG_RULE_VERSION,
+        ruleId: CACHE_LOG_REGENERABILITY_RULE_ID,
+        ruleVersion: CACHE_LOG_REGENERABILITY_RULE_VERSION,
         complete: true,
-        empty,
+        regenerable,
         targetFingerprint: fingerprintDigest(after),
       });
     } catch {
@@ -699,7 +726,7 @@ class RuntimeFileSystemFacade implements FileSystemFacade {
       current.fileType === "unknown" ||
       current.device !== root.device ||
       (this.expectedUid >= 0 && current.uid !== this.expectedUid);
-    const regenerabilityProbe = await this.probeEmptyCacheLogArtifact({
+    const regenerabilityProbe = await this.probeCacheLogArtifact({
       path: candidate.path,
       allowedRoot: candidate.allowedRoot,
       root: candidate.root,
@@ -720,7 +747,7 @@ class RuntimeFileSystemFacade implements FileSystemFacade {
       structuralChecksComplete: !structurallyProtected && pathValidation.ok,
       gitTraversalComplete: !gitProtection.blocked,
       contentSemanticChecksComplete:
-        regenerabilityProbe.complete && regenerabilityProbe.empty,
+        regenerabilityProbe.complete && regenerabilityProbe.regenerable,
     });
     return {
       ...candidate,
@@ -802,7 +829,7 @@ class RuntimeFileSystemFacade implements FileSystemFacade {
           },
         ],
       });
-      const regenerabilityProbe = await this.probeEmptyCacheLogArtifact({
+      const regenerabilityProbe = await this.probeCacheLogArtifact({
         path,
         allowedRoot,
         root,
@@ -824,7 +851,7 @@ class RuntimeFileSystemFacade implements FileSystemFacade {
         structuralChecksComplete: !structurallyProtected && pathValidation.ok,
         gitTraversalComplete: !gitProtection.blocked,
         contentSemanticChecksComplete:
-          regenerabilityProbe.complete && regenerabilityProbe.empty,
+          regenerabilityProbe.complete && regenerabilityProbe.regenerable,
       });
       const excludeFromCandidates =
         structurallyProtected ||
@@ -1089,19 +1116,22 @@ class RuntimeFileSystemFacade implements FileSystemFacade {
   }
 }
 
-function sameIdentity(
-  exclusion: UserExclusion,
+function rawExclusionIdentity(
   identity: UserExclusionIdentity,
-): boolean {
-  return (
-    exclusion.ruleId === identity.ruleId &&
-    exclusion.artifactKind === identity.artifactKind &&
-    exclusion.normalizedTargetIdentity === identity.normalizedTargetIdentity &&
-    (exclusion.bundleId ?? null) === (identity.bundleId ?? null) &&
-    (exclusion.packageId ?? null) === (identity.packageId ?? null) &&
-    (exclusion.signingIdentity ?? null) === (identity.signingIdentity ?? null) &&
-    exclusion.ownerTypeFingerprint === identity.ownerTypeFingerprint
-  );
+): RawUserExclusionIdentity {
+  return {
+    targetIdentity: identity.normalizedTargetIdentity,
+    ownerTypeFingerprint: identity.ownerTypeFingerprint,
+    ...(identity.bundleId == null
+      ? {}
+      : { bundleIdentifier: identity.bundleId }),
+    ...(identity.packageId == null
+      ? {}
+      : { packageIdentifier: identity.packageId }),
+    ...(identity.signingIdentity == null
+      ? {}
+      : { signingRequirement: identity.signingIdentity }),
+  };
 }
 
 interface FindingRecord {
@@ -1111,12 +1141,17 @@ interface FindingRecord {
   readonly evidence: EvidenceSet;
   readonly classification: Classification;
   readonly policy: PolicyDecision;
-  readonly correlation: CorrelationResolverResult | null;
+  readonly correlation: RuntimeCorrelationRecord | null;
   readonly regenerabilityProof: RuntimeRegenerabilityProof | null;
   readonly candidate: RuntimeCandidate | null;
   readonly identity: UserExclusionIdentity | null;
   readonly diagnostic: RuntimeDiagnostic | null;
 }
+
+type RuntimeCorrelationRecord = Pick<
+  CorrelationResolverResult,
+  "candidateSubjectId" | "revision" | "safeView"
+>;
 
 interface AuditRunRecord {
   readonly auditId: string;
@@ -1146,6 +1181,260 @@ interface AuditRunRecord {
   };
   findings: FindingRecord[];
   excludedCount: number;
+  persistence: Promise<void> | null;
+}
+
+type PersistedCandidate = Pick<
+  RuntimeCandidate,
+  | "ref"
+  | "path"
+  | "allowedRoot"
+  | "root"
+  | "kind"
+  | "fingerprint"
+  | "parentFingerprint"
+>;
+
+interface PersistedFinding {
+  readonly model: FindingModelView;
+  readonly componentDisplayName: string;
+  readonly observation: Observation;
+  readonly evidence: EvidenceSet;
+  readonly classification: Classification;
+  readonly policy: PolicyDecision;
+  readonly correlation: RuntimeCorrelationRecord | null;
+  readonly regenerabilityProof: RuntimeRegenerabilityProof | null;
+  readonly candidate: PersistedCandidate | null;
+  readonly diagnostic: RuntimeDiagnostic | null;
+}
+
+type PersistedAuditRun = Omit<
+  AuditRunRecord,
+  "controller" | "persistence" | "findings"
+> & {
+  readonly findings: readonly PersistedFinding[];
+};
+
+interface PersistedAuditEnvelope {
+  readonly schemaVersion: 1;
+  readonly keyId: string;
+  readonly derivationVersion: number;
+  readonly payload: PersistedAuditRun;
+  readonly integrity: string;
+}
+
+const UnknownRuntimeSchema: RuntimeSchema<unknown> = {
+  parse: (value) => value,
+};
+
+function plainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function hasExactKeys(
+  value: Record<string, unknown>,
+  keys: readonly string[],
+): boolean {
+  return Object.keys(value).sort().join("\u0000") ===
+    [...keys].sort().join("\u0000");
+}
+
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(stableJson).join(",")}]`;
+  }
+  if (plainRecord(value)) {
+    return `{${Object.entries(value)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, entry]) => `${JSON.stringify(key)}:${stableJson(entry)}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "null";
+}
+
+function persistedCandidate(value: unknown): value is PersistedCandidate {
+  return (
+    plainRecord(value) &&
+    hasExactKeys(value, [
+      "ref",
+      "path",
+      "allowedRoot",
+      "root",
+      "kind",
+      "fingerprint",
+      "parentFingerprint",
+    ]) &&
+    typeof value.ref === "string" &&
+    typeof value.path === "string" &&
+    typeof value.allowedRoot === "string" &&
+    typeof value.root === "string" &&
+    typeof value.kind === "string" &&
+    plainRecord(value.fingerprint) &&
+    plainRecord(value.parentFingerprint)
+  );
+}
+
+function persistedCorrelation(
+  value: unknown,
+): value is RuntimeCorrelationRecord {
+  return (
+    plainRecord(value) &&
+    hasExactKeys(value, ["candidateSubjectId", "revision", "safeView"]) &&
+    typeof value.candidateSubjectId === "string" &&
+    CorrelationRevisionSchema.safeParse(value.revision).success &&
+    SafeCorrelationViewSchema.safeParse(value.safeView).success
+  );
+}
+
+function persistedFinding(value: unknown): value is PersistedFinding {
+  if (
+    !plainRecord(value) ||
+    !hasExactKeys(value, [
+      "model",
+      "componentDisplayName",
+      "observation",
+      "evidence",
+      "classification",
+      "policy",
+      "correlation",
+      "regenerabilityProof",
+      "candidate",
+      "diagnostic",
+    ])
+  ) {
+    return false;
+  }
+  if (!FindingModelViewSchema.safeParse(value.model).success) return false;
+  if (!ModelSafeTextSchema.safeParse(value.componentDisplayName).success) {
+    return false;
+  }
+  if (
+    !plainRecord(value.observation) ||
+    !plainRecord(value.evidence) ||
+    !plainRecord(value.classification) ||
+    !plainRecord(value.policy)
+  ) {
+    return false;
+  }
+  if (
+    value.correlation !== null &&
+    !persistedCorrelation(value.correlation)
+  ) {
+    return false;
+  }
+  if (
+    value.candidate !== null &&
+    !persistedCandidate(value.candidate)
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function identityForFinding(input: Readonly<{
+  classification: Classification;
+  candidate: Pick<RuntimeCandidate, "kind" | "fingerprint">;
+  targetIdentity: string;
+}>): UserExclusionIdentity {
+  return {
+    ruleId:
+      input.classification.ruleIds[0] ??
+      "CLASSIFIER_V2_UNKNOWN_INCOMPLETE_EVIDENCE",
+    artifactKind: input.candidate.kind,
+    normalizedTargetIdentity: `target:v1:${sha256(input.targetIdentity)}`,
+    bundleId: null,
+    packageId: null,
+    signingIdentity: null,
+    ownerTypeFingerprint: `owner-type:v1:${sha256(
+      `${input.candidate.fingerprint.uid}:${input.candidate.fingerprint.fileType}`,
+    )}`,
+  };
+}
+
+function hydratePersistedFinding(
+  finding: PersistedFinding,
+): FindingRecord {
+  const candidate: RuntimeCandidate | null =
+    finding.candidate === null
+      ? null
+      : {
+          ...finding.candidate,
+          protected: true,
+          protectedScopeEvaluation: { complete: false, kinds: [] },
+          regenerabilityProbe: {
+            schemaVersion: 1,
+            ruleId: CACHE_LOG_REGENERABILITY_RULE_ID,
+            ruleVersion: CACHE_LOG_REGENERABILITY_RULE_VERSION,
+            complete: false,
+            regenerable: false,
+            targetFingerprint: fingerprintDigest(
+              finding.candidate.fingerprint,
+            ),
+          },
+          pathValidation: {
+            ok: false,
+            errorCode: "PATH_ANCESTRY_INCOMPLETE",
+          },
+        };
+  return {
+    ...finding,
+    candidate,
+    identity:
+      candidate === null
+        ? null
+        : identityForFinding({
+            classification: finding.classification,
+            candidate,
+            targetIdentity:
+              finding.correlation?.candidateSubjectId ??
+              finding.evidence.targetIdentity,
+          }),
+  };
+}
+
+function parsePersistedAuditPayload(value: unknown): PersistedAuditRun {
+  if (!plainRecord(value)) throw new TypeError("Invalid persisted audit");
+  const state = value.state;
+  if (
+    (state !== "completed" && state !== "completed_with_warnings") ||
+    typeof value.auditId !== "string" ||
+    typeof value.requestId !== "string" ||
+    !Number.isSafeInteger(value.stateVersion) ||
+    !Number.isSafeInteger(value.revision) ||
+    (value.revision as number) < 1 ||
+    typeof value.progressPhase !== "string" ||
+    !Number.isSafeInteger(value.completedSteps) ||
+    !Number.isSafeInteger(value.totalSteps) ||
+    !Number.isSafeInteger(value.processedCandidates) ||
+    !Number.isSafeInteger(value.totalCandidates) ||
+    !Array.isArray(value.coverageWarningCodes) ||
+    !value.coverageWarningCodes.every((code) => typeof code === "string") ||
+    !plainRecord(value.coverage) ||
+    !Number.isSafeInteger(value.coverage.checkedSourceCount) ||
+    !Number.isSafeInteger(value.coverage.skippedSourceCount) ||
+    !Array.isArray(value.coverage.warnings) ||
+    !value.coverage.warnings.every((warning) => typeof warning === "string") ||
+    !Array.isArray(value.findings) ||
+    !value.findings.every(persistedFinding) ||
+    !Number.isSafeInteger(value.excludedCount)
+  ) {
+    throw new TypeError("Invalid persisted audit");
+  }
+  return value as unknown as PersistedAuditRun;
+}
+
+function parsePersistedAuditEnvelope(value: unknown): PersistedAuditEnvelope {
+  if (
+    !plainRecord(value) ||
+    value.schemaVersion !== 1 ||
+    typeof value.keyId !== "string" ||
+    !Number.isSafeInteger(value.derivationVersion) ||
+    typeof value.integrity !== "string" ||
+    !plainRecord(value.payload)
+  ) {
+    throw new TypeError("Invalid persisted audit envelope");
+  }
+  return value as unknown as PersistedAuditEnvelope;
 }
 
 export type PaginationChannel = "model" | "dashboard";
@@ -1321,45 +1610,55 @@ export class BoundedCursorPager {
 export interface RuntimeExclusionStore {
   list(): Promise<{
     readonly stateVersion: number;
-    readonly exclusions: readonly UserExclusion[];
+    readonly exclusions: readonly KeyedUserExclusion[];
   }>;
-  create(exclusion: UserExclusion): Promise<{
+  create(
+    metadata: KeyedExclusionMetadata,
+    identity: UserExclusionIdentity,
+  ): Promise<{
     readonly stateVersion: number;
-    readonly exclusions: readonly UserExclusion[];
+    readonly exclusions: readonly KeyedUserExclusion[];
   }>;
   remove(exclusionId: string): Promise<{
     readonly stateVersion: number;
-    readonly exclusions: readonly UserExclusion[];
+    readonly exclusions: readonly KeyedUserExclusion[];
   }>;
-  reset(expectedStateVersion: number): ReturnType<ExclusionStateStore["reset"]>;
+  reset(expectedStateVersion: number): ReturnType<KeyedExclusionStateStore["reset"]>;
   readForAudit(): Promise<
-    | Readonly<{ status: "ready"; exclusions: readonly UserExclusion[] }>
+    | Readonly<{
+        status: "ready";
+        stateVersion: number;
+        exclusions: readonly KeyedUserExclusion[];
+      }>
     | Readonly<{
         status: "invalid";
-        errorCode: "EXCLUSION_STATE_INVALID";
+        errorCode: string;
         tokenIssuance: "blocked";
       }>
   >;
+  deriveIdentity(identity: UserExclusionIdentity): KeyedUserExclusionIdentity;
 }
 
 class PersistentRuntimeExclusionStore implements RuntimeExclusionStore {
-  private readonly store: ExclusionStateStore;
+  private readonly store: KeyedExclusionStateStore;
 
-  constructor(stateRoot: string) {
-    this.store = new ExclusionStateStore({ stateRoot });
+  constructor(
+    stateRoot: string,
+    private readonly installationKey: InstallationKey | null,
+  ) {
+    this.store = new KeyedExclusionStateStore({ stateRoot });
   }
 
   async list() {
     return this.store.list();
   }
 
-  async create(exclusion: UserExclusion) {
-    return this.store.create({
-      ...exclusion,
-      bundleId: exclusion.bundleId ?? null,
-      packageId: exclusion.packageId ?? null,
-      signingIdentity: exclusion.signingIdentity ?? null,
-    });
+  async create(
+    metadata: KeyedExclusionMetadata,
+    identity: UserExclusionIdentity,
+  ) {
+    await this.store.createFromIdentity(metadata, rawExclusionIdentity(identity));
+    return this.store.list();
   }
 
   async remove(exclusionId: string) {
@@ -1371,7 +1670,39 @@ class PersistentRuntimeExclusionStore implements RuntimeExclusionStore {
   }
 
   async readForAudit() {
+    if (this.installationKey === null) {
+      return {
+        status: "invalid" as const,
+        errorCode: "CORRELATION_SCHEMA_UNSUPPORTED",
+        tokenIssuance: "blocked" as const,
+      };
+    }
     return this.store.readForAudit();
+  }
+
+  deriveIdentity(identity: UserExclusionIdentity): KeyedUserExclusionIdentity {
+    if (this.installationKey === null) {
+      throw new Error("EXCLUSION_STATE_INVALID");
+    }
+    const exclusion = deriveKeyedUserExclusion(
+      this.installationKey,
+      {
+        exclusionId: "exclusion-identity-probe",
+        ruleId: identity.ruleId,
+        artifactKind: identity.artifactKind,
+        createdAt: "1970-01-01T00:00:00.000Z",
+        reasonCategory: "other",
+      },
+      rawExclusionIdentity(identity),
+    );
+    return {
+      ruleId: exclusion.ruleId,
+      artifactKind: exclusion.artifactKind,
+      keyId: exclusion.keyId,
+      derivationVersion: exclusion.derivationVersion,
+      subjectDigest: exclusion.subjectDigest,
+      claimDigests: exclusion.claimDigests,
+    };
   }
 }
 
@@ -1415,6 +1746,8 @@ class AuditRuntimeService implements AuditToolService {
   private readonly auditIdByRequest = new Map<string, string>();
   private readonly pager: BoundedCursorPager;
   private latestAuditId: string | null = null;
+  private latestCompletedAuditId: string | null = null;
+  private executionQueue: Promise<void> = Promise.resolve();
 
   constructor(
     private readonly filesystem: RuntimeFileSystemFacade,
@@ -1431,6 +1764,129 @@ class AuditRuntimeService implements AuditToolService {
     private readonly createId: (prefix: string) => string,
   ) {
     this.pager = new BoundedCursorPager(() => this.createId("cursor"));
+  }
+
+  private persistedPayload(run: AuditRunRecord): PersistedAuditRun {
+    const {
+      controller: _controller,
+      persistence: _persistence,
+      findings,
+      ...payload
+    } = run;
+    return JSON.parse(
+      JSON.stringify({
+        ...payload,
+        findings: findings.map((finding): PersistedFinding => ({
+          model: finding.model,
+          componentDisplayName: finding.componentDisplayName,
+          observation: finding.observation,
+          evidence: finding.evidence,
+          classification: finding.classification,
+          policy: finding.policy,
+          correlation:
+            finding.correlation === null
+              ? null
+              : {
+                  candidateSubjectId:
+                    finding.correlation.candidateSubjectId,
+                  revision: finding.correlation.revision,
+                  safeView: finding.correlation.safeView,
+                },
+          regenerabilityProof: finding.regenerabilityProof,
+          candidate:
+            finding.candidate === null
+              ? null
+              : {
+                  ref: finding.candidate.ref,
+                  path: finding.candidate.path,
+                  allowedRoot: finding.candidate.allowedRoot,
+                  root: finding.candidate.root,
+                  kind: finding.candidate.kind,
+                  fingerprint: finding.candidate.fingerprint,
+                  parentFingerprint:
+                    finding.candidate.parentFingerprint,
+                },
+          diagnostic: finding.diagnostic,
+        })),
+      }),
+    ) as PersistedAuditRun;
+  }
+
+  private async persistLatest(run: AuditRunRecord): Promise<void> {
+    const payload = this.persistedPayload(run);
+    const envelope: PersistedAuditEnvelope = {
+      schemaVersion: 1,
+      keyId: this.installationKey.keyId,
+      derivationVersion: this.installationKey.derivationVersion,
+      payload,
+      integrity: this.installationKey.derive(
+        "cmc:audit-snapshot:integrity:v1",
+        "payload",
+        stableJson(payload),
+      ),
+    };
+    await new JsonStore(this.stateRoot).writeJsonAtomic(
+      LATEST_AUDIT_STATE_PATH,
+      envelope,
+    );
+  }
+
+  async restoreLatest(): Promise<boolean> {
+    try {
+      const raw = await new JsonStore(this.stateRoot).readJson(
+        LATEST_AUDIT_STATE_PATH,
+        UnknownRuntimeSchema,
+      );
+      const envelope = parsePersistedAuditEnvelope(raw);
+      if (
+        envelope.keyId !== this.installationKey.keyId ||
+        envelope.derivationVersion !== this.installationKey.derivationVersion
+      ) {
+        return false;
+      }
+      const expected = this.installationKey.derive(
+        "cmc:audit-snapshot:integrity:v1",
+        "payload",
+        stableJson(envelope.payload),
+      );
+      const actualBuffer = Buffer.from(envelope.integrity, "utf8");
+      const expectedBuffer = Buffer.from(expected, "utf8");
+      if (
+        actualBuffer.byteLength !== expectedBuffer.byteLength ||
+        !timingSafeEqual(actualBuffer, expectedBuffer)
+      ) {
+        return false;
+      }
+      const payload = parsePersistedAuditPayload(envelope.payload);
+      const allowedRoots = new Set(
+        ALLOWLISTED_LIBRARY_ROOTS.map((root) =>
+          join(this.homeDirectory, "Library", root),
+        ),
+      );
+      for (const finding of payload.findings) {
+        const candidate = finding.candidate;
+        if (
+          candidate !== null &&
+          (!allowedRoots.has(candidate.allowedRoot) ||
+            dirname(candidate.path) !== candidate.allowedRoot)
+        ) {
+          return false;
+        }
+      }
+      const run: AuditRunRecord = {
+        ...payload,
+        findings: payload.findings.map(hydratePersistedFinding),
+        controller: new AbortController(),
+        persistence: null,
+      };
+      this.runs.set(run.auditId, run);
+      this.auditIdByRequest.set(run.requestId, run.auditId);
+      this.latestAuditId = run.auditId;
+      this.latestCompletedAuditId = run.auditId;
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   private runFor(auditId: string): AuditRunRecord {
@@ -1451,9 +1907,18 @@ class AuditRuntimeService implements AuditToolService {
   }
 
   private dashboardRun(
-    auditId: string,
+    auditId: string | null,
     revision: number | null,
   ): AuditRunRecord {
+    if (auditId === null) {
+      if (revision !== null || this.latestCompletedAuditId === null) {
+        throw new Error("AUDIT_STALE");
+      }
+      return this.completedRun(
+        this.latestCompletedAuditId,
+        this.runFor(this.latestCompletedAuditId).revision ?? -1,
+      );
+    }
     return revision === null
       ? this.runFor(auditId)
       : this.completedRun(auditId, revision);
@@ -1563,19 +2028,28 @@ class AuditRuntimeService implements AuditToolService {
 
   private async exclusionSnapshot(): Promise<{
     readonly invalid: boolean;
-    readonly exclusions: readonly UserExclusion[];
+    readonly exclusions: readonly KeyedUserExclusion[];
     readonly stateVersion: number;
   }> {
     const state = await this.exclusions.readForAudit();
     if (state.status === "invalid") {
       return { invalid: true, exclusions: [], stateVersion: 0 };
     }
-    const listed = await this.exclusions.list();
     return {
       invalid: false,
-      exclusions: listed.exclusions,
-      stateVersion: listed.stateVersion,
+      exclusions: state.exclusions,
+      stateVersion: state.stateVersion,
     };
+  }
+
+  private exclusionMatch(
+    exclusions: readonly KeyedUserExclusion[],
+    identity: UserExclusionIdentity,
+  ) {
+    return matchKeyedUserExclusions(
+      exclusions,
+      this.exclusions.deriveIdentity(identity),
+    );
   }
 
   private correlationAdapter(
@@ -1647,7 +2121,7 @@ class AuditRuntimeService implements AuditToolService {
     auditId: string,
     exclusionState: Readonly<{
       invalid: boolean;
-      exclusions: readonly UserExclusion[];
+      exclusions: readonly KeyedUserExclusion[];
     }>,
   ): FindingRecord {
     const category = categoryFor(candidate.root);
@@ -1681,22 +2155,21 @@ class AuditRuntimeService implements AuditToolService {
     const classification = classifyEvidence(evidence);
     const currentFingerprint = candidate.fingerprint;
     const findingId = this.findingId(auditId, observation.targetRef);
-    const identity: UserExclusionIdentity = {
-      ruleId: classification.ruleIds[0] ?? "CLASSIFIER_V2_UNKNOWN_INCOMPLETE_EVIDENCE",
-      artifactKind: candidate.kind,
-      normalizedTargetIdentity: `target:v1:${sha256(
+    const identity = identityForFinding({
+      classification,
+      candidate,
+      targetIdentity:
         correlation?.candidateSubjectId ?? evidence.targetIdentity,
-      )}`,
-      bundleId: null,
-      packageId: null,
-      signingIdentity: null,
-      ownerTypeFingerprint: `owner-type:v1:${sha256(
-        `${candidate.fingerprint.uid}:${candidate.fingerprint.fileType}`,
-      )}`,
-    };
-    const matchedExclusion = exclusionState.exclusions.find((exclusion) =>
-      sameIdentity(exclusion, identity),
-    );
+    });
+    const exclusionMatch = exclusionState.invalid
+      ? { status: "invalid" as const }
+      : this.exclusionMatch(exclusionState.exclusions, identity);
+    const matchedExclusion =
+      exclusionMatch.status === "matched"
+        ? exclusionState.exclusions.find(
+            (exclusion) => exclusion.exclusionId === exclusionMatch.exclusionId,
+          )
+        : undefined;
     const policy = enforceProtectedScopeCompleteness(
       evaluatePolicy({
         classification,
@@ -1847,6 +2320,12 @@ class AuditRuntimeService implements AuditToolService {
   }
 
   private async execute(run: AuditRunRecord): Promise<void> {
+    if (run.controller.signal.aborted) {
+      run.state = "cancelled";
+      run.progressPhase = "cancelled";
+      run.stateVersion += 1;
+      return;
+    }
     run.state = "running";
     run.progressPhase = "discovering_candidates";
     run.stateVersion += 1;
@@ -1954,10 +2433,12 @@ class AuditRuntimeService implements AuditToolService {
             exclusionState,
           );
           const excluded =
+            !exclusionState.invalid &&
             finding.identity !== null &&
-            exclusionState.exclusions.some((exclusion) =>
-              sameIdentity(exclusion, finding.identity!),
-            );
+            this.exclusionMatch(
+              exclusionState.exclusions,
+              finding.identity,
+            ).status === "matched";
           recordCandidateProgress();
           return { finding, excluded, warningCodes } as const;
         },
@@ -2001,6 +2482,27 @@ class AuditRuntimeService implements AuditToolService {
       }
     } finally {
       run.stateVersion += 1;
+      if (
+        run.state === "completed" ||
+        run.state === "completed_with_warnings"
+      ) {
+        this.latestCompletedAuditId = run.auditId;
+        run.persistence = this.persistLatest(run).catch(() => {
+          run.state = "completed_with_warnings";
+          run.coverageWarningCodes = [
+            ...new Set([...run.coverageWarningCodes, "INTERNAL_ERROR"]),
+          ];
+          run.coverage = {
+            ...run.coverage,
+            warnings: [
+              ...run.coverage.warnings,
+              "Последний результат не удалось сохранить для следующей задачи.",
+            ],
+          };
+          run.stateVersion += 1;
+        });
+        await run.persistence;
+      }
     }
   }
 
@@ -2029,17 +2531,24 @@ class AuditRuntimeService implements AuditToolService {
       coverage: { checkedSourceCount: 0, skippedSourceCount: 0, warnings: [] },
       findings: [],
       excludedCount: 0,
+      persistence: null,
     };
     this.runs.set(auditId, run);
     this.auditIdByRequest.set(input.requestId, auditId);
     this.latestAuditId = auditId;
-    queueMicrotask(() => void this.execute(run));
+    queueMicrotask(() => {
+      const execution = this.executionQueue.then(() => this.execute(run));
+      this.executionQueue = execution.catch(() => undefined);
+    });
     return { auditId, state: "queued" as const, stateVersion: 0 };
   }
 
   async status(rawInput: unknown) {
     const input = AuditStatusInputSchema.parse(rawInput);
     const run = this.runFor(input.auditId);
+    if (run.persistence !== null) {
+      await run.persistence;
+    }
     return {
       auditId: run.auditId,
       state: run.state,
@@ -2068,14 +2577,18 @@ class AuditRuntimeService implements AuditToolService {
   }
 
   private async safeSnapshot(run: AuditRunRecord) {
-    const exclusionState = await this.exclusions.list();
-    const storageSummary = await this.storageSummary();
+    const exclusionState = await this.exclusionSnapshot();
+    const storageSummary = await this.storageSummaryForRun(run);
     const diskObservation = await observeDisk(this.stateRoot);
     return {
       storageSummary,
       diskObservation,
       excludedCount: run.excludedCount,
-      stateVersion: Math.max(run.stateVersion, storageSummary.stateVersion, exclusionState.stateVersion),
+      stateVersion: Math.max(
+        run.stateVersion,
+        storageSummary.stateVersion,
+        exclusionState.stateVersion,
+      ),
     };
   }
 
@@ -2147,13 +2660,15 @@ class AuditRuntimeService implements AuditToolService {
   async dashboard(rawInput: unknown) {
     const input = DashboardOpenInputSchema.parse(rawInput);
     const run = this.dashboardRun(input.auditId, input.revision);
+    const resolvedRevision =
+      input.auditId === null ? run.revision : input.revision;
     const actionable =
-      input.revision !== null &&
+      resolvedRevision !== null &&
       run.revision !== null &&
       (run.state === "completed" || run.state === "completed_with_warnings");
     const results = actionable
       ? await this.results({
-          auditId: input.auditId,
+          auditId: run.auditId,
           revision: run.revision,
           cursor: null,
           filters: {},
@@ -2280,8 +2795,9 @@ class AuditRuntimeService implements AuditToolService {
     }
   }
 
-  async storageSummary(): Promise<StorageSummary> {
-    const run = this.latestAuditId === null ? undefined : this.runs.get(this.latestAuditId);
+  private async storageSummaryForRun(
+    run: AuditRunRecord | undefined,
+  ): Promise<StorageSummary> {
     const candidateLogicalBytes = run?.findings.reduce(
       (total, finding) =>
         total + (finding.candidate === null ? 0 : finding.model.logicalSize),
@@ -2303,6 +2819,25 @@ class AuditRuntimeService implements AuditToolService {
       },
     });
     return controller.readStorageSummary();
+  }
+
+  async storageSummary(): Promise<StorageSummary> {
+    const selectedAuditId =
+      this.latestCompletedAuditId ?? this.latestAuditId;
+    const run =
+      selectedAuditId === null
+        ? undefined
+        : this.runs.get(selectedAuditId);
+    return this.storageSummaryForRun(run);
+  }
+
+  async storageSummaryForAudit(
+    auditId: string,
+    auditRevision: number,
+  ): Promise<StorageSummary> {
+    return this.storageSummaryForRun(
+      this.completedRun(auditId, auditRevision),
+    );
   }
 
   moveSubject(findingId: string, revision: number): MoveSubject {
@@ -2397,17 +2932,11 @@ class AuditRuntimeService implements AuditToolService {
               protectedScopeKinds: currentPath.protectedScopeEvaluation.kinds,
               exclusionMatch: exclusionState.invalid
                 ? { status: "invalid", errorCode: "EXCLUSION_STATE_INVALID" }
-                : currentFinding.identity !== null &&
-                    exclusionState.exclusions.some((exclusion) =>
-                      sameIdentity(exclusion, currentFinding.identity!),
+                : currentFinding.identity !== null
+                  ? this.exclusionMatch(
+                      exclusionState.exclusions,
+                      currentFinding.identity,
                     )
-                  ? {
-                      status: "matched",
-                      exclusionId:
-                        exclusionState.exclusions.find((exclusion) =>
-                          sameIdentity(exclusion, currentFinding.identity!),
-                        )!.exclusionId,
-                    }
                   : { status: "none" },
               officialUninstallerApplicable:
                 currentCorrelation?.safeView.facts.officialUninstaller.state ===
@@ -2851,8 +3380,13 @@ export async function createRuntimeCore(
   );
   await new JsonStore(requestedStateRoot).ensureDirectory(".");
   const stateRoot = await realpath(requestedStateRoot);
+  const exclusionStateRoot = join(stateRoot, "exclusions");
+  const exclusionInstallationKey = await new InstallationKeyStore({
+    stateRoot: exclusionStateRoot,
+  }).loadOrCreate().catch(() => null);
   const exclusionStore = new PersistentRuntimeExclusionStore(
-    join(stateRoot, "exclusions"),
+    exclusionStateRoot,
+    exclusionInstallationKey,
   );
   const installationKey = await new InstallationKeyStore({ stateRoot })
     .loadOrCreate();
@@ -2897,6 +3431,7 @@ export async function createRuntimeCore(
     options.now ?? (() => new Date()),
     options.createId ?? ((prefix) => `${prefix}-${randomUUID()}`),
   );
+  await auditService.restoreLatest();
   return {
     auditService,
     exclusionStore,
@@ -2904,8 +3439,19 @@ export async function createRuntimeCore(
       const manifests = new ManifestRepository(stateRoot);
       const controller = new QuarantineController({
         storeRoot: stateRoot,
-        candidateStorage: async () => {
-          const summary = await auditService.storageSummary();
+        candidateStorage: async (binding) => {
+          let summary: StorageSummary;
+          try {
+            summary =
+              binding === undefined
+                ? await auditService.storageSummary()
+                : await auditService.storageSummaryForAudit(
+                    binding.auditId,
+                    binding.auditRevision,
+                  );
+          } catch {
+            summary = await auditService.storageSummary();
+          }
           return {
             candidateLogicalBytes: summary.candidateLogicalBytes,
             candidatePhysicalBytes: summary.candidatePhysicalBytes,

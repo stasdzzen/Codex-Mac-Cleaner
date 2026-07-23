@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArchiveIcon, ArchiveRestoreIcon, LoaderCircleIcon } from "lucide-react";
+import { ArchiveRestoreIcon, LoaderCircleIcon, Trash2Icon } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -17,7 +17,10 @@ import {
 import { Button } from "@/components/ui/button";
 import type { WidgetBridge } from "@/lib/bridge";
 import { createRequestId } from "@/lib/bridge";
-import type { DashboardFinding } from "@/lib/dashboard-types";
+import type {
+  DashboardFinding,
+  DashboardSnapshot,
+} from "@/lib/dashboard-types";
 import { riskLabel } from "@/lib/presentation";
 import { formatBytes } from "@/lib/utils";
 
@@ -25,13 +28,32 @@ interface MovePreview {
   readonly previewToken: string;
 }
 
+export interface MoveResult {
+  readonly quarantineEntry: {
+    readonly quarantineEntryId: string;
+    readonly displayName: string;
+    readonly physicalBytes: number;
+    readonly movedAt: string;
+    readonly state: "moved";
+  };
+  readonly storageSummary: DashboardSnapshot["storageSummary"];
+  readonly diskObservation: DashboardSnapshot["diskObservation"];
+  readonly stateVersion: number;
+}
+
 interface ActionDialogProps {
   readonly finding: DashboardFinding;
   readonly auditRevision: number;
   readonly bridge: WidgetBridge;
+  readonly onMoved: (findingId: string, result: MoveResult) => void;
 }
 
-export function ActionDialog({ finding, auditRevision, bridge }: ActionDialogProps) {
+export function ActionDialog({
+  finding,
+  auditRevision,
+  bridge,
+  onMoved,
+}: ActionDialogProps) {
   const [previewToken, setPreviewToken] = useState<string | null>(null);
   const [preparing, setPreparing] = useState(false);
   const [open, setOpen] = useState(false);
@@ -57,15 +79,24 @@ export function ActionDialog({ finding, auditRevision, bridge }: ActionDialogPro
     if (previewToken === null) {
       return;
     }
+    setPreparing(true);
+    setPreviewToken(null);
     try {
-      await bridge.callTool("quarantine_move", {
-        previewToken,
-        operationId: createRequestId("move"),
-      });
+      const result = await bridge.callTool<MoveResult>(
+        "quarantine_move",
+        {
+          previewToken,
+          operationId: createRequestId("move"),
+        },
+      );
+      onMoved(finding.findingId, result);
       toast.success("Объект перемещён в карантин.");
       setOpen(false);
     } catch {
       toast.error("Объект изменился после проверки. Запустите проверку ещё раз.");
+      setOpen(false);
+    } finally {
+      setPreparing(false);
     }
   }
 
@@ -84,26 +115,28 @@ export function ActionDialog({ finding, auditRevision, bridge }: ActionDialogPro
         render={
           <Button
             variant="destructive"
+            aria-label={`Удалить: ${finding.displayName}`}
             onClick={() => {
               void prepareMove();
             }}
           />
         }
       >
-        <ArchiveIcon data-icon="inline-start" />
-        В карантин
+        <Trash2Icon data-icon="inline-start" />
+        Удалить
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogMedia>
             <ArchiveRestoreIcon aria-hidden="true" />
           </AlertDialogMedia>
-          <AlertDialogTitle>Переместить «{finding.displayName}» в карантин?</AlertDialogTitle>
+          <AlertDialogTitle>Удалить «{finding.displayName}»?</AlertDialogTitle>
           <AlertDialogDescription
             render={<div className="flex flex-col gap-2" />}
           >
               <p>
-                Будет перемещён в карантин ровно один объект. Это не прямое удаление исходника.
+                Ровно один объект будет безопасно перемещён в карантин, а не удалён
+                напрямую.
               </p>
               <p>
                 Занимает на диске примерно {formatBytes(finding.reclaimEstimate.estimatedPhysicalBytes)}.
@@ -122,7 +155,7 @@ export function ActionDialog({ finding, auditRevision, bridge }: ActionDialogPro
             }}
           >
             {preparing && <LoaderCircleIcon data-icon="inline-start" className="animate-spin" />}
-            Переместить один объект
+            Переместить в карантин
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

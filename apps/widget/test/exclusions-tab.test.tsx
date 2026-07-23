@@ -58,7 +58,11 @@ describe("вкладка Оставленные", () => {
     const { unmount } = render(
       <AuditDashboard snapshot={dashboardFixture} bridge={state.bridge} />,
     );
-    fireEvent.click(screen.getByRole("tab", { name: "Найдено" }));
+    const cacheRow = screen.getByText("Кеши приложений").closest("tr");
+    expect(cacheRow).not.toBeNull();
+    fireEvent.click(
+      within(cacheRow!).getByRole("button", { name: "Показать объекты" }),
+    );
     fireEvent.click(screen.getByRole("button", { name: "Оставить: Synthetic Cache" }));
 
     await waitFor(() =>

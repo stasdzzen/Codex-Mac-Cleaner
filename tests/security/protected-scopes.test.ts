@@ -81,8 +81,8 @@ describe("CMC-10: candidate-specific regenerability proof", () => {
   };
   const proof: RuntimeRegenerabilityProof = {
     schemaVersion: 1,
-    ruleId: "EMPTY_CACHE_LOG_ARTIFACT_V1",
-    ruleVersion: 1,
+    ruleId: "BOUNDED_CACHE_LOG_REGENERABILITY_V2",
+    ruleVersion: 2,
     targetFingerprint,
     correlationRevisionId,
   };
