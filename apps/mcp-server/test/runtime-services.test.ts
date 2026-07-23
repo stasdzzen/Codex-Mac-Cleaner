@@ -308,7 +308,7 @@ describe("production runtime services", () => {
       auditId: started.auditId,
       revision: null,
       state: expect.stringMatching(/^(?:queued|running)$/u),
-      resourceUri: "ui://codex-mac-cleaner/dashboard-v2.html",
+      resourceUri: "ui://codex-mac-cleaner/dashboard-v3.html",
       findings: [],
     });
     expect(live?.meta).toMatchObject({
@@ -694,6 +694,165 @@ describe("production runtime services", () => {
     }).meta.dashboard.findings.map(({ componentDisplayName }) => componentDisplayName);
     expect(widgetNames).toEqual(discoveredNames);
     expect(JSON.stringify(dashboard)).not.toContain(canonicalCacheRoot);
+  });
+
+  it("проводит 101 finding через реальные MCP handlers с независимыми model и Dashboard cursor", async () => {
+    const root = await mkdtemp(join(tmpdir(), "cmc-runtime-integrated-pagination-"));
+    roots.push(root);
+    const homeDirectory = join(root, "home");
+    const cacheRoot = join(homeDirectory, "Library", "Caches");
+    await Promise.all(
+      Array.from({ length: 101 }, (_, index) =>
+        mkdir(
+          join(
+            cacheRoot,
+            `Pagination Candidate ${index.toString().padStart(3, "0")}`,
+          ),
+          { recursive: true },
+        ),
+      ),
+    );
+    const commands = createCommandRunner(async (_executable, _argv, { signal }) => {
+      signal.throwIfAborted();
+      return { stdout: "", stderr: "", exitCode: 0 };
+    });
+    const filesystem: MacOSCorrelationReadOnlyFileSystem = {
+      async canonicalize(path, signal) {
+        signal.throwIfAborted();
+        return path;
+      },
+      async stat(path, signal) {
+        signal.throwIfAborted();
+        return {
+          device: "device-integrated-pagination",
+          inode: inode(path),
+          fileType: "directory",
+          uid: process.getuid?.() ?? 501,
+          gid: process.getgid?.() ?? 20,
+          size: 0,
+          modifiedAtMs: 1,
+        };
+      },
+      async readDirectory() {
+        return [];
+      },
+    };
+    let nextId = 0;
+    const services = await createDefaultRuntimeServices({
+      homeDirectory,
+      stateRoot: join(root, "state"),
+      correlation: { commands, filesystem },
+      createId: (prefix) => `${prefix}-integrated-${++nextId}`,
+    });
+    const started = (await services.auditService?.start({
+      requestId: "integrated-pagination-request",
+      profile: "application_remnants",
+    })) as { auditId: string };
+
+    let state = "queued";
+    for (let attempt = 0; attempt < 500; attempt += 1) {
+      state = ((await services.auditService?.status({ auditId: started.auditId })) as {
+        state: string;
+      }).state;
+      if (state === "completed" || state === "completed_with_warnings") break;
+      if (state === "failed" || state === "cancelled") break;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    expect(state).toMatch(/^completed(?:_with_warnings)?$/u);
+
+    const server = createMcpServer(platform, services);
+    const client = new Client({
+      name: "integrated-pagination",
+      version: "1.0.0",
+    });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    try {
+      const modelFirst = await client.callTool({
+        name: "audit_results",
+        arguments: {
+          auditId: started.auditId,
+          revision: 1,
+          cursor: null,
+          filters: {},
+        },
+      });
+      expect(modelFirst.isError).not.toBe(true);
+      const modelPage = modelFirst.structuredContent as {
+        findings: unknown[];
+        nextCursor: string | null;
+      };
+      expect(modelPage.findings).toHaveLength(100);
+      expect(modelPage.nextCursor).toEqual(expect.any(String));
+      expect(
+        Buffer.byteLength(JSON.stringify(modelPage.findings), "utf8"),
+      ).toBeLessThanOrEqual(512 * 1024);
+
+      const dashboardFirst = await client.callTool({
+        name: "dashboard_open",
+        arguments: { auditId: started.auditId, revision: 1 },
+      });
+      expect(dashboardFirst.isError).not.toBe(true);
+      const dashboardMeta = dashboardFirst._meta?.["dashboard"] as {
+        findingSummary: { matchingCount: number };
+        findings: Array<{ findingId: string }>;
+        nextCursor: string | null;
+      };
+      expect(dashboardMeta.findingSummary.matchingCount).toBe(101);
+      expect(dashboardMeta.findings).toHaveLength(100);
+      expect(dashboardMeta.nextCursor).toEqual(expect.any(String));
+      expect(dashboardMeta.nextCursor).not.toBe(modelPage.nextCursor);
+      expect(
+        Buffer.byteLength(JSON.stringify(dashboardMeta.findings), "utf8"),
+      ).toBeLessThanOrEqual(512 * 1024);
+
+      const dashboardSecond = await client.callTool({
+        name: "dashboard_page",
+        arguments: {
+          auditId: started.auditId,
+          revision: 1,
+          cursor: dashboardMeta.nextCursor,
+          filters: {},
+        },
+      });
+      expect(dashboardSecond.isError).not.toBe(true);
+      const dashboardSecondPage = dashboardSecond.structuredContent as {
+        findings: Array<{ findingId: string }>;
+        nextCursor: string | null;
+      };
+      expect(dashboardSecondPage.findings).toHaveLength(1);
+      expect(dashboardSecondPage.nextCursor).toBeNull();
+      expect(
+        new Set(
+          [...dashboardMeta.findings, ...dashboardSecondPage.findings].map(
+            ({ findingId }) => findingId,
+          ),
+        ).size,
+      ).toBe(101);
+      expect(
+        Buffer.byteLength(JSON.stringify(dashboardSecondPage.findings), "utf8"),
+      ).toBeLessThanOrEqual(512 * 1024);
+
+      const crossChannel = await client.callTool({
+        name: "dashboard_page",
+        arguments: {
+          auditId: started.auditId,
+          revision: 1,
+          cursor: modelPage.nextCursor,
+          filters: {},
+        },
+      });
+      expect(crossChannel.isError).toBe(true);
+      expect(crossChannel._meta?.["codexMacCleaner/toolError"]).toMatchObject({
+        errorCode: "AUDIT_STALE",
+        severity: "blocking",
+        scope: "audit",
+        retryable: false,
+      });
+    } finally {
+      await client.close();
+      await server.close();
+    }
   });
 
   it("укладывает наблюдаемую Real-Mac стоимость 2 766 candidates в прежние пять минут", () => {

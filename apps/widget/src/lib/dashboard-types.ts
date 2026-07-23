@@ -39,6 +39,16 @@ export interface QuarantineEntry {
   readonly state: "moved";
 }
 
+export interface FindingSummary {
+  readonly totalCount: number;
+  readonly matchingCount: number;
+  readonly supportLevelCounts: {
+    readonly candidate: number;
+    readonly analysisOnly: number;
+    readonly unsupportedManual: number;
+  };
+}
+
 export interface DashboardSnapshot {
   readonly auditId: string;
   readonly revision: number | null;
@@ -67,6 +77,8 @@ export interface DashboardSnapshot {
   readonly storageSummary: StorageSummary;
   readonly diskObservation: DiskObservation;
   readonly excludedCount: number;
+  readonly findingSummary: FindingSummary;
   readonly findings: readonly DashboardFinding[];
+  readonly nextCursor: string | null;
   readonly quarantineEntries: readonly QuarantineEntry[];
 }

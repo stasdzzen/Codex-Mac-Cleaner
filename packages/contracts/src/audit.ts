@@ -194,6 +194,15 @@ export const DashboardOpenInputSchema = z
   })
   .strict();
 
+export const DashboardPageInputSchema = z
+  .object({
+    auditId: OpaqueIdSchema,
+    revision: SafeIntegerSchema.min(1),
+    cursor: OpaqueIdSchema,
+    filters: AuditResultsFilterSchema,
+  })
+  .strict();
+
 export const FindingInspectInputSchema = z
   .object({ findingId: OpaqueIdSchema, auditRevision: SafeIntegerSchema.min(1) })
   .strict();

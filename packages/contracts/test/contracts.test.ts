@@ -129,7 +129,7 @@ describe("контракты аудита", () => {
         revision: null,
         state: "running",
         stateVersion: 1,
-        resourceUri: "ui://codex-mac-cleaner/dashboard-v2.html",
+        resourceUri: "ui://codex-mac-cleaner/dashboard-v3.html",
         storageSummary: {
           candidateLogicalBytes: 0,
           candidatePhysicalBytes: 0,
@@ -144,7 +144,17 @@ describe("контракты аудита", () => {
           source: "statfs",
         },
         excludedCount: 0,
+        findingSummary: {
+          totalCount: 0,
+          matchingCount: 0,
+          supportLevelCounts: {
+            candidate: 0,
+            analysisOnly: 0,
+            unsupportedManual: 0,
+          },
+        },
         findings: [],
+        nextCursor: null,
       }).revision,
     ).toBeNull();
   });

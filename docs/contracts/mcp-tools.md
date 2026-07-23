@@ -5,7 +5,7 @@ description: Имена, видимость, влияние и данные tool
 tags: [contracts, mcp, tools, ui]
 status: approved
 owner: Architect
-date: 2026-07-21
+date: 2026-07-23
 ---
 
 # Архитектурный тип
@@ -32,6 +32,7 @@ date: 2026-07-21
 
 | Tool | Назначение | Destructive |
 |---|---|---|
+| `dashboard_page` | Получить следующую bounded widget-safe страницу после нажатия пользователя | Нет |
 | `quarantine_prepare_move` | Подготовить preview token для одной находки | Нет |
 | `quarantine_move` | Переместить одну находку в карантин | Да, хотя действие обратимо |
 | `quarantine_list` | Получить записи и `StorageSummary` | Нет |
@@ -62,6 +63,7 @@ date: 2026-07-21
 | `finding_reveal` | `false` | `false` | `true` |
 | `schedule_intent_get` | `true` | `false` | `true` |
 | `schedule_intent_complete` | `false` | `false` | `true` |
+| `dashboard_page` | `true` | `false` | `true` |
 | `quarantine_prepare_move` | `false` | `false` | `true` |
 | `quarantine_move` | `false` | `true` | `true` |
 | `quarantine_list` | `true` | `false` | `true` |
@@ -90,6 +92,8 @@ date: 2026-07-21
 * `audit_cancel` не принимает profile, path, revision или mutation-параметры.
 * `dashboard_open.revision=null` запрашивает текущий live snapshot. Integer revision допустима только для завершённой immutable revision.
 * `audit_status.revision` равна `null` до успешного terminal state. Только `completed` и `completed_with_warnings` возвращают точную integer revision для последующих `audit_results` и `dashboard_open`; клиент не угадывает её и не запускает повторный аудит автоматически.
+* `audit_results.cursor` и `dashboard_page.cursor` — разные server-owned opaque handles. Они привязаны к `auditId`, точной revision, каналу, нормализованным filters и offset; подмена либо потеря процесса возвращает `AUDIT_STALE`.
+* `dashboard_page` не принимает path, destination, identity или mutation-параметры и вызывается только App после нажатия «Показать ещё».
 * Preview token хранится server-side и привязан к действию, UI session, finding/quarantine entry, immutable audit/correlation revision, candidate/parent fingerprints, edge/coverage digests, policy/derivation versions, exclusion state и сроку пять минут.
 * App получает только opaque action handle без identity или token material. Token одноразовый. Повтор с тем же `operationId` возвращает прежний результат.
 * Любой неизвестный input field отклоняется schema validation.
@@ -99,6 +103,8 @@ date: 2026-07-21
 * `structuredContent` содержит краткие model-visible данные и `stateVersion`.
 * Если tools не видны немедленно, Skill один раз использует штатный host tool discovery по точным именам. Потерянный in-memory audit run возвращает безопасную ошибку `AUDIT_STALE`; сервер не сохраняет raw audit report, а Skill не обходит host через terminal/direct stdio и не начинает новый аудит без явного запроса пользователя.
 * Live `dashboard_open` возвращает `revision=null`, пустые findings/actions и server-owned progress; он не создаёт action authority.
+* `audit_results`, model-visible часть `dashboard_open` и widget-safe страницы содержат не более 100 findings и не более 512 КиБ сериализованного массива. Полная immutable revision не обрезается.
+* `dashboard_open` создаёт независимые первые страницы для модели и Widget. `findingSummary` содержит total, matching и server-owned counts по уровням поддержки; UI отдельно показывает число уже загруженных объектов.
 * `content` содержит короткое русскоязычное объяснение без полного пути.
 * `_meta` содержит widget-only `SafeCorrelationView`, presentation state и server-owned actions. Полные пути, raw/digested identity claims, inventory, correlation edges, coverage certificates и token material отсутствуют.
 * `audit_results`, `dashboard_open` и `quarantine_list` возвращают серверную `StorageSummary`; UI не пересчитывает её.
@@ -118,7 +124,7 @@ date: 2026-07-21
 
 # UI resource
 
-Текущий URI — `ui://codex-mac-cleaner/dashboard-v2.html`. Он вводит live progress и nullable pre-result revision. Breaking change HTML, JS или CSS снова повышает версию URI; v1 не переопределяется.
+Текущий URI — `ui://codex-mac-cleaner/dashboard-v3.html`. Он вводит bounded model/widget pagination и server-owned `findingSummary`, сохраняя live progress и nullable pre-result revision. Опубликованные v1 и v2 не переопределяются.
 
 CSP не содержит `connectDomains`, `resourceDomains` или `frameDomains`: bundle автономен и не загружает CDN. `redirectDomains` содержит только `https://github.com` и `https://dzzen.com` для явных footer-переходов через host `openExternal`. Footer не вызывает MCP tool и не передаёт audit payload во внешние URL.
 

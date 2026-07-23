@@ -45,7 +45,18 @@ function dashboardFromMeta(value: unknown): DashboardSnapshot | undefined {
     !isRecord(dashboard.storageSummary) ||
     !isRecord(dashboard.diskObservation) ||
     typeof dashboard.excludedCount !== "number" ||
+    !isRecord(dashboard.findingSummary) ||
+    typeof dashboard.findingSummary.totalCount !== "number" ||
+    typeof dashboard.findingSummary.matchingCount !== "number" ||
+    !isRecord(dashboard.findingSummary.supportLevelCounts) ||
+    typeof dashboard.findingSummary.supportLevelCounts.candidate !== "number" ||
+    typeof dashboard.findingSummary.supportLevelCounts.analysisOnly !== "number" ||
+    typeof dashboard.findingSummary.supportLevelCounts.unsupportedManual !==
+      "number" ||
+    (dashboard.nextCursor !== null &&
+      typeof dashboard.nextCursor !== "string") ||
     !Array.isArray(dashboard.findings) ||
+    dashboard.findings.length > 100 ||
     !dashboard.findings.every(
       (finding) =>
         isRecord(finding) &&
@@ -96,6 +107,12 @@ function mergeSafeResult(
       : {}),
     ...(typeof safe.excludedCount === "number"
       ? { excludedCount: safe.excludedCount }
+      : {}),
+    ...(isRecord(safe.findingSummary)
+      ? {
+          findingSummary:
+            safe.findingSummary as unknown as DashboardSnapshot["findingSummary"],
+        }
       : {}),
     stateVersion: incomingVersion,
   };

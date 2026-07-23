@@ -89,6 +89,7 @@ const modelToolNames = [
 ] as const;
 
 const appToolNames = [
+  "dashboard_page",
   "quarantine_prepare_move",
   "quarantine_move",
   "quarantine_list",
@@ -326,6 +327,19 @@ describe("полная интеграция MCP App", () => {
       }
       expect(jsonSchema).toContain("additionalProperties");
     }
+    const dashboardPageOutput = JSON.stringify(
+      APP_VISIBLE_TOOL_DEFINITIONS.dashboard_page.outputSchema.toJSONSchema(),
+    );
+    for (const forbidden of [
+      "canonicalPath",
+      "sourcePath",
+      "destinationPath",
+      "installedApplications",
+      "rawConfig",
+      "details",
+    ]) {
+      expect(dashboardPageOutput).not.toContain(`\"${forbidden}\"`);
+    }
   });
 
   it("возвращает автономный versioned Dashboard resource без сетевого CSP", async () => {
@@ -484,7 +498,7 @@ describe("полная интеграция MCP App", () => {
 
   it("скомпилированный Dashboard package автономен", async () => {
     const html = await readFile(
-      packagedPath(".codex-plugin", "assets", "dashboard-v2.html"),
+      packagedPath(".codex-plugin", "assets", "dashboard-v3.html"),
       "utf8",
     );
     expect(html).toContain("Очистка MacBook от мусора");

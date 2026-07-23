@@ -5,13 +5,13 @@ description: Последовательности аудита, карантин
 tags: [architecture, flows, audit, quarantine]
 status: approved
 owner: Architect
-date: 2026-07-22
+date: 2026-07-23
 ---
 
 # Аудит
 
 1. `audit_start` принимает новый `requestId` и профиль `application_remnants`.
-2. Skill сразу вызывает `dashboard_open` с `revision=null`; Dashboard v2 показывает безопасный live snapshot без findings/actions и начинает polling `audit_status`.
+2. Skill сразу вызывает `dashboard_open` с `revision=null`; Dashboard v3 показывает безопасный live snapshot без findings/actions и начинает polling `audit_status`.
 3. Capability Scanner создаёт logical `snapshotId`, фиксирует доступные корни, permissions, query scopes и источники.
 4. Protected Scope Registry исключает универсальные system/credential/browser-profile/personal/project/plugin/Codex scopes до создания кандидатов.
 5. Snapshot A фиксирует candidate/parent filesystem identity, source capabilities и начальные fingerprints. Raw paths остаются только в памяти сервера.
@@ -26,7 +26,8 @@ date: 2026-07-22
 14. Classifier формирует метку, уверенность и объяснение по независимым owner, installed, activity, open-file, receipt, dependency, temporal и data-kind evidence.
 15. Policy Engine выбирает server-owned requirement profile и applicability, затем вычисляет `allowedActions`. В v0.1 `prepare_move` возможен только для `private_regenerable_remnant_v1`, category `cache | log`, authoritative owner binding, отсутствующего owner/executable, полного required coverage, receipt `absent | stale`, безопасного regenerable data kind и стабильных Snapshot A/B. Обязательный `unknown`, `unsupported`, ambiguity, mismatch, stale revision, positive counter-evidence, `analysis_only`, `unsupported_manual` и excluded identity не получают mutation actions. `not_applicable` не является `absent`. Применимый официальный uninstaller блокирует manual quarantine.
 16. Local Store сохраняет safe immutable audit/correlation revision, `StorageSummary`, `DiskObservation` и агрегированный coverage/excluded count без raw identity graph, inventory, path или token material.
-17. Модель и Dashboard получают только `SafeCorrelationView`; widget-only `_meta` не содержит raw identities или paths, но может показать очищенное basename одного верхнеуровневого компонента. Model-visible label остаётся generic. После появления integer revision Skill вызывает `audit_results` и повторно открывает Dashboard для immutable результатов.
+17. Модель и Dashboard получают только `SafeCorrelationView`; widget-only `_meta` не содержит raw identities или paths, но может показать очищенное basename одного верхнеуровневого компонента. Model-visible label остаётся generic. После появления integer revision Skill вызывает `audit_results` и повторно открывает Dashboard для immutable результатов. `audit_results` и оба канала `dashboard_open` получают независимые первые страницы максимум по 100 findings и 512 КиБ; full revision остаётся полной в памяти сервера.
+18. `findingSummary` вычисляется по полной revision. Следующую widget-safe страницу App запрашивает через `dashboard_page` только после нажатия «Показать ещё». Cursor связан с audit/revision/channel/normalized filters/offset; forged, cross-channel и stale cursor дают `AUDIT_STALE` без автоматического повтора аудита.
 
 Во время работы сервер публикует фазы `queued → discovering_candidates → collecting_global_evidence → correlating_candidates → finalizing → completed`. Global installed-app/process/open-file/startup/package inventories снимаются один раз для Snapshot A и один раз для Snapshot B в пределах audit adapter; candidate-specific receipts, container metadata и filesystem identity остаются отдельными. Кандидаты обрабатываются с bounded concurrency восемь, но findings сохраняют discovery order. Любой gap сохраняет `unknown` и блокирует mutation.
 

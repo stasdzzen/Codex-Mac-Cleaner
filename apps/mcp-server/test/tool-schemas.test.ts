@@ -147,6 +147,27 @@ describe("model-visible MCP skeleton", () => {
     }
   });
 
+  it("dashboard_page доступен только приложению и ограничен 100 находками", () => {
+    expect(
+      Object.keys(APP_VISIBLE_TOOL_DEFINITIONS),
+    ).toContain("dashboard_page");
+    expect(
+      Object.keys(MODEL_VISIBLE_TOOL_DEFINITIONS),
+    ).not.toContain("dashboard_page");
+    expect(APP_VISIBLE_TOOL_DEFINITIONS.dashboard_page.annotations).toMatchObject({
+      readOnlyHint: true,
+      destructiveHint: false,
+    });
+    expect(APP_VISIBLE_TOOL_DEFINITIONS.dashboard_page._meta).toEqual({
+      ui: { visibility: ["app"] },
+    });
+    const outputJsonSchema =
+      APP_VISIBLE_TOOL_DEFINITIONS.dashboard_page.outputSchema.toJSONSchema() as {
+        properties?: { findings?: { maxItems?: number } };
+      };
+    expect(outputJsonSchema.properties?.findings?.maxItems).toBe(100);
+  });
+
   it("legacy previewToken field описан только как opaque action handle", () => {
     const inputHandle =
       APP_VISIBLE_TOOL_DEFINITIONS.quarantine_move.inputSchema.shape.previewToken;

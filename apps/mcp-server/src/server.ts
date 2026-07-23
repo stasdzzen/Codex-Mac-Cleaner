@@ -9,6 +9,8 @@ import {
   AuditStatusOutputSchema,
   DashboardOpenInputSchema,
   DashboardOpenOutputSchema,
+  DashboardPageInputSchema,
+  DashboardPageOutputSchema,
   ExclusionCreateInputSchema,
   ExclusionCreateOutputSchema,
   ExclusionListInputSchema,
@@ -175,6 +177,21 @@ const AppToolAnnotations = {
 
 const AppOnlyMeta = { ui: { visibility: ["app"] } } as const;
 
+export const APP_VISIBLE_AUDIT_TOOL_DEFINITIONS = {
+  dashboard_page: {
+    title: "Показать ещё результаты",
+    description:
+      "Возвращает следующую ограниченную страницу безопасных данных Dashboard.",
+    inputSchema: DashboardPageInputSchema,
+    outputSchema: DashboardPageOutputSchema,
+    annotations: { ...AppToolAnnotations, readOnlyHint: true },
+    _meta: AppOnlyMeta,
+  },
+} as const satisfies Record<string, AppToolDefinition>;
+
+export type AppVisibleAuditToolName =
+  keyof typeof APP_VISIBLE_AUDIT_TOOL_DEFINITIONS;
+
 export const APP_VISIBLE_EXCLUSION_TOOL_DEFINITIONS = {
   exclusion_create: {
     title: "Оставить объект",
@@ -222,6 +239,7 @@ export type AppVisibleExclusionToolName =
   keyof typeof APP_VISIBLE_EXCLUSION_TOOL_DEFINITIONS;
 
 export const APP_VISIBLE_TOOL_DEFINITIONS = {
+  ...APP_VISIBLE_AUDIT_TOOL_DEFINITIONS,
   ...APP_VISIBLE_QUARANTINE_TOOL_DEFINITIONS,
   ...APP_VISIBLE_EXCLUSION_TOOL_DEFINITIONS,
   ...APP_VISIBLE_SCHEDULE_TOOL_DEFINITIONS,
@@ -611,6 +629,11 @@ function buildAppToolResult(
     string,
     unknown
   >;
+  if (toolName === "dashboard_page") {
+    assertNoUnsafeGuidance(output);
+    assertUnsupportedFindingsAreInspectOnly(output);
+    assertNoPrivateWidgetMetaFields(output);
+  }
   return {
     content: [{ type: "text", text: ModelSafeTextSchema.parse(message) }],
     structuredContent: output,
@@ -780,8 +803,25 @@ export interface AuditToolService {
     readonly output: unknown;
     readonly meta: Readonly<Record<string, unknown>>;
   }>;
+  dashboardPage(input: unknown): Promise<unknown>;
   inspect(input: unknown): Promise<unknown>;
   reveal(input: unknown): Promise<unknown>;
+}
+
+async function callDashboardAppTool(
+  service: AuditToolService,
+  toolName: AppVisibleAuditToolName,
+  rawInput: unknown,
+): Promise<CallToolResult> {
+  try {
+    return buildAppToolResult(
+      toolName,
+      await service.dashboardPage(rawInput),
+      "Следующая страница результатов загружена.",
+    );
+  } catch (error) {
+    return auditServiceError(error);
+  }
 }
 
 async function callAuditModelTool(
@@ -952,7 +992,17 @@ export function createMcpServer(
     const toolName = name as AppVisibleToolName;
     let handler: (input: unknown) => CallToolResult | Promise<CallToolResult> =
       skeletonUnavailableResult;
-    if (toolName in APP_VISIBLE_EXCLUSION_TOOL_DEFINITIONS) {
+    if (toolName in APP_VISIBLE_AUDIT_TOOL_DEFINITIONS) {
+      handler =
+        options.auditService === undefined
+          ? skeletonUnavailableResult
+          : (input: unknown) =>
+              callDashboardAppTool(
+                options.auditService!,
+                toolName as AppVisibleAuditToolName,
+                input,
+              );
+    } else if (toolName in APP_VISIBLE_EXCLUSION_TOOL_DEFINITIONS) {
       handler =
         options.exclusionService === undefined
           ? skeletonUnavailableResult
