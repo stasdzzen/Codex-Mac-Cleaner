@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import {
   copyFile,
   mkdir,
@@ -111,5 +112,32 @@ describe("probe поверхности плагина", () => {
         { cwd: repositoryRoot, timeout: 30_000 },
       ),
     ).rejects.toMatchObject({ code: 1 });
+  });
+
+  it("не раскрывает абсолютный plugin root в stderr", async () => {
+    const missingRoot = join(
+      tmpdir(),
+      `cmc-probe-sensitive-${randomUUID()}`,
+      "plugin root",
+    );
+    try {
+      await execFileAsync(
+        process.execPath,
+        [
+          resolve(repositoryRoot, "scripts/probe-plugin-surface.mjs"),
+          "--plugin-root",
+          missingRoot,
+          "--json",
+        ],
+        { cwd: repositoryRoot, timeout: 30_000 },
+      );
+      expect.unreachable("Probe отсутствующего plugin root обязан завершиться ошибкой");
+    } catch (error) {
+      const failure = error as Error & { code?: number; stderr?: string };
+      expect(failure.code).toBe(1);
+      expect(failure.stderr).toContain("ENOENT");
+      expect(failure.stderr).not.toContain(missingRoot);
+      expect(failure.stderr).not.toMatch(/\/private\/|\/Users\/|\/home\//u);
+    }
   });
 });

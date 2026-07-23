@@ -73,7 +73,8 @@ state, и постраничная загрузка Dashboard остаются a
 3. Probe сравнивает полный tool inventory и visibility metadata с этой матрицей.
 4. Probe читает Dashboard resource и проверяет URI, MIME и CSP.
 5. Plugin-test намеренно подменяет URI во временной копии runtime и доказывает,
-   что drift завершает probe ошибкой.
+   что drift завершает probe ошибкой; отдельная ошибка отсутствующего plugin
+   root не может вывести абсолютный путь в stderr.
 6. Полный audit flow, exact terminal revision, pagination и policy проверяются
    отдельными contract/runtime/widget integration tests.
 

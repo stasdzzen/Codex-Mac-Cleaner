@@ -82,7 +82,9 @@ Probe обязан подтвердить:
 * `ui://codex-mac-cleaner/dashboard-v3.html`;
 * MIME `text/html;profile=mcp-app`;
 * закрытый CSP без connect/resource/frame domains;
-* plugin-relative Node stdio launch без HTTP/terminal fallback.
+* plugin-relative Node stdio launch без HTTP/terminal fallback;
+* typed fail-closed stderr без абсолютного plugin root, синтетического `HOME`
+  или другого локального пути.
 
 Если probe зелёный, а инструменты отсутствуют только в конкретной задаче Codex,
 это граница host registry, а не разрешение на обход. Плагин остаётся fail closed.

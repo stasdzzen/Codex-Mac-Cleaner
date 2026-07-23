@@ -102,7 +102,7 @@ date: 2026-07-23
 * Clean-room установка из repository marketplace работает по опубликованной инструкции.
 * `.codex-plugin/plugin.json`, `.mcp.json` и `SKILL.md` проходят schema и smoke checks.
 * Packaged surface probe на синтетическом `HOME` подтверждает точные 9 model-visible и 15 app-only tools, их visibility metadata, Dashboard v3 URI/MIME/CSP и plugin-relative Node stdio без HTTP/terminal fallback.
-* Capability matrix совпадает с probe; tool/resource/visibility drift даёт ненулевой exit code.
+* Capability matrix совпадает с probe; tool/resource/visibility drift даёт ненулевой exit code, а stderr не раскрывает абсолютные локальные пути.
 * GitHub Release содержит checksum, SBOM и provenance, связанные с tag и commit.
 * Clean-room запуск в новой задаче Codex открывает аудит и Dashboard без копирования команд в терминал.
 * Missing task-scoped tools приводят к одному штатному host discovery и затем к fail-closed остановке; прямой stdio, Terminal, local HTML, ложный claim об открытом Dashboard и автоматический rescan отсутствуют.

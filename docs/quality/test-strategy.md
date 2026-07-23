@@ -60,7 +60,7 @@ Snapshot A/B tests меняют candidate, parent, executable, process/open-file
 
 ## Packaged plugin surface probe
 
-`pnpm probe:plugin-surface` запускает отслеживаемый plugin-relative stdio runtime на временном синтетическом `HOME`, но не вызывает `audit_start`. Probe проверяет точные 9 model-visible и 15 app-only tools, visibility metadata, binding `dashboard_open` к Dashboard v3, MIME и закрытый CSP. HTTP/terminal launch contract, неизвестный tool, ошибочная видимость и resource drift завершают проверку ошибкой.
+`pnpm probe:plugin-surface` запускает отслеживаемый plugin-relative stdio runtime на временном синтетическом `HOME`, но не вызывает `audit_start`. Probe проверяет точные 9 model-visible и 15 app-only tools, visibility metadata, binding `dashboard_open` к Dashboard v3, MIME и закрытый CSP. HTTP/terminal launch contract, неизвестный tool, ошибочная видимость и resource drift завершают проверку ошибкой. Ошибка выводит только безопасный typed code и не содержит абсолютный plugin root, синтетический `HOME` или другой локальный путь.
 
 Plugin-test сравнивает [capability matrix](plugin-capability-matrix.md) с тем же каноническим списком и подменяет Dashboard URI только во временной копии runtime, доказывая отрицательный gate. Зелёный packaged probe не доказывает наличие task-scoped registry в каждом процессе Codex; такой host gap обрабатывается по [runbook](../development/audit-runtime-troubleshooting.md) без обхода.
 

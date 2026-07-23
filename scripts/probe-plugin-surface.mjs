@@ -279,11 +279,23 @@ export async function probePluginSurface(pluginRoot) {
 
 function safeErrorMessage(error) {
   const message = error instanceof Error ? error.message : String(error);
-  return message
-    .replaceAll(repositoryRoot, "<repository>")
-    .replace(/\/Users\/[A-Za-z0-9._-]+(?:\/[^\s:)]*)?/gu, "<local-path>")
-    .replace(/\/home\/[A-Za-z0-9._-]+(?:\/[^\s:)]*)?/gu, "<local-path>")
-    .replace(/[A-Za-z]:\\Users\\[A-Za-z0-9._-]+(?:\\[^\s:)]*)?/gu, "<local-path>");
+  const rawCode =
+    error !== null && typeof error === "object" && "code" in error
+      ? error.code
+      : undefined;
+  const safeCode =
+    typeof rawCode === "number"
+      ? `MCP_ERROR_${rawCode}`
+      : typeof rawCode === "string" && /^[A-Z0-9_-]+$/u.test(rawCode)
+        ? rawCode
+        : undefined;
+  const containsAbsolutePath =
+    message.includes(repositoryRoot) ||
+    /file:\/\/\/|(?:^|[\s("'`,:=])\/(?!\/)|[A-Za-z]:\\/u.test(message);
+
+  if (containsAbsolutePath) return safeCode ?? "PROBE_ERROR";
+  if (safeCode !== undefined && safeCode !== "ERR_ASSERTION") return safeCode;
+  return message;
 }
 
 async function main() {
