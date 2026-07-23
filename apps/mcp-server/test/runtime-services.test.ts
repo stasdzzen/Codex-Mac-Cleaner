@@ -20,7 +20,7 @@ import {
 } from "@codex-mac-cleaner/storage";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   createDefaultRuntimeServices,
@@ -355,24 +355,47 @@ describe("production runtime services", () => {
     });
   });
 
-  it("останавливает зависший аудит по server-owned deadline", async () => {
-    const root = await mkdtemp(join(tmpdir(), "cmc-runtime-audit-timeout-"));
+  it("не прерывает долгий аудит по времени и завершает его после продолжения источника", async () => {
+    const root = await mkdtemp(join(tmpdir(), "cmc-runtime-audit-without-deadline-"));
     roots.push(root);
     const homeDirectory = join(root, "home");
     const candidatePath = join(
       homeDirectory,
       "Library",
       "Caches",
-      "Synthetic Timeout Candidate",
+      "Synthetic Delayed Candidate",
     );
     await mkdir(candidatePath, { recursive: true });
-    const executor: ArgvExecutor = async (_executable, _argv, { signal }) =>
-      new Promise((_resolve, reject) => {
+    let markInspectionStarted: (() => void) | undefined;
+    const inspectionStarted = new Promise<void>((resolve) => {
+      markInspectionStarted = resolve;
+    });
+    let continueInspection: (() => void) | undefined;
+    const inspectionGate = new Promise<void>((resolve) => {
+      continueInspection = resolve;
+    });
+    const executor: ArgvExecutor = async () => ({
+      stdout: "",
+      stderr: "",
+      exitCode: 0,
+    });
+    let inspectionBlocked = false;
+    const waitForInspectionGate = async (signal: AbortSignal) => {
+      markInspectionStarted?.();
+      await new Promise<void>((resolve, reject) => {
         const abort = () =>
           reject(Object.assign(new Error("aborted"), { name: "AbortError" }));
-        if (signal.aborted) abort();
-        else signal.addEventListener("abort", abort, { once: true });
+        if (signal.aborted) {
+          abort();
+          return;
+        }
+        signal.addEventListener("abort", abort, { once: true });
+        void inspectionGate.then(() => {
+          signal.removeEventListener("abort", abort);
+          resolve();
+        });
       });
+    };
     const filesystem: MacOSCorrelationReadOnlyFileSystem = {
       async canonicalize(path) {
         return path;
@@ -388,44 +411,159 @@ describe("production runtime services", () => {
           modifiedAtMs: 1,
         };
       },
-      async readDirectory() {
+      async readDirectory(_path, signal) {
+        if (!inspectionBlocked) {
+          inspectionBlocked = true;
+          await waitForInspectionGate(signal);
+        }
         return [];
       },
     };
-    const services = await createDefaultRuntimeServices({
-      homeDirectory,
-      stateRoot: join(root, "state"),
-      auditTimeoutMs: 25,
-      correlation: {
-        commands: createCommandRunner(executor),
-        filesystem,
-      },
-    });
-    const started = (await services.auditService?.start({
-      requestId: "audit-timeout-request",
-      profile: "application_remnants",
-    })) as { auditId: string };
+    vi.useFakeTimers();
+    try {
+      const services = await createDefaultRuntimeServices({
+        homeDirectory,
+        stateRoot: join(root, "state"),
+        correlation: {
+          commands: createCommandRunner(executor),
+          filesystem,
+        },
+      });
+      const started = (await services.auditService?.start({
+        requestId: "audit-without-deadline-request",
+        profile: "application_remnants",
+      })) as { auditId: string };
 
-    type TimeoutStatus = {
-      state: string;
-      coverageWarningCodes: string[];
-      progress: { phase: string };
-    };
-    let status: TimeoutStatus | null = null;
-    for (let attempt = 0; attempt < 100; attempt += 1) {
-      status = (await services.auditService?.status({
+      type AuditStatus = {
+        state: string;
+        coverageWarningCodes: string[];
+        progress: { phase: string };
+      };
+      await vi.advanceTimersByTimeAsync(0);
+      await inspectionStarted;
+      await vi.advanceTimersByTimeAsync(300_001);
+      let status = (await services.auditService?.status({
         auditId: started.auditId,
-      })) as TimeoutStatus;
-      if (status?.state === "failed") break;
-      await new Promise((resolve) => setTimeout(resolve, 5));
-    }
+      })) as AuditStatus;
+      expect(status).toMatchObject({
+        state: "running",
+      });
+      expect(status.coverageWarningCodes).not.toContain("AUDIT_TIMEOUT");
 
-    expect(status).toMatchObject({
-      state: "failed",
-      coverageWarningCodes: ["AUDIT_TIMEOUT"],
-      progress: { phase: "failed" },
-    });
+      continueInspection?.();
+      for (let attempt = 0; attempt < 400; attempt += 1) {
+        await vi.advanceTimersByTimeAsync(0);
+        status = (await services.auditService?.status({
+          auditId: started.auditId,
+        })) as AuditStatus;
+        if (!["queued", "running"].includes(status.state)) break;
+      }
+
+      expect(status).toMatchObject({
+        state: expect.stringMatching(/^completed(?:_with_warnings)?$/u),
+        progress: { phase: "completed" },
+      });
+      expect(status.coverageWarningCodes).not.toContain("AUDIT_TIMEOUT");
+      const results = await services.auditService?.results({
+        auditId: started.auditId,
+        revision: 1,
+        cursor: null,
+        filters: {},
+      });
+      expect(results).toMatchObject({
+        auditId: started.auditId,
+        revision: 1,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
+
+  it.each([
+    {
+      name: "plutil при проверке автозапуска",
+      executable: "/usr/bin/plutil",
+      processInspection: false,
+    },
+    {
+      name: "ps при проверке процессов",
+      executable: "/bin/ps",
+      processInspection: true,
+    },
+  ])(
+    "ограничивает зависший $name отдельным тайм-аутом и завершает аудит с coverage gap",
+    async ({ executable: stalledExecutable, processInspection }) => {
+      const root = await mkdtemp(join(tmpdir(), "cmc-runtime-command-timeout-"));
+      roots.push(root);
+      const homeDirectory = join(root, "home");
+      const launchAgents = join(homeDirectory, "Library", "LaunchAgents");
+      await mkdir(launchAgents, { recursive: true });
+      if (stalledExecutable === "/usr/bin/plutil") {
+        await writeFile(
+          join(launchAgents, "org.example.stalled.plist"),
+          "<plist version=\"1.0\"></plist>\n",
+          "utf8",
+        );
+      }
+      const executor: ArgvExecutor = async (executable, _argv, { signal }) => {
+        if (executable !== stalledExecutable) {
+          return { stdout: "", stderr: "", exitCode: 0 };
+        }
+        return new Promise((_resolve, reject) => {
+          const abort = () =>
+            reject(Object.assign(new Error("aborted"), { name: "AbortError" }));
+          if (signal.aborted) abort();
+          else signal.addEventListener("abort", abort, { once: true });
+        });
+      };
+      const services = await createDefaultRuntimeServices({
+        homeDirectory,
+        stateRoot: join(root, "state"),
+        correlation: {
+          commands: createCommandRunner(executor),
+          commandTimeoutMs: 25,
+        },
+        diagnostics: {
+          systemLibraryRoot: join(root, "system-library"),
+          enableProcessInspection: processInspection,
+        },
+      });
+      const started = (await services.auditService?.start({
+        requestId: `audit-command-timeout-${processInspection ? "ps" : "plutil"}`,
+        profile: "application_remnants",
+      })) as { auditId: string };
+
+      let status = (await services.auditService?.status({
+        auditId: started.auditId,
+      })) as {
+        state: string;
+        coverageWarningCodes: string[];
+      };
+      for (let attempt = 0; attempt < 200; attempt += 1) {
+        if (!["queued", "running"].includes(status.state)) break;
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        status = (await services.auditService?.status({
+          auditId: started.auditId,
+        })) as typeof status;
+      }
+
+      expect(status).toMatchObject({
+        state: "completed_with_warnings",
+        coverageWarningCodes: expect.arrayContaining(["INTERNAL_ERROR"]),
+      });
+      expect(status.coverageWarningCodes).not.toContain("AUDIT_TIMEOUT");
+      const results = await services.auditService?.results({
+        auditId: started.auditId,
+        revision: 1,
+        cursor: null,
+        filters: {},
+      });
+      expect(results).toMatchObject({
+        revision: 1,
+        findings: [],
+      });
+    },
+  );
 
   it("обрабатывает большой snapshot с production concurrency восемь и сохраняет порядок findings", async () => {
     const root = await mkdtemp(join(tmpdir(), "cmc-runtime-bounded-audit-"));
@@ -494,7 +632,6 @@ describe("production runtime services", () => {
     const services = await createDefaultRuntimeServices({
       homeDirectory,
       stateRoot: join(root, "state"),
-      auditTimeoutMs: 2_000,
       correlation: {
         commands: createCommandRunner(executor),
         filesystem,
@@ -907,7 +1044,6 @@ describe("production runtime services", () => {
     const services = await createDefaultRuntimeServices({
       homeDirectory,
       stateRoot: join(root, "state"),
-      auditTimeoutMs: 2_000,
       candidateConcurrency: 4,
       correlation: {
         commands: createCommandRunner(executor),

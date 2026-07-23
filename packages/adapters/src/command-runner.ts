@@ -25,6 +25,46 @@ export interface CommandRunner {
   ): Promise<CommandOutput>;
 }
 
+export function createCommandTimeoutRunner(
+  commands: CommandRunner,
+  timeoutMs: number,
+): CommandRunner {
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1) {
+    throw Object.assign(new TypeError("COMMAND_TIMEOUT_INVALID"), {
+      code: "EINVAL",
+    });
+  }
+  const runner: CommandRunner = {
+    async run(executable, argv, { signal }) {
+      const controller = new AbortController();
+      let timedOut = false;
+      const abort = (): void => controller.abort();
+      if (signal.aborted) abort();
+      else signal.addEventListener("abort", abort, { once: true });
+      const timer = setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, timeoutMs);
+      try {
+        return await commands.run(executable, argv, {
+          signal: controller.signal,
+        });
+      } catch (error) {
+        if (timedOut) {
+          throw Object.assign(new Error("COMMAND_TIMEOUT"), {
+            code: "ETIMEDOUT",
+          });
+        }
+        throw error;
+      } finally {
+        clearTimeout(timer);
+        signal.removeEventListener("abort", abort);
+      }
+    },
+  };
+  return Object.freeze(runner);
+}
+
 function validateToken(value: string): void {
   if (value.length === 0 || value.includes("\0")) {
     throw Object.assign(new TypeError("INVALID_ARGV_TOKEN"), { code: "EINVAL" });

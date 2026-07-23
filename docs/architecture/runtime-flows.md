@@ -32,7 +32,7 @@ date: 2026-07-22
 
 Отдельный read-only targeted adapter проверяет user LaunchAgents и доступные системные LaunchAgents/LaunchDaemons. Только абсолютный `Program` либо первый `ProgramArguments`, доказанно отсутствующий на диске, создаёт diagnostic: user-объект получает `analysis_only`, системный — `unsupported_manual`, оба только с `inspect`. Неразбираемый plist, относительный target, permission gap и неизвестное состояние не становятся находкой. Для active process такой же diagnostic допустим только при абсолютном executable и точном `ENOENT`: PID/путь остаются server-only, user process получает `analysis_only`, другой OS owner — `unsupported_manual`. Наличие активности или открытого файла остаётся blocking counter-evidence, не классифицируется как мусор и не получает terminate/cleanup action.
 
-Server-owned deadline всего audit run равен пяти минутам. При превышении run получает `failed`, progress phase `failed` и safe warning `AUDIT_TIMEOUT`; findings/actions и actionable revision отсутствуют.
+У всего audit run нет автоматического hard, soft или progress-aware deadline. После discovery сервер обрабатывает каждый найденный кандидат и публикует immutable revision только после полного прохода и финализации. Таймаут отдельной read-only команды macOS создаёт safe coverage gap для соответствующего источника, оставляет факты `unknown` и блокирует затронутые mutation actions, но не отменяет обработку остальных кандидатов. Весь запуск останавливается только по явному `audit_cancel` или реальной внутренней ошибке; ни одно такое завершение не публикует частичную actionable revision.
 
 Состояния аудита: `queued`, `running`, `cancelling`, `cancelled`, `completed`, `completed_with_warnings`, `failed`.
 

@@ -62,6 +62,14 @@ describe("repository marketplace plugin", () => {
     expect(dirname(entrypoint!)).toBe(resolve(repositoryRoot, ".codex-plugin/runtime"));
   });
 
+  it("не содержит общего тайм-аута аудита в packaged runtime", async () => {
+    const runtime = await readFile(
+      resolve(repositoryRoot, ".codex-plugin/runtime/server.js"),
+      "utf8",
+    );
+    expect(runtime).not.toContain("AUDIT_TIMEOUT");
+  });
+
   it("Skill сохраняет no-terminal и app-confirmation flow", async () => {
     const skill = await readFile(
       resolve(repositoryRoot, "skills/codex-mac-cleaner/SKILL.md"),

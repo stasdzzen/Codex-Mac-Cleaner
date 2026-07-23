@@ -9,7 +9,10 @@ import {
   type KeyedOwnerBindingHistoryRecord,
 } from "@codex-mac-cleaner/storage";
 
-import type { CommandRunner } from "./command-runner.js";
+import {
+  createCommandTimeoutRunner,
+  type CommandRunner,
+} from "./command-runner.js";
 import {
   CorrelationInputError,
   type CorrelationArtifactCategory,
@@ -289,31 +292,6 @@ function exitState(exitCode: number): RawQueryState {
   if (exitCode === 77 || exitCode === 126) return "permission_denied";
   if (exitCode === 127) return "capability_missing";
   return "parse_loss";
-}
-
-function withCommandTimeout(commands: CommandRunner, timeoutMs: number): CommandRunner {
-  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1) {
-    throw new CorrelationInputError("CORRELATION_SCHEMA_UNSUPPORTED");
-  }
-  return Object.freeze({
-    async run(executable: string, argv: readonly string[], { signal }: { signal: AbortSignal }) {
-      const controller = new AbortController();
-      let timedOut = false;
-      const abort = (): void => controller.abort();
-      if (signal.aborted) abort();
-      else signal.addEventListener("abort", abort, { once: true });
-      const timer = setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
-      try {
-        return await commands.run(executable, argv, { signal: controller.signal });
-      } catch (error) {
-        if (timedOut) throw Object.assign(new Error("COMMAND_TIMEOUT"), { code: "ETIMEDOUT" });
-        throw error;
-      } finally {
-        clearTimeout(timer);
-        signal.removeEventListener("abort", abort);
-      }
-    },
-  });
 }
 
 async function runCommand(
@@ -1146,11 +1124,14 @@ export function createMacOSProductionCorrelationAdapter(
   input: CreateMacOSProductionCorrelationAdapterInput,
 ): ProductionCorrelationAdapter {
   const commandTimeoutMs = input.commandTimeoutMs ?? 30_000;
+  if (!Number.isSafeInteger(commandTimeoutMs) || commandTimeoutMs < 1) {
+    throw new CorrelationInputError("CORRELATION_SCHEMA_UNSUPPORTED");
+  }
   const history = input.ownerBindingHistory ??
     (input.stateRoot === undefined ? undefined : new KeyedOwnerBindingHistoryStore(input.stateRoot));
   const keyStore = input.stateRoot === undefined ? undefined : new InstallationKeyStore({ stateRoot: input.stateRoot });
   const dependencies = {
-    commands: withCommandTimeout(input.commands, commandTimeoutMs),
+    commands: createCommandTimeoutRunner(input.commands, commandTimeoutMs),
     candidates: input.candidates,
     filesystem: input.filesystem ?? createNodeMacOSCorrelationReadOnlyFileSystem(),
     now: input.now ?? (() => new Date().toISOString()),
