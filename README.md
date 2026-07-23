@@ -5,14 +5,32 @@
 <h1 align="center">Codex Mac Cleaner</h1>
 
 <p align="center">
-  Плагин Codex, который находит остатки удалённых приложений на Mac и помогает
-  безопасно убрать их через карантин.
+  <strong>Очистка вашего Mac от мусора, который могут пропустить даже платные
+  приложения из App Store.</strong>
 </p>
 
-[![Проверки репозитория](https://github.com/stasdzzen/Codex-Mac-Cleaner/actions/workflows/repository.yml/badge.svg?branch=main)](https://github.com/stasdzzen/Codex-Mac-Cleaner/actions/workflows/repository.yml)
-![Платформа](https://img.shields.io/badge/macOS-26%2B-000000?logo=apple&logoColor=white)
-![Архитектура](https://img.shields.io/badge/Apple%20M1%2B-arm64-333333)
-[![Лицензия](https://img.shields.io/badge/license-Apache--2.0-2ea44f)](LICENSE)
+<p align="center">
+  Освободите место на диске прямо в Codex — без отдельного приложения для
+  очистки и ручных команд после запуска.
+</p>
+
+<p align="center">
+  <a href="https://github.com/stasdzzen/Codex-Mac-Cleaner/actions/workflows/repository.yml">
+    <img src="https://github.com/stasdzzen/Codex-Mac-Cleaner/actions/workflows/repository.yml/badge.svg?branch=main" alt="Проверки репозитория">
+  </a>
+  <img src="https://img.shields.io/badge/macOS-26%2B-000000?logo=apple&logoColor=white" alt="macOS 26 или новее">
+  <img src="https://img.shields.io/badge/Apple%20M1%2B-arm64-333333" alt="Mac с Apple M1 или новее">
+  <a href="LICENSE">
+    <img src="https://img.shields.io/badge/license-Apache--2.0-2ea44f" alt="Лицензия Apache 2.0">
+  </a>
+</p>
+
+<p align="center">
+  <a href="#установка">Установка</a> ·
+  <a href="#как-запустить">Как запустить</a> ·
+  <a href="#как-устроена-безопасность">Безопасность</a> ·
+  <a href="docs/index.md">Документация</a>
+</p>
 
 > [!WARNING]
 > `v0.1.0-beta.12` — тестовая версия. Автоматические проверки проходят в
@@ -22,9 +40,12 @@
 
 ## Что делает плагин
 
-Codex Mac Cleaner проверяет личную системную папку `~/Library` («Библиотека»)
-и ищет следы приложений, которых больше нет на Mac. Для каждого объекта он
-показывает:
+После удаления приложения на Mac могут остаться кэши, журналы и другие
+ненужные файлы. Обычная очистка не всегда их показывает. Codex Mac Cleaner
+проверяет личную системную папку `~/Library` («Библиотека»), находит такие
+остатки и объясняет, почему их можно считать мусором.
+
+Для каждого найденного объекта плагин показывает:
 
 - понятное название и предполагаемого владельца;
 - размер файлов и место, которое они занимают на диске;
@@ -142,7 +163,8 @@ node scripts/package-release.mjs --verify-only
 - [архитектурный канон](docs/index.md);
 - [PRD](docs/product/PRD-codex-mac-cleaner.md);
 - [контракт выполнения](docs/development/execution-contract.md);
-- [правила публичного репозитория](docs/development/public-repository-policy.md).
+- [правила публичного репозитория](docs/development/public-repository-policy.md);
+- [источники и благодарности](ACKNOWLEDGEMENTS.md).
 
 ## Участие и поддержка
 

@@ -20,7 +20,7 @@ Bump every public plugin, MCP server and deterministic package version to 0.1.0-
 
 ### Acceptance criteria
 
-Every public version reports 0.1.0-beta.8. The packaged Dashboard uses shadcn Base UI with style base-mira and the accepted OKLCH theme; no Radix UI or Superdesign runtime dependency remains; all user-facing Dashboard, plugin, skill, README and release texts are clear Russian. README explains installation, launch and one-command update without removing the marketplace or installed plugin. Release notes do not claim completed owner Real-Mac smoke.
+Every public version reports 0.1.0-beta.8. The packaged Dashboard uses shadcn Base UI with style base-mira and the accepted OKLCH theme; no previous UI or abandoned design-tool runtime dependency remains; all user-facing Dashboard, plugin, skill, README and release texts are clear Russian. README explains installation, launch and one-command update without removing the marketplace or installed plugin. Release notes do not claim completed owner Real-Mac smoke.
 
 ### Verification
 
@@ -42,7 +42,7 @@ Do not change safety policy, classifier, cleanup categories, mutation semantics,
 
 ### Критерии приёмки
 
-Все публичные версии сообщают 0.1.0-beta.8. Упакованный Dashboard использует shadcn Base UI со стилем base-mira и согласованной OKLCH-темой; runtime-зависимостей от Radix UI и Superdesign нет; все пользовательские тексты Dashboard, плагина, навыков, README и заметок о выпуске написаны понятным русским языком. README объясняет установку, запуск и обновление одной командой без удаления marketplace или установленного плагина. Заметки о выпуске не заявляют о завершённом ручном smoke-тесте владельца на реальном Mac.
+Все публичные версии сообщают 0.1.0-beta.8. Упакованный Dashboard использует shadcn Base UI со стилем base-mira и согласованной OKLCH-темой; runtime-зависимостей от прежней UI-реализации и отменённого дизайн-инструмента нет; все пользовательские тексты Dashboard, плагина, навыков, README и заметок о выпуске написаны понятным русским языком. README объясняет установку, запуск и обновление одной командой без удаления marketplace или установленного плагина. Заметки о выпуске не заявляют о завершённом ручном smoke-тесте владельца на реальном Mac.
 
 ### Проверка
 

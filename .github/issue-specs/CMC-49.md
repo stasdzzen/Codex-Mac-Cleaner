@@ -27,9 +27,9 @@ URI/MIME/CSP boundary and the absence of HTTP/terminal fallback in the plugin
 launch contract. Add a plugin test that executes the probe. Update the test
 strategy and Gate H with the beta.11 regressions.
 
-Use the useful verification patterns found in `nexu-io/codex-slides` without
-adopting its Browser-first local HTTP server, runtime build/install, large
-model-visible tool surface or persisted raw project-state design.
+Use an explicit capability matrix and standalone MCP probe without adopting a
+Browser-first local HTTP server, runtime build/install, large model-visible tool
+surface or persisted raw project-state design.
 
 ### Acceptance criteria
 
@@ -74,10 +74,9 @@ app-only инструментов, metadata видимости, URI/MIME/CSP Das
 который выполняет probe. Дополнить стратегию тестирования и Gate H регрессиями
 beta.11.
 
-Из `nexu-io/codex-slides` использовать только полезные паттерны проверки
-поверхности. Не переносить Browser-first локальный HTTP-сервер, runtime
-build/install, широкую model-visible поверхность или сохранение raw project
-state.
+Использовать явную capability matrix и отдельный MCP probe. Не добавлять
+Browser-first локальный HTTP-сервер, runtime build/install, широкую
+model-visible поверхность или сохранение raw project state.
 
 ### Критерии приёмки
 

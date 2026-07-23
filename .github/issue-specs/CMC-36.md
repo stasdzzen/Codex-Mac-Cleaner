@@ -16,7 +16,15 @@ Restore a useful Real-Mac `application_remnants` audit after beta.6 timed out tw
 
 ### Scope
 
-Fix the production bottleneck evidenced by Codex task `019f8930-713c-70c1-b547-9e1c3c08ea88`: audit `audit-8b2b18e1-de94-47f3-a927-faf36bb6d620` failed at 2,044/2,766 and retry `audit-52f7eacd-d8f3-4445-8a94-21af1e5982c0` failed at 2,016/2,766 with `AUDIT_TIMEOUT`. Replace the disproven concurrency-four production assumption with a measured fixed bound of eight while retaining A/B receipt revalidation, deterministic ordering, cancellation and the five-minute deadline. Render every byte-valued Dashboard metric in decimal MB or GB. Restore useful local-only component presentation and read-only orphaned-autostart diagnostics from the original concept without exposing full paths or app inventory to the model and without enabling system mutation.
+Fix the production bottleneck evidenced by two owner Real-Mac beta.6 runs: the
+first failed at 2,044/2,766 candidates and the retry at 2,016/2,766 with
+`AUDIT_TIMEOUT`. Replace the disproven concurrency-four production assumption
+with a measured fixed bound of eight while retaining A/B receipt revalidation,
+deterministic ordering, cancellation and the five-minute deadline. Render every
+byte-valued Dashboard metric in decimal MB or GB. Restore useful local-only
+component presentation and read-only orphaned-autostart diagnostics from the
+original concept without exposing full paths or app inventory to the model and
+without enabling system mutation.
 
 ### Acceptance criteria
 
@@ -38,7 +46,15 @@ Do not increase/remove the five-minute deadline, truncate candidates, skip Snaps
 
 ### Объём
 
-Исправить production bottleneck, подтверждённый задачей Codex `019f8930-713c-70c1-b547-9e1c3c08ea88`: аудит `audit-8b2b18e1-de94-47f3-a927-faf36bb6d620` завершился `AUDIT_TIMEOUT` на 2 044/2 766, повтор `audit-52f7eacd-d8f3-4445-8a94-21af1e5982c0` — на 2 016/2 766. Заменить опровергнутое production-предположение concurrency четыре на измеренную фиксированную границу восемь, сохранив A/B-проверку receipts, детерминированный порядок, cancellation и пятиминутный deadline. Показывать все byte-метрики Dashboard только в десятичных МБ или ГБ. Вернуть полезное локальное отображение компонентов и read-only диагностику осиротевшего автозапуска из исходной концепции без передачи модели полного пути/app inventory и без системных mutation.
+Исправить production bottleneck, подтверждённый двумя Real-Mac запусками beta.6
+владельца: первый завершился `AUDIT_TIMEOUT` на 2 044/2 766 кандидатов,
+повторный — на 2 016/2 766. Заменить опровергнутое production-предположение
+concurrency четыре на измеренную фиксированную границу восемь, сохранив
+A/B-проверку receipts, детерминированный порядок, cancellation и пятиминутный
+deadline. Показывать все byte-метрики Dashboard только в десятичных МБ или ГБ.
+Вернуть полезное локальное отображение компонентов и read-only диагностику
+осиротевшего автозапуска из исходной концепции без передачи модели полного
+пути/app inventory и без системных mutation.
 
 ### Критерии приёмки
 

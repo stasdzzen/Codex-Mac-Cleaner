@@ -16,7 +16,12 @@ Make large application_remnants audits complete within the existing five-minute 
 
 ### Scope
 
-Fix the production bottleneck evidenced by owner audit audit-83ab409b-a94a-49b8-9d62-0794f1f94115, which timed out after 947 of 2,766 candidates. Reuse the canonical package inventory once per Snapshot A/B phase instead of running pkgutil --pkgs for every candidate, process candidate correlations with fixed bounded concurrency four, preserve deterministic result order and progress, and serialize owner-binding-history updates.
+Fix the production bottleneck evidenced by an owner Real-Mac audit that timed
+out after 947 of 2,766 candidates. Reuse the canonical package inventory once
+per Snapshot A/B phase instead of running pkgutil --pkgs for every candidate,
+process candidate correlations with fixed bounded concurrency four, preserve
+deterministic result order and progress, and serialize owner-binding-history
+updates.
 
 ### Acceptance criteria
 
@@ -38,7 +43,12 @@ Do not increase or remove the server deadline. Do not truncate candidates, conve
 
 ### Объём
 
-Исправить production bottleneck, доказанный аудитом владельца audit-83ab409b-a94a-49b8-9d62-0794f1f94115, который остановился после 947 из 2 766 кандидатов. Переиспользовать канонический package inventory один раз на фазу Snapshot A/B вместо запуска pkgutil --pkgs для каждого кандидата, обрабатывать candidate correlations с фиксированной bounded concurrency четыре, сохранять детерминированный порядок результатов и прогресс, сериализовать обновления owner-binding history.
+Исправить production bottleneck, доказанный Real-Mac аудитом владельца, который
+остановился после 947 из 2 766 кандидатов. Переиспользовать канонический package
+inventory один раз на фазу Snapshot A/B вместо запуска `pkgutil --pkgs` для
+каждого кандидата, обрабатывать candidate correlations с фиксированной bounded
+concurrency четыре, сохранять детерминированный порядок результатов и прогресс,
+сериализовать обновления owner-binding history.
 
 ### Критерии приёмки
 

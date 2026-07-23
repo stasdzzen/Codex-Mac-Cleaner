@@ -16,6 +16,7 @@
 * [Промпты](prompts/) — готовые входы для отдельных Workers.
 * [Разработка](development/) — контракт Issue → task → worktree → PR и [безопасная диагностика запуска аудита](development/audit-runtime-troubleshooting.md).
 * [Передача Product-чату](handoff/) — утверждённый вход для PRD, промптов и GitHub Issues.
+* [Источники и благодарности](../ACKNOWLEDGEMENTS.md) — внешние материалы, повлиявшие на документацию, проверки и интерфейс.
 
 # Статус
 

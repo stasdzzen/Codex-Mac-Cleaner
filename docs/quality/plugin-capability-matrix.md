@@ -78,18 +78,17 @@ state, и постраничная загрузка Dashboard остаются a
 6. Полный audit flow, exact terminal revision, pagination и policy проверяются
    отдельными contract/runtime/widget integration tests.
 
-# Заимствованный паттерн и граница
+# Граница реализации
 
-Идея явной capability matrix и отдельного MCP probe взята из открытого проекта
-[nexu-io/codex-slides](https://github.com/nexu-io/codex-slides). Его
-Browser-first Next.js/HTTP-сервер, runtime `npm install`/build, широкая
-model-visible поверхность и persisted raw project state не являются частью
-Codex Mac Cleaner.
+Capability matrix и отдельный MCP probe принадлежат контуру качества Codex Mac
+Cleaner. Browser-first HTTP-сервер, runtime `npm install`/build, широкая
+model-visible поверхность и persisted raw project state не входят в продукт.
+Исследовательские источники собраны отдельно в
+[благодарностях](../../ACKNOWLEDGEMENTS.md).
 
 # Источники
 
 1. [MCP-tools](../contracts/mcp-tools.md)
 2. [Компоненты](../architecture/components.md)
 3. [Диагностика запуска](../development/audit-runtime-troubleshooting.md)
-4. [Codex Slides capability matrix](https://github.com/nexu-io/codex-slides/blob/dbc2a5992e937760e9ce8e587e11729f970881cb/skills/codex-slides/references/CAPABILITY_MATRIX.md)
-5. [Codex Slides MCP probe](https://github.com/nexu-io/codex-slides/blob/dbc2a5992e937760e9ce8e587e11729f970881cb/scripts/probe-mcp.mjs)
+4. [Источники и благодарности](../../ACKNOWLEDGEMENTS.md)
