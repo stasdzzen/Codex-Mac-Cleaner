@@ -9,12 +9,12 @@
 * [Контракты](contracts/) — доменная модель, server-owned correlation identity, MCP-tools, карантин и ошибки.
 * [Безопасность](safety/) — safety model, threat model и политика путей.
 * [Решения](decisions/) — принятые ADR.
-* [Качество](quality/) — стратегия тестирования и release gates.
+* [Качество](quality/) — стратегия тестирования, release gates и [проверяемая поверхность плагина](quality/plugin-capability-matrix.md).
 * [Продукт](product/) — PRD, roadmap, трассировка требований и release scope.
 * [Спецификации дизайна](superpowers/specs/) — утверждённые на обсуждении дополнения перед изменением канона.
 * [Планы реализации](superpowers/plans/) — пошаговый TDD-план для Issues.
 * [Промпты](prompts/) — готовые входы для отдельных Workers.
-* [Разработка](development/) — контракт Issue → task → worktree → PR.
+* [Разработка](development/) — контракт Issue → task → worktree → PR и [безопасная диагностика запуска аудита](development/audit-runtime-troubleshooting.md).
 * [Передача Product-чату](handoff/) — утверждённый вход для PRD, промптов и GitHub Issues.
 
 # Статус

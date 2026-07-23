@@ -7,6 +7,7 @@
     "node": ">=24.18.0 <25"
   },
   "scripts": {
+    "probe:plugin-surface": "node scripts/probe-plugin-surface.mjs",
     "typecheck": "pnpm -r --if-present typecheck",
     "test": "pnpm -r --if-present test",
     "check": "pnpm typecheck && pnpm test"
