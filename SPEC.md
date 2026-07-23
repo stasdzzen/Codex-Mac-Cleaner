@@ -70,13 +70,17 @@ server-owned выводы, но не классифицирует файлы и 
 
 ## Производительность аудита
 
-- Пятиминутный server-owned deadline остаётся fail-closed границей всего запуска.
+- У всего запуска нет автоматического общего лимита времени: после discovery
+  сервер обрабатывает каждый найденный кандидат и только затем публикует
+  завершённую immutable revision.
 - Глобальные inventories, включая package inventory, снимаются не более одного раза
   для Snapshot A и одного раза для Snapshot B.
 - Candidate-specific evidence повторно проверяется в обеих фазах с фиксированной
   bounded concurrency восемь; порядок итоговых findings остаётся детерминированным.
+- Защитный таймаут отдельной read-only команды macOS превращает недоступный запрос
+  в coverage gap, но не прерывает весь аудит.
 - Оптимизация не обрезает список кандидатов, не превращает partial coverage в
-  complete и не создаёт actionable revision после timeout или cancellation.
+  complete и не создаёт actionable revision после cancellation или internal error.
 - Все byte-метрики Dashboard отображаются только в десятичных МБ/ГБ; значения
   меньше 0,01 МБ не округляются до ложного нуля.
 - User missing-target LaunchAgents отображаются как `analysis_only`, системные

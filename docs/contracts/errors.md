@@ -27,7 +27,6 @@ date: 2026-07-21
 | `CAPABILITY_UNAVAILABLE` | warning | Показать непроверенный источник |
 | `PERMISSION_DENIED` | warning или blocking | Показать coverage gap без совета использовать `sudo` или обходить TCC |
 | `AUDIT_STALE` | blocking | Повторить аудит |
-| `AUDIT_TIMEOUT` | blocking | Аудит превысил пятиминутную границу; повторить проверку и сохранить безопасный отчёт о фазе |
 | `SOURCE_CHANGED` | blocking | Не менять объект; повторить аудит |
 | `CORRELATION_AMBIGUOUS` | blocking | Не выбирать совпадение; показать `unknown` и повторить аудит после устранения неоднозначности |
 | `CORRELATION_MISSING` | blocking | Не выводить `absent`; показать missing identity evidence |
@@ -67,6 +66,8 @@ date: 2026-07-21
 # Правила
 
 * Ошибка одного adapter не завершает весь аудит.
+* У всего аудита нет автоматического deadline; таймаут отдельной системной команды
+  становится coverage gap и не отменяет остальные проверки.
 * Mutation-ошибка всегда работает fail closed.
 * Ошибка correlation/coverage никогда не понижается до `absent` и не раскрывает конфликтующие identities.
 * `not_applicable` не используется вместо ошибки source query, `unknown` или `absent` и не скрывает positive evidence.

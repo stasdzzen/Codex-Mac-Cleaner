@@ -77,7 +77,7 @@ Dashboard показывает server-owned значения под понятн
 
 ## Audit Coordinator
 
-Управляет жизненным циклом аудита, capability/coverage report, logical snapshot ID, Snapshot A/B, кооперативной отменой и immutable audit/correlation revisions. Частичный отчёт `cancelled`, incomplete source query или `staleDuringAudit` не становятся actionable revision. Candidate correlation выполняется с фиксированной bounded concurrency восемь; progress отражает число полностью обработанных кандидатов, а итоговый список сохраняет порядок discovery независимо от порядка завершения workers.
+Управляет жизненным циклом аудита, capability/coverage report, logical snapshot ID, Snapshot A/B, кооперативной отменой и immutable audit/correlation revisions. У всего audit run нет автоматического общего deadline: после discovery Coordinator обрабатывает каждый найденный кандидат и только затем публикует завершённую revision. Частичный отчёт `cancelled`, incomplete source query или `staleDuringAudit` не становятся actionable revision. Candidate correlation выполняется с фиксированной bounded concurrency восемь; progress отражает число полностью обработанных кандидатов, а итоговый список сохраняет порядок discovery независимо от порядка завершения workers. Таймаут отдельной системной команды создаёт fail-closed coverage gap и не отменяет весь run.
 
 ## Source Adapters
 

@@ -522,6 +522,14 @@ describe("полная интеграция MCP App", () => {
     expect(html).toContain("Ожидание результатов");
   });
 
+  it("скомпилированный runtime не содержит общего тайм-аута аудита", async () => {
+    const runtime = await readFile(
+      packagedPath(".codex-plugin", "runtime", "server.js"),
+      "utf8",
+    );
+    expect(runtime).not.toContain("AUDIT_TIMEOUT");
+  });
+
   it("не выпускает core preview secret в source или compiled package", async () => {
     const [source, runtime] = await Promise.all([
       readFile(new URL("../src/runtime.ts", import.meta.url), "utf8"),

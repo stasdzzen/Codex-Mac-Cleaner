@@ -39,6 +39,7 @@ date: 2026-07-21
 | `CMC-24` | Исправленный запуск packaged MCP после marketplace install | `CMC-10` | Средний: plugin runtime | Завершено 21 июля 2026 года |
 | `CMC-25` | Устанавливаемый prerelease `v0.1.0-beta.2` | `CMC-24` | Высокий: release | Завершено 21 июля 2026 года |
 | `CMC-26` | Dashboard v2 при старте, server-owned progress и shared global inventories A/B | `CMC-25` | Высокий: architecture/runtime | Issue #48; только последовательно |
+| `CMC-43` | ADR-0019 и полный проход по всем кандидатам без общего автоматического deadline | `CMC-41` | Высокий: architecture/runtime/completeness | Issue #82; отдельный worktree, merge только после CMC-42 и rebase из-за общей трассировки |
 | `CMC-13` | Post-v0.1 capability-aware monthly automation lifecycle и scheduled prompt | `CMC-10` | Высокий: host integration | `cto:blocked` до отдельного owner decision открыть capability-релиз |
 | `CMC-14` | Architecture research Advanced Cleanup v0.2 и trusted privileged helper | `CMC-10` | Критический: system mutation | `cto:blocked` до owner approval и нового ADR |
 | `CMC-15` | Architecture research Browser/Developer Storage profiles v0.2 | `CMC-10` | Высокий: personal/developer data | `cto:blocked` до owner approval и новых threat models |

@@ -50,6 +50,7 @@ date: 2026-07-19
 | Рискованная Library category получила карантин | Потеря настроек, sync state, saves или базы | v0.1 actionable только для private regenerable cache/log; остальные categories принудительно inspect-only |
 | Независимые opaque refs ошибочно объединены | Чужой installed/process/receipt evidence применён к candidate | Server-only subjects/edges, typed claims, versioned rules; `targetRef` не является identity |
 | Пустой или частичный source output принят за отсутствие | Candidate получает ложное negative evidence | `absent` только с completeness certificate полного same-snapshot query; иначе `unknown` |
+| Долгий аудит удерживает локальные ресурсы | Большой набор кандидатов проверяется дольше ожидаемого | Bounded concurrency восемь, живой progress, явный `audit_cancel` и таймауты отдельных subprocess; общего автоматического deadline нет, частичная revision не публикуется |
 | Path/display name/bundle/package/signer field выбран как единственное совпадение | Name-only resolution разрешает mutation | Claims дают candidate sets; resolved edge требует authoritative или независимые corroborated claims |
 | Несколько совместимых identities | Resolver произвольно выбирает владельца | `ambiguous` без scoring fallback; mutation блокируется |
 | Snapshot source изменился во время query | Positive counter-evidence исчезает между аудитом и действием | Snapshot A/B, source-query fingerprints, `staleDuringAudit`, immutable correlation revision |
@@ -97,6 +98,10 @@ date: 2026-07-19
 * Installation key в файле `0600` не защищает от уже скомпрометированного процесса того же UID; продукт ограничивает переносимость и dictionary attack, но не заявляет защиту от такого malware.
 * Rekey делает старые digests несопоставимыми; recovery требует поддержанной migration либо явного пересоздания exclusions и до этого блокирует token issuance.
 * На первом аудите authoritative owner binding может отсутствовать; продукт сознательно оставляет такой finding inspect-only и может накопить безопасную historical relation только из будущего наблюдения.
+* Полный аудит большого числа кандидатов может выполняться долго и потреблять
+  локальные CPU/IO до завершения или явной отмены. Concurrency и subprocess
+  ограничены, progress остаётся видимым, но продукт не обещает верхнюю границу
+  времени и не запускает такой аудит автоматически в v0.1.
 
 # Проверка мер
 

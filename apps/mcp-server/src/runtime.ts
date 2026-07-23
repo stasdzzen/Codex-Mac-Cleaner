@@ -88,7 +88,6 @@ const TERMINAL_STATES = new Set([
 const MAX_GIT_SCAN_DEPTH = 128;
 const MAX_GIT_SCAN_ENTRIES = 100_000;
 const MAX_EMPTY_ARTIFACT_ENTRIES = 4_096;
-const DEFAULT_AUDIT_TIMEOUT_MS = 5 * 60 * 1_000;
 const DEFAULT_CANDIDATE_CONCURRENCY = 8;
 const EMPTY_CACHE_LOG_RULE_ID = "EMPTY_CACHE_LOG_ARTIFACT_V1" as const;
 const EMPTY_CACHE_LOG_RULE_VERSION = 1 as const;
@@ -1206,8 +1205,6 @@ export interface RuntimeServiceOptions {
   readonly currentProjectRoot?: string;
   readonly now?: () => Date;
   readonly createId?: (prefix: string) => string;
-  /** Deterministic tests могут уменьшить deadline; packaged runtime использует 5 минут. */
-  readonly auditTimeoutMs?: number;
   /** Deterministic tests могут переопределить bounded concurrency; packaged runtime использует 8. */
   readonly candidateConcurrency?: number;
   /**
@@ -1249,7 +1246,6 @@ class AuditRuntimeService implements AuditToolService {
     private readonly correlationCommands: CommandRunner,
     private readonly correlationFilesystem: MacOSCorrelationReadOnlyFileSystem | undefined,
     private readonly ownerBindingHistory: MacOSOwnerBindingHistory | undefined,
-    private readonly auditTimeoutMs: number,
     private readonly candidateConcurrency: number,
     private readonly now: () => Date,
     private readonly createId: (prefix: string) => string,
@@ -1576,12 +1572,6 @@ class AuditRuntimeService implements AuditToolService {
   }
 
   private async execute(run: AuditRunRecord): Promise<void> {
-    let deadlineExceeded = false;
-    const deadline = setTimeout(() => {
-      deadlineExceeded = true;
-      run.controller.abort();
-    }, this.auditTimeoutMs);
-    deadline.unref?.();
     run.state = "running";
     run.progressPhase = "discovering_candidates";
     run.stateVersion += 1;
@@ -1597,8 +1587,8 @@ class AuditRuntimeService implements AuditToolService {
         { signal: run.controller.signal },
       );
       // Coordinator может завершиться состоянием cancelled без исключения.
-      // Повторно проверяем общий signal, чтобы server deadline всегда проходил
-      // через единый failed/AUDIT_TIMEOUT путь, а явная отмена — через cancelled.
+      // Повторно проверяем общий signal, чтобы явная отмена всегда проходила
+      // через единый terminal state без публикации частичной revision.
       run.controller.signal.throwIfAborted();
       run.coverageWarningCodes = result.coverage.gaps.map((gap) => gap.errorCode);
       run.coverage = {
@@ -1726,11 +1716,7 @@ class AuditRuntimeService implements AuditToolService {
       run.completedSteps = run.totalSteps;
       run.progressPhase = "completed";
     } catch (error) {
-      if (deadlineExceeded) {
-        run.state = "failed";
-        run.progressPhase = "failed";
-        run.coverageWarningCodes = ["AUDIT_TIMEOUT"];
-      } else if (run.controller.signal.aborted) {
+      if (run.controller.signal.aborted) {
         run.state = "cancelled";
         run.progressPhase = "cancelled";
       } else {
@@ -1739,7 +1725,6 @@ class AuditRuntimeService implements AuditToolService {
         run.coverageWarningCodes = ["INTERNAL_ERROR"];
       }
     } finally {
-      clearTimeout(deadline);
       run.stateVersion += 1;
     }
   }
@@ -2643,7 +2628,6 @@ export async function createRuntimeCore(
     correlationCommands,
     options.correlation?.filesystem,
     options.correlation?.ownerBindingHistory,
-    options.auditTimeoutMs ?? DEFAULT_AUDIT_TIMEOUT_MS,
     candidateConcurrency,
     options.now ?? (() => new Date()),
     options.createId ?? ((prefix) => `${prefix}-${randomUUID()}`),

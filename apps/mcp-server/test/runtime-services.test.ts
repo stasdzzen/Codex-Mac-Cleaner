@@ -355,24 +355,30 @@ describe("production runtime services", () => {
     });
   });
 
-  it("останавливает зависший аудит по server-owned deadline", async () => {
-    const root = await mkdtemp(join(tmpdir(), "cmc-runtime-audit-timeout-"));
+  it("не прерывает долгий аудит по времени и завершает его после продолжения источника", async () => {
+    const root = await mkdtemp(join(tmpdir(), "cmc-runtime-audit-without-deadline-"));
     roots.push(root);
     const homeDirectory = join(root, "home");
     const candidatePath = join(
       homeDirectory,
       "Library",
       "Caches",
-      "Synthetic Timeout Candidate",
+      "Synthetic Delayed Candidate",
     );
     await mkdir(candidatePath, { recursive: true });
-    const executor: ArgvExecutor = async (_executable, _argv, { signal }) =>
-      new Promise((_resolve, reject) => {
-        const abort = () =>
-          reject(Object.assign(new Error("aborted"), { name: "AbortError" }));
-        if (signal.aborted) abort();
-        else signal.addEventListener("abort", abort, { once: true });
-      });
+    let markCommandStarted: (() => void) | undefined;
+    const commandStarted = new Promise<void>((resolve) => {
+      markCommandStarted = resolve;
+    });
+    let continueCommands: (() => void) | undefined;
+    const commandGate = new Promise<void>((resolve) => {
+      continueCommands = resolve;
+    });
+    const executor: ArgvExecutor = async () => {
+      markCommandStarted?.();
+      await commandGate;
+      return { stdout: "", stderr: "", exitCode: 0 };
+    };
     const filesystem: MacOSCorrelationReadOnlyFileSystem = {
       async canonicalize(path) {
         return path;
@@ -395,36 +401,50 @@ describe("production runtime services", () => {
     const services = await createDefaultRuntimeServices({
       homeDirectory,
       stateRoot: join(root, "state"),
-      auditTimeoutMs: 25,
       correlation: {
         commands: createCommandRunner(executor),
         filesystem,
       },
     });
     const started = (await services.auditService?.start({
-      requestId: "audit-timeout-request",
+      requestId: "audit-without-deadline-request",
       profile: "application_remnants",
     })) as { auditId: string };
 
-    type TimeoutStatus = {
+    type AuditStatus = {
       state: string;
       coverageWarningCodes: string[];
       progress: { phase: string };
     };
-    let status: TimeoutStatus | null = null;
-    for (let attempt = 0; attempt < 100; attempt += 1) {
+    await Promise.race([
+      commandStarted,
+      new Promise((_resolve, reject) =>
+        setTimeout(() => reject(new Error("Команда источника не запустилась")), 1_000),
+      ),
+    ]);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    let status = (await services.auditService?.status({
+      auditId: started.auditId,
+    })) as AuditStatus;
+    expect(status).toMatchObject({
+      state: "running",
+    });
+    expect(status.coverageWarningCodes).not.toContain("AUDIT_TIMEOUT");
+
+    continueCommands?.();
+    for (let attempt = 0; attempt < 400; attempt += 1) {
       status = (await services.auditService?.status({
         auditId: started.auditId,
-      })) as TimeoutStatus;
-      if (status?.state === "failed") break;
+      })) as AuditStatus;
+      if (!["queued", "running"].includes(status.state)) break;
       await new Promise((resolve) => setTimeout(resolve, 5));
     }
 
     expect(status).toMatchObject({
-      state: "failed",
-      coverageWarningCodes: ["AUDIT_TIMEOUT"],
-      progress: { phase: "failed" },
+      state: expect.stringMatching(/^completed(?:_with_warnings)?$/u),
+      progress: { phase: "completed" },
     });
+    expect(status.coverageWarningCodes).not.toContain("AUDIT_TIMEOUT");
   });
 
   it("обрабатывает большой snapshot с production concurrency восемь и сохраняет порядок findings", async () => {
@@ -494,7 +514,6 @@ describe("production runtime services", () => {
     const services = await createDefaultRuntimeServices({
       homeDirectory,
       stateRoot: join(root, "state"),
-      auditTimeoutMs: 2_000,
       correlation: {
         commands: createCommandRunner(executor),
         filesystem,
@@ -907,7 +926,6 @@ describe("production runtime services", () => {
     const services = await createDefaultRuntimeServices({
       homeDirectory,
       stateRoot: join(root, "state"),
-      auditTimeoutMs: 2_000,
       candidateConcurrency: 4,
       correlation: {
         commands: createCommandRunner(executor),
