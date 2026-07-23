@@ -3,7 +3,7 @@
   "source": {
     "command": "pnpm licenses list --prod --json",
     "lockfile": "pnpm-lock.yaml",
-    "lockfileSha256": "c6f87657e2569da747d8c51ef9969acb57702e0dbec5f042dd47caea614d3eee"
+    "lockfileSha256": "776e1c687f6d3afec686fdaa643589050cbb89ae2e91b4a370caa0db447dbf05"
   },
   "compatibilityPolicy": {
     "approvedSpdxLicenses": [
@@ -84,9 +84,9 @@
       ]
     },
     {
-      "bomRef": "pkg:npm/%40hono/node-server@1.19.14",
+      "bomRef": "pkg:npm/%40hono/node-server@2.0.10",
       "name": "@hono/node-server",
-      "version": "1.19.14",
+      "version": "2.0.10",
       "license": "MIT",
       "noticeIds": [
         "sha256:6895190430d809c4c57a7582ecc2f99acbc2ea39a5dfad20262a41d5b3e91733"
@@ -534,9 +534,9 @@
       ]
     },
     {
-      "bomRef": "pkg:npm/fast-uri@3.1.3",
+      "bomRef": "pkg:npm/fast-uri@3.1.4",
       "name": "fast-uri",
-      "version": "3.1.3",
+      "version": "3.1.4",
       "license": "BSD-3-Clause",
       "noticeIds": [
         "sha256:df7464922225c9b286167fa692d305e5ba98bf71613525d4d031649a344a3f3f"
