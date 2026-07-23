@@ -117,6 +117,6 @@ Issue и PR не могут объявить требование выполне
 | `CMC-46` | [#88 — штатный запуск MCP и завершённая ревизия](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/88) | Закрыта; PR #91 слит |
 | `CMC-47` | [#89 — bounded pagination и Dashboard v3](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/89) | Закрыта; PR #92 слит |
 | `CMC-48` | [#90 — выпуск v0.1.0-beta.11](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/90) | Закрыта; PR #93 слит, выпуск опубликован |
-| `CMC-49` | [#94 — диагностика beta.11 и проверка поверхности плагина](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/94) | `cto:in-progress` |
+| `CMC-49` | [#94 — диагностика beta.11 и проверка поверхности плагина](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/94) | На проверке; draft PR #95 открыт |
 
 Operational label не заменяет dependency validation. Источником текущего readiness остаётся GitHub и `issue_contract.py`.
