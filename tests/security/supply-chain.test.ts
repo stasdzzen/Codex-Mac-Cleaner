@@ -20,20 +20,13 @@ const approvedLicenses = new Set([
   "MPL-2.0",
 ]);
 
-function isSemverAtLeast(version: string, minimum: string): boolean {
-  const parse = (value: string): [number, number, number] => {
-    const match = value.match(/^(\d+)\.(\d+)\.(\d+)(?:\+[0-9A-Za-z.-]+)?$/u);
-    if (match === null) throw new Error(`INVALID_SEMVER:${value}`);
-    return [Number(match[1]), Number(match[2]), Number(match[3])];
-  };
-  const current = parse(version);
-  const required = parse(minimum);
-  for (let index = 0; index < current.length; index += 1) {
-    if (current[index] !== required[index]) {
-      return current[index]! > required[index]!;
-    }
-  }
-  return true;
+const pinnedRuntimeDependencyVersions = new Map([
+  ["fast-uri", "3.1.4"],
+  ["@hono/node-server", "2.0.10"],
+]);
+
+function isPinnedRuntimeDependencyVersion(name: string, version: string): boolean {
+  return pinnedRuntimeDependencyVersions.get(name) === version;
 }
 
 function readTarEntries(archive: Buffer): Map<string, Buffer> {
@@ -57,6 +50,13 @@ function readTarEntries(archive: Buffer): Map<string, Buffer> {
 }
 
 describe("CMC-10: supply-chain and public package boundary", () => {
+  it.each(["4.0.0", "4.1.0"])(
+    "отклоняет уязвимый fast-uri@%s по GHSA-v2hh-gcrm-f6hx",
+    (version) => {
+      expect(isPinnedRuntimeDependencyVersion("fast-uri", version)).toBe(false);
+    },
+  );
+
   it("разрешает только исправленные runtime-зависимости CMC-44", async () => {
     const { stdout } = await execFileAsync(
       "pnpm",
@@ -67,22 +67,16 @@ describe("CMC-10: supply-chain and public package boundary", () => {
       name: string;
       version: string;
     }>;
-    const minimumVersions = new Map([
-      ["fast-uri", "3.1.4"],
-      ["@hono/node-server", "2.0.10"],
-    ]);
 
-    for (const [name, minimum] of minimumVersions) {
+    for (const [name, pinnedVersion] of pinnedRuntimeDependencyVersions) {
       const versions = resolutions
         .filter((resolution) => resolution.name === name)
         .map((resolution) => resolution.version);
-      expect(versions.length, `${name} должен присутствовать в runtime graph`).toBeGreaterThan(0);
-      for (const version of versions) {
-        expect(
-          isSemverAtLeast(version, minimum),
-          `${name}@${version} должен быть не ниже ${minimum}`,
-        ).toBe(true);
-      }
+      expect(versions, `${name} должен иметь одно pinned-разрешение`).toHaveLength(1);
+      expect(
+        versions.every((version) => isPinnedRuntimeDependencyVersion(name, version)),
+        `${name} должен разрешаться ровно как ${pinnedVersion}`,
+      ).toBe(true);
     }
   });
 
