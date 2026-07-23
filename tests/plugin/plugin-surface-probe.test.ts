@@ -42,7 +42,7 @@ describe("probe поверхности плагина", () => {
     expect(JSON.parse(stdout)).toEqual({
       ok: true,
       plugin: "codex-mac-cleaner",
-      version: "0.1.0-beta.11",
+      version: "0.1.0-beta.12",
       modelToolCount: 9,
       appToolCount: 15,
       resourceUri: DASHBOARD_RESOURCE_URI,

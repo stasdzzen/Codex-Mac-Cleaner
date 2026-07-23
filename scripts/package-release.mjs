@@ -32,7 +32,7 @@ if (outputDirectoryIndex >= 0 && outputDirectoryArgument === undefined) {
   throw new Error("OUTPUT_DIRECTORY_REQUIRED");
 }
 
-const releaseVersion = "0.1.0-beta.11";
+const releaseVersion = "0.1.0-beta.12";
 const artifactName = `codex-mac-cleaner-v${releaseVersion}.tar`;
 const builtEntries = new Set([
   ".codex-plugin/assets/dashboard-v3.html",
