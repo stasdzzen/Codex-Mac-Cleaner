@@ -22,6 +22,8 @@
 * [ADR-0016: только fullscreen для расширенного отображения Dashboard](ADR-0016-fullscreen-only-dashboard-display.md)
 * [ADR-0017: подвал Dashboard и host-mediated ссылки проекта](ADR-0017-dashboard-community-footer.md)
 * [ADR-0018: пропускная способность Real-Mac аудита и безопасная диагностика автозапуска](ADR-0018-real-mac-audit-throughput-and-diagnostics.md)
+* [ADR-0019: полный аудит без общего лимита времени](ADR-0019-complete-audit-without-overall-deadline.md)
+* [ADR-0020: ограниченная пагинация результатов и Dashboard v3](ADR-0020-bounded-dashboard-pagination.md)
 
 ## Правило изменения
 

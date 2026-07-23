@@ -13,7 +13,7 @@ export default defineConfig({
   build: {
     outDir: "dist",
     rollupOptions: {
-      input: "dashboard-v2.html",
+      input: "dashboard-v3.html",
     },
   },
   test: {

@@ -41,6 +41,15 @@ const baseSnapshot: DashboardSnapshot = {
     source: "statfs",
   },
   excludedCount: 2,
+  findingSummary: {
+    totalCount: 3,
+    matchingCount: 3,
+    supportLevelCounts: {
+      candidate: 1,
+      analysisOnly: 1,
+      unsupportedManual: 1,
+    },
+  },
   findings: [
     {
       findingId: "finding-synthetic-cache",
@@ -178,6 +187,7 @@ const baseSnapshot: DashboardSnapshot = {
       blockingReasons: ["SYSTEM_SCOPE_UNSUPPORTED"],
     },
   ],
+  nextCursor: null,
   quarantineEntries: [
     {
       entryId: "quarantine-synthetic-001",
@@ -203,7 +213,17 @@ export const runningFixture = deepFreeze({
     processedCandidates: 2,
     totalCandidates: 6,
   },
+  findingSummary: {
+    totalCount: 0,
+    matchingCount: 0,
+    supportLevelCounts: {
+      candidate: 0,
+      analysisOnly: 0,
+      unsupportedManual: 0,
+    },
+  },
   findings: [],
+  nextCursor: null,
 });
 
 export const cancellingFixture = deepFreeze({
@@ -217,6 +237,15 @@ export const cancelledFixture = deepFreeze({
   revision: null,
   state: "cancelled" as const,
   stateVersion: 15,
+  findingSummary: {
+    totalCount: 3,
+    matchingCount: 3,
+    supportLevelCounts: {
+      candidate: 1,
+      analysisOnly: 1,
+      unsupportedManual: 1,
+    },
+  },
   findings: baseSnapshot.findings.map((finding) => ({
     ...finding,
     allowedActions: [],

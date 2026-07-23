@@ -97,14 +97,25 @@ export function AuditDashboard({ snapshot, bridge }: AuditDashboardProps) {
   const [acceptedSnapshot, setAcceptedSnapshot] = useState(snapshot);
   const [viewState, setViewState] = useState<WidgetViewState>(INITIAL_VIEW_STATE);
   const [exclusionRefreshKey, setExclusionRefreshKey] = useState(0);
+  const [pagePending, setPagePending] = useState(false);
   const [isFullscreenPending, setFullscreenPending] = useState(false);
   const previousRevisionKey = useRef(revisionKey(snapshot));
   const tabRefs = useRef(new Map<DashboardTab, HTMLButtonElement>());
 
   useEffect(() => {
-    setAcceptedSnapshot((current) =>
-      acceptSnapshot(current.stateVersion, snapshot.stateVersion) ? snapshot : current,
-    );
+    setAcceptedSnapshot((current) => {
+      if (!acceptSnapshot(current.stateVersion, snapshot.stateVersion)) {
+        return current;
+      }
+      if (revisionKey(current) !== revisionKey(snapshot)) {
+        return snapshot;
+      }
+      return {
+        ...snapshot,
+        findings: current.findings,
+        nextCursor: current.nextCursor,
+      };
+    });
   }, [snapshot]);
 
   useEffect(() => {
@@ -172,6 +183,7 @@ export function AuditDashboard({ snapshot, bridge }: AuditDashboardProps) {
       return;
     }
     previousRevisionKey.current = nextRevisionKey;
+    setPagePending(false);
     setViewState((current) => {
       const reset: WidgetViewState = {
         ...current,
@@ -241,6 +253,65 @@ export function AuditDashboard({ snapshot, bridge }: AuditDashboardProps) {
       });
     } catch {
       toast.error("Не удалось остановить проверку. Подождите немного и повторите.");
+    }
+  }
+
+  async function loadNextPage(): Promise<void> {
+    const cursor = acceptedSnapshot.nextCursor;
+    const revision = acceptedSnapshot.revision;
+    if (cursor === null || revision === null || pagePending) return;
+    setPagePending(true);
+    try {
+      const page = await bridge.callTool<{
+        auditId: string;
+        revision: number;
+        stateVersion: number;
+        findingSummary: DashboardSnapshot["findingSummary"];
+        findings: readonly DashboardFinding[];
+        nextCursor: string | null;
+      }>("dashboard_page", {
+        auditId: acceptedSnapshot.auditId,
+        revision,
+        cursor,
+        filters: {},
+      });
+      if (
+        page.auditId !== acceptedSnapshot.auditId ||
+        page.revision !== revision ||
+        page.findingSummary.totalCount !==
+          acceptedSnapshot.findingSummary.totalCount ||
+        page.findingSummary.matchingCount !==
+          acceptedSnapshot.findingSummary.matchingCount
+      ) {
+        throw new Error("AUDIT_STALE");
+      }
+      setAcceptedSnapshot((current) => {
+        if (
+          current.auditId !== page.auditId ||
+          current.revision !== page.revision ||
+          current.nextCursor !== cursor
+        ) {
+          return current;
+        }
+        const known = new Set(
+          current.findings.map((finding) => finding.findingId),
+        );
+        const appended = page.findings.filter(
+          (finding) => !known.has(finding.findingId),
+        );
+        return {
+          ...current,
+          stateVersion: Math.max(current.stateVersion, page.stateVersion),
+          findings: [...current.findings, ...appended],
+          nextCursor: page.nextCursor,
+        };
+      });
+    } catch {
+      toast.error(
+        "Не удалось загрузить следующую страницу. Уже показанные результаты сохранены.",
+      );
+    } finally {
+      setPagePending(false);
     }
   }
 
@@ -424,16 +495,20 @@ export function AuditDashboard({ snapshot, bridge }: AuditDashboardProps) {
             <CardHeader>
               <CardTitle>Итог проверки</CardTitle>
               <CardDescription>
-                Найдено объектов: {acceptedSnapshot.findings.length}. Оставлено по вашему выбору: {acceptedSnapshot.excludedCount}.
+                Найдено объектов: {acceptedSnapshot.findingSummary.totalCount}. Загружено: {acceptedSnapshot.findings.length}. Оставлено по вашему выбору: {acceptedSnapshot.excludedCount}.
                 Источников проверено: {acceptedSnapshot.coverage.checkedSourceCount}; недоступно: {acceptedSnapshot.coverage.skippedSourceCount}.
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-wrap gap-2">
-              {acceptedSnapshot.findings.map((finding) => (
-                <Badge key={finding.findingId} variant="secondary">
-                  {finding.displayName}
-                </Badge>
-              ))}
+              <Badge variant="secondary">
+                Можно рассмотреть: {acceptedSnapshot.findingSummary.supportLevelCounts.candidate}
+              </Badge>
+              <Badge variant="secondary">
+                Только анализ: {acceptedSnapshot.findingSummary.supportLevelCounts.analysisOnly}
+              </Badge>
+              <Badge variant="secondary">
+                Нужна ручная проверка: {acceptedSnapshot.findingSummary.supportLevelCounts.unsupportedManual}
+              </Badge>
             </CardContent>
           </Card>
           </div>
@@ -449,6 +524,22 @@ export function AuditDashboard({ snapshot, bridge }: AuditDashboardProps) {
             onExclude={excludeFinding}
             onSkip={skipFinding}
           />
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-muted-foreground">
+              Показано {acceptedSnapshot.findings.length} из{" "}
+              {acceptedSnapshot.findingSummary.matchingCount}
+            </p>
+            {acceptedSnapshot.nextCursor !== null ? (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={pagePending}
+                onClick={() => void loadNextPage()}
+              >
+                {pagePending ? "Загружаем…" : "Показать ещё"}
+              </Button>
+            ) : null}
+          </div>
         </TabsContent>
 
         <TabsContent value="quarantine">

@@ -5,7 +5,7 @@ description: Обязанности и зависимости компонент
 tags: [architecture, components, mcp, ui]
 status: approved
 owner: Architect
-date: 2026-07-22
+date: 2026-07-23
 ---
 
 # Архитектурный стиль
@@ -42,9 +42,9 @@ React/Vite widget использует shadcn/ui на примитивах Base 
 * `Separator` и компактные `Button` для подвала проекта;
 * `sonner` для короткой обратной связи.
 
-Тема использует semantic tokens shadcn/ui и утверждённые OKLCH-значения светлого и тёмного режима. Прямые цвета в компонентах, ручные `dark:` overrides и внешние CDN запрещены. Пользовательские подписи переводят внутренние enum и policy-коды в понятный русский текст; неизвестный код не показывается напрямую. Live progress и nullable pre-result revision используют `ui://codex-mac-cleaner/dashboard-v2.html`; прежний v1 URI не переопределяется.
+Тема использует semantic tokens shadcn/ui и утверждённые OKLCH-значения светлого и тёмного режима. Прямые цвета в компонентах, ручные `dark:` overrides и внешние CDN запрещены. Пользовательские подписи переводят внутренние enum и policy-коды в понятный русский текст; неизвестный код не показывается напрямую. Bounded pagination, live progress и nullable pre-result revision используют `ui://codex-mac-cleaner/dashboard-v3.html`; опубликованные v1 и v2 URI не переопределяются.
 
-Widget получает начальный snapshot из ответа `dashboard_open`, в активном состоянии раз в секунду опрашивает `audit_status`, а app-only actions вызывает через MCP Apps bridge. `stateVersion` монотонен: ответ со старой версией или другим `auditId` отбрасывается. Pre-result snapshot имеет `revision=null`, пустые findings/actions и только server-owned phase/counts. Widget state хранит только представление — фильтр, выделенную строку, открытую панель и `skippedFindingIds` текущей ревизии. Raw paths, inventory, bundle/package/signing claims, correlation graph, coverage certificates, destructive token material и решения policy в widget не копируются. «Пропустить сейчас» добавляет ID в session-local список, не вызывает tool и не влияет на новый аудит. «Исключить» вызывает app-visible state action по `findingId`/revision, а не сохраняет identity в browser state.
+Widget получает начальный snapshot из ответа `dashboard_open`, в активном состоянии раз в секунду опрашивает `audit_status`, а app-only actions вызывает через MCP Apps bridge. Первая страница содержит максимум 100 findings; следующая загружается через app-only `dashboard_page` только после отдельного нажатия «Показать ещё». Модель и Widget имеют независимые opaque cursors, а UI показывает server-owned total/support-level counts и число загруженных строк, не пересчитывая итог из текущей страницы. `stateVersion` монотонен: ответ со старой версией, другим `auditId` или revision отбрасывается. Pre-result snapshot имеет `revision=null`, пустые findings/actions и только server-owned phase/counts. Widget state хранит только представление — фильтр, выделенную строку, открытую панель и `skippedFindingIds` текущей ревизии. Raw paths, inventory, bundle/package/signing claims, correlation graph, coverage certificates, destructive token material и решения policy в widget не копируются. «Пропустить сейчас» добавляет ID в session-local список, не вызывает tool и не влияет на новый аудит. «Исключить» вызывает app-visible state action по `findingId`/revision, а не сохраняет identity в browser state.
 
 Dashboard отображается `inline` по умолчанию. Только отдельное нажатие пользователя
 может запросить у Codex режим `fullscreen`; режим `pip` продукт не предлагает.

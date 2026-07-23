@@ -41,6 +41,15 @@ export const standaloneFixture = deepFreeze<DashboardSnapshot>({
     source: "statfs",
   },
   excludedCount: 1,
+  findingSummary: {
+    totalCount: 1,
+    matchingCount: 1,
+    supportLevelCounts: {
+      candidate: 1,
+      analysisOnly: 0,
+      unsupportedManual: 0,
+    },
+  },
   findings: [
     {
       findingId: "finding-public-synthetic",
@@ -88,6 +97,7 @@ export const standaloneFixture = deepFreeze<DashboardSnapshot>({
       blockingReasons: [],
     },
   ],
+  nextCursor: null,
   quarantineEntries: [
     {
       entryId: "quarantine-public-synthetic",

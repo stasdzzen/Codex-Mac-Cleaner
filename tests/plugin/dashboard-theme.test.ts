@@ -9,7 +9,7 @@ describe("CMC-38: тема shadcn на Base UI", () => {
   it("использует пресет Base Mira, тему владельца и тёмный режим по умолчанию", async () => {
     const [styles, html, components] = await Promise.all([
       readFile(resolve(repositoryRoot, "apps/widget/src/styles.css"), "utf8"),
-      readFile(resolve(repositoryRoot, "apps/widget/dashboard-v2.html"), "utf8"),
+      readFile(resolve(repositoryRoot, "apps/widget/dashboard-v3.html"), "utf8"),
       readFile(resolve(repositoryRoot, "apps/widget/components.json"), "utf8"),
     ]);
 
@@ -48,7 +48,7 @@ describe("CMC-38: тема shadcn на Base UI", () => {
     const [styles, bundle] = await Promise.all([
       readFile(resolve(repositoryRoot, "apps/widget/src/styles.css"), "utf8"),
       readFile(
-        resolve(repositoryRoot, ".codex-plugin/assets/dashboard-v2.html"),
+        resolve(repositoryRoot, ".codex-plugin/assets/dashboard-v3.html"),
         "utf8",
       ),
     ]);

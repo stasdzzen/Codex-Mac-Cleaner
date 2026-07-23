@@ -173,6 +173,97 @@ describe("интерфейс проверки Mac", () => {
     );
   });
 
+  it("загружает следующую страницу только после нажатия и сохраняет общий итог", async () => {
+    const state = createBridge();
+    const initialFinding = dashboardFixture.findings[0]!;
+    const nextFinding = dashboardFixture.findings[1]!;
+    state.callTool.mockImplementation(async (name) => {
+      if (name === "dashboard_page") {
+        return {
+          auditId: dashboardFixture.auditId,
+          revision: dashboardFixture.revision,
+          stateVersion: dashboardFixture.stateVersion,
+          findingSummary: {
+            totalCount: 2_767,
+            matchingCount: 2_767,
+            supportLevelCounts: {
+              candidate: 112,
+              analysisOnly: 2_655,
+              unsupportedManual: 0,
+            },
+          },
+          findings: [initialFinding, nextFinding],
+          nextCursor: null,
+        };
+      }
+      if (name === "exclusion_list") {
+        return { exclusions: [], stateVersion: 20 };
+      }
+      return { stateVersion: 20 };
+    });
+    const { rerender } = render(
+      <AuditDashboard
+        snapshot={{
+          ...dashboardFixture,
+          findings: [initialFinding],
+          findingSummary: {
+            totalCount: 2_767,
+            matchingCount: 2_767,
+            supportLevelCounts: {
+              candidate: 112,
+              analysisOnly: 2_655,
+              unsupportedManual: 0,
+            },
+          },
+          nextCursor: "cursor-page-2",
+        }}
+        bridge={state.bridge}
+      />,
+    );
+
+    expect(
+      state.callTool.mock.calls.filter(([name]) => name === "dashboard_page"),
+    ).toHaveLength(0);
+    fireEvent.click(screen.getByRole("tab", { name: "Найдено" }));
+    expect(screen.getByText("Показано 1 из 2767")).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Показать ещё" }));
+    await waitFor(() =>
+      expect(state.callTool).toHaveBeenCalledWith("dashboard_page", {
+        auditId: dashboardFixture.auditId,
+        revision: dashboardFixture.revision,
+        cursor: "cursor-page-2",
+        filters: {},
+      }),
+    );
+    expect(await screen.findByText("Показано 2 из 2767")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Показать ещё" })).not.toBeInTheDocument();
+    expect(screen.getAllByText(nextFinding.displayName)).toHaveLength(1);
+
+    rerender(
+      <AuditDashboard
+        snapshot={{
+          ...dashboardFixture,
+          stateVersion: dashboardFixture.stateVersion + 1,
+          findings: [initialFinding],
+          findingSummary: {
+            totalCount: 2_767,
+            matchingCount: 2_767,
+            supportLevelCounts: {
+              candidate: 112,
+              analysisOnly: 2_655,
+              unsupportedManual: 0,
+            },
+          },
+          nextCursor: "cursor-page-2",
+        }}
+        bridge={state.bridge}
+      />,
+    );
+    expect(screen.getByText("Показано 2 из 2767")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Показать ещё" })).not.toBeInTheDocument();
+  });
+
   it("поддерживает клавиатурную навигацию по вкладкам", () => {
     const { bridge } = createBridge();
     render(<AuditDashboard snapshot={dashboardFixture} bridge={bridge} />);
@@ -385,6 +476,7 @@ describe("интерфейс проверки Mac", () => {
     const { rerender } = render(
       <AuditDashboard snapshot={dashboardFixture} bridge={bridge} />,
     );
+    fireEvent.click(screen.getByRole("tab", { name: "Найдено" }));
     expect(screen.getByText("Synthetic Cache")).toBeVisible();
 
     rerender(

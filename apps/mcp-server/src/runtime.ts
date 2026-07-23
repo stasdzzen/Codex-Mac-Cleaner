@@ -31,6 +31,7 @@ import {
   AuditStartInputSchema,
   AuditStatusInputSchema,
   DashboardOpenInputSchema,
+  DashboardPageInputSchema,
   FindingInspectInputSchema,
   FindingRevealInputSchema,
   ModelSafeTextSchema,
@@ -78,7 +79,9 @@ import {
 import type { AuditToolService } from "./server.js";
 import type { QuarantineToolService } from "./tools/quarantine.js";
 
-const DASHBOARD_RESOURCE_URI = "ui://codex-mac-cleaner/dashboard-v2.html" as const;
+const DASHBOARD_RESOURCE_URI = "ui://codex-mac-cleaner/dashboard-v3.html" as const;
+const DASHBOARD_PAGE_SIZE = 100;
+const DASHBOARD_PAGE_MAX_BYTES = 512 * 1024;
 
 const TERMINAL_STATES = new Set([
   "cancelled",
@@ -1145,6 +1148,176 @@ interface AuditRunRecord {
   excludedCount: number;
 }
 
+export type PaginationChannel = "model" | "dashboard";
+
+interface CursorBinding {
+  readonly auditId: string;
+  readonly revision: number;
+  readonly channel: PaginationChannel;
+  readonly filterKey: string;
+  readonly offset: number;
+}
+
+export interface PaginationBinding {
+  readonly auditId: string;
+  readonly revision: number;
+  readonly channel: PaginationChannel;
+  readonly filterKey: string;
+}
+
+interface NormalizedAuditFilters {
+  readonly categories: readonly string[] | undefined;
+  readonly supportLevels: readonly string[] | undefined;
+  readonly labels: readonly string[] | undefined;
+  readonly risks: readonly string[] | undefined;
+}
+
+export function normalizeAuditFilters(
+  filters: Readonly<{
+    categories?: readonly string[] | undefined;
+    supportLevels?: readonly string[] | undefined;
+    labels?: readonly string[] | undefined;
+    risks?: readonly string[] | undefined;
+  }>,
+): NormalizedAuditFilters {
+  const normalize = (values: readonly string[] | undefined) =>
+    values === undefined ? undefined : [...new Set(values)].sort();
+  return {
+    categories: normalize(filters.categories),
+    supportLevels: normalize(filters.supportLevels),
+    labels: normalize(filters.labels),
+    risks: normalize(filters.risks),
+  };
+}
+
+function matchesAuditFilters(
+  finding: FindingModelView,
+  filters: NormalizedAuditFilters,
+): boolean {
+  return (
+    (filters.categories === undefined ||
+      filters.categories.includes(finding.category)) &&
+    (filters.supportLevels === undefined ||
+      filters.supportLevels.includes(finding.supportLevel)) &&
+    (filters.labels === undefined || filters.labels.includes(finding.label)) &&
+    (filters.risks === undefined || filters.risks.includes(finding.risk))
+  );
+}
+
+function summarizeFindings(
+  all: readonly FindingRecord[],
+  matching: readonly FindingRecord[],
+) {
+  return {
+    totalCount: all.length,
+    matchingCount: matching.length,
+    supportLevelCounts: {
+      candidate: matching.filter(
+        (finding) => finding.model.supportLevel === "candidate",
+      ).length,
+      analysisOnly: matching.filter(
+        (finding) => finding.model.supportLevel === "analysis_only",
+      ).length,
+      unsupportedManual: matching.filter(
+        (finding) => finding.model.supportLevel === "unsupported_manual",
+      ).length,
+    },
+  };
+}
+
+export class BoundedCursorPager {
+  private readonly cursors = new Map<string, CursorBinding>();
+  private readonly cursorByBinding = new Map<string, string>();
+
+  constructor(
+    private readonly createCursor: () => string = () =>
+      `cursor-${randomUUID()}`,
+  ) {}
+
+  private bindingKey(binding: CursorBinding): string {
+    return JSON.stringify([
+      binding.auditId,
+      binding.revision,
+      binding.channel,
+      binding.filterKey,
+      binding.offset,
+    ]);
+  }
+
+  private cursorFor(binding: CursorBinding): string {
+    const bindingKey = this.bindingKey(binding);
+    const existing = this.cursorByBinding.get(bindingKey);
+    if (existing !== undefined) return existing;
+    const cursor = this.createCursor();
+    if (this.cursors.has(cursor)) {
+      throw new Error("INTERNAL_ERROR");
+    }
+    this.cursors.set(cursor, binding);
+    this.cursorByBinding.set(bindingKey, cursor);
+    return cursor;
+  }
+
+  private offset(cursor: string | null, expected: PaginationBinding): number {
+    if (cursor === null) return 0;
+    const binding = this.cursors.get(cursor);
+    if (
+      binding === undefined ||
+      binding.auditId !== expected.auditId ||
+      binding.revision !== expected.revision ||
+      binding.channel !== expected.channel ||
+      binding.filterKey !== expected.filterKey
+    ) {
+      throw new Error("AUDIT_STALE");
+    }
+    return binding.offset;
+  }
+
+  page<TInput, TOutput>(
+    input: Readonly<{
+      items: readonly TInput[];
+      cursor: string | null;
+      binding: PaginationBinding;
+      toOutput: (item: TInput) => TOutput;
+    }>,
+  ): { readonly findings: readonly TOutput[]; readonly nextCursor: string | null } {
+    const offset = this.offset(input.cursor, input.binding);
+    if (
+      !Number.isSafeInteger(offset) ||
+      offset < 0 ||
+      offset > input.items.length
+    ) {
+      throw new Error("AUDIT_STALE");
+    }
+    const page: TOutput[] = [];
+    let byteLength = 2;
+    let index = offset;
+    while (
+      index < input.items.length &&
+      page.length < DASHBOARD_PAGE_SIZE
+    ) {
+      const output = input.toOutput(input.items[index]!);
+      const outputBytes = Buffer.byteLength(JSON.stringify(output), "utf8");
+      const separatorBytes = page.length === 0 ? 0 : 1;
+      if (byteLength + separatorBytes + outputBytes > DASHBOARD_PAGE_MAX_BYTES) {
+        if (page.length === 0) {
+          throw new Error("INTERNAL_ERROR");
+        }
+        break;
+      }
+      page.push(output);
+      byteLength += separatorBytes + outputBytes;
+      index += 1;
+    }
+    return {
+      findings: page,
+      nextCursor:
+        index < input.items.length
+          ? this.cursorFor({ ...input.binding, offset: index })
+          : null,
+    };
+  }
+}
+
 export interface RuntimeExclusionStore {
   list(): Promise<{
     readonly stateVersion: number;
@@ -1240,6 +1413,7 @@ function defaultStateRoot(homeDirectory: string): string {
 class AuditRuntimeService implements AuditToolService {
   private readonly runs = new Map<string, AuditRunRecord>();
   private readonly auditIdByRequest = new Map<string, string>();
+  private readonly pager: BoundedCursorPager;
   private latestAuditId: string | null = null;
 
   constructor(
@@ -1255,7 +1429,9 @@ class AuditRuntimeService implements AuditToolService {
     private readonly candidateConcurrency: number,
     private readonly now: () => Date,
     private readonly createId: (prefix: string) => string,
-  ) {}
+  ) {
+    this.pager = new BoundedCursorPager(() => this.createId("cursor"));
+  }
 
   private runFor(auditId: string): AuditRunRecord {
     const run = this.runs.get(auditId);
@@ -1281,6 +1457,98 @@ class AuditRuntimeService implements AuditToolService {
     return revision === null
       ? this.runFor(auditId)
       : this.completedRun(auditId, revision);
+  }
+
+  private dashboardFinding(finding: FindingRecord) {
+    const safe = finding.correlation?.safeView;
+    const facts = safe?.facts;
+    const diagnostic = finding.diagnostic;
+    const receiptState =
+      safe?.receiptLifecycle.lifecycle === "live" ||
+      safe?.receiptLifecycle.lifecycle === "stale"
+        ? "present"
+        : safe?.receiptLifecycle.lifecycle === "absent"
+          ? "absent"
+          : "unknown";
+    return {
+      findingId: finding.model.findingId,
+      displayName: finding.model.displayName,
+      componentDisplayName: finding.componentDisplayName,
+      category: finding.model.category,
+      supportLevel: finding.model.supportLevel,
+      logicalSize: finding.model.logicalSize,
+      physicalSize: finding.model.physicalSize,
+      label: finding.model.label,
+      confidence: finding.model.confidence,
+      risk: finding.model.risk,
+      allowedActions: finding.model.allowedActions,
+      correlationRevisionId: safe?.correlationRevisionId ?? null,
+      ownerBindingState: safe?.ownerBindingState ?? "missing",
+      ownerBindingSourceClass: safe?.ownerBindingSourceClass ?? "none",
+      requirementProfileId:
+        safe?.requirementProfileId ?? "inspection_only_v1",
+      requirementApplicability: safe?.requirementApplicability ?? null,
+      receiptLifecycle: safe?.receiptLifecycle ?? null,
+      facts: facts ?? null,
+      coverageSummary:
+        safe?.coverageSummary ??
+        (diagnostic === null
+          ? {
+              completeSourceCount: 0,
+              gapCount: 1,
+              gapCodes: ["missing" as const],
+            }
+          : {
+              completeSourceCount: 1,
+              gapCount: 0,
+              gapCodes: [],
+            }),
+      staleDuringAudit: safe?.staleDuringAudit ?? diagnostic === null,
+      blockingReasonCodes:
+        safe?.blockingReasonCodes ?? finding.policy.blockingRuleIds,
+      findingFacts: {
+        lastObservedAt: finding.observation.observedAt,
+        temporalKind: finding.evidence.stale ? "stale" : "current",
+        mainBundleState: facts?.ownerApplication.state ?? "unknown",
+        activityState:
+          facts?.activity.state ?? diagnostic?.activityState ?? "unknown",
+        openFileState: facts?.openFile.state ?? "unknown",
+        startupKinds:
+          diagnostic !== null && diagnostic.startupKind !== null
+            ? [diagnostic.startupKind]
+            : facts?.startupTarget.state === "present"
+              ? ["unknown"]
+              : [],
+        targetExecutableState:
+          diagnostic?.targetExecutableState ??
+          facts?.ownerExecutable.state ??
+          "unknown",
+        receiptState,
+        dependencyState: facts?.dependency.state ?? "unknown",
+        sensitivityFlags: finding.observation.sensitivityFlags,
+        recommendedRemovalMethod: finding.evidence.recommendedRemovalMethod,
+        blockingReasons: finding.model.blockingReasons,
+      },
+      reclaimEstimate: {
+        estimatedPhysicalBytes: finding.model.physicalSize,
+        confidence: "low" as const,
+        basis: "observed_physical_size" as const,
+        limitations: ["snapshot_estimate" as const],
+        observedAt: finding.observation.observedAt,
+      },
+      evidence:
+        diagnostic === null
+          ? []
+          : finding.evidence.items.map((item) => ({
+              evidenceId: item.evidenceId,
+              ruleInputType: item.ruleInputType,
+              sourceAdapter: item.sourceAdapter,
+              outcome: item.outcome,
+              observedAt: item.observedAt,
+              summary: item.summary,
+            })),
+      blockingReasons: finding.model.blockingReasons,
+    };
   }
 
   private progress(run: AuditRunRecord) {
@@ -1815,15 +2083,23 @@ class AuditRuntimeService implements AuditToolService {
     const input = AuditResultsInputSchema.parse(rawInput);
     const run = this.completedRun(input.auditId, input.revision);
     const safe = await this.safeSnapshot(run);
-    const findings = run.findings
-      .map((finding) => finding.model)
-      .filter((finding) =>
-        (input.filters.categories === undefined || input.filters.categories.includes(finding.category)) &&
-        (input.filters.supportLevels === undefined ||
-          input.filters.supportLevels.includes(finding.supportLevel)) &&
-        (input.filters.labels === undefined || input.filters.labels.includes(finding.label)) &&
-        (input.filters.risks === undefined || input.filters.risks.includes(finding.risk)),
-      );
+    const filters = normalizeAuditFilters(input.filters);
+    const filterKey = JSON.stringify(filters);
+    const matching = run.findings.filter((finding) =>
+      matchesAuditFilters(finding.model, filters),
+    );
+    const cursorBinding = {
+      auditId: run.auditId,
+      revision: input.revision,
+      channel: "model" as const,
+      filterKey,
+    };
+    const page = this.pager.page({
+      items: matching,
+      cursor: input.cursor,
+      binding: cursorBinding,
+      toOutput: (finding) => finding.model,
+    });
     return {
       auditId: run.auditId,
       revision: input.revision,
@@ -1831,8 +2107,40 @@ class AuditRuntimeService implements AuditToolService {
       storageSummary: safe.storageSummary,
       diskObservation: safe.diskObservation,
       excludedCount: safe.excludedCount,
-      findings,
-      nextCursor: null,
+      findingSummary: summarizeFindings(run.findings, matching),
+      findings: page.findings,
+      nextCursor: page.nextCursor,
+    };
+  }
+
+  async dashboardPage(rawInput: unknown) {
+    const input = DashboardPageInputSchema.parse(rawInput);
+    const run = this.completedRun(input.auditId, input.revision);
+    const filters = normalizeAuditFilters(input.filters);
+    const filterKey = JSON.stringify(filters);
+    const matching = run.findings.filter((finding) =>
+      matchesAuditFilters(finding.model, filters),
+    );
+    const cursorBinding = {
+      auditId: run.auditId,
+      revision: input.revision,
+      channel: "dashboard" as const,
+      filterKey,
+    };
+    const page = this.pager.page({
+      items: matching,
+      cursor: input.cursor,
+      binding: cursorBinding,
+      toOutput: (finding) => this.dashboardFinding(finding),
+    });
+    const safe = await this.safeSnapshot(run);
+    return {
+      auditId: run.auditId,
+      revision: input.revision,
+      stateVersion: safe.stateVersion,
+      findingSummary: summarizeFindings(run.findings, matching),
+      findings: page.findings,
+      nextCursor: page.nextCursor,
     };
   }
 
@@ -1854,9 +2162,27 @@ class AuditRuntimeService implements AuditToolService {
           auditId: run.auditId,
           revision: null,
           ...(await this.safeSnapshot(run)),
+          findingSummary: summarizeFindings([], []),
           findings: [] as FindingModelView[],
+          nextCursor: null,
         };
     run.stateVersion = Math.max(run.stateVersion, results.stateVersion);
+    const dashboardFilters = normalizeAuditFilters({});
+    const dashboardFilterKey = JSON.stringify(dashboardFilters);
+    const dashboardPage =
+      actionable && run.revision !== null
+        ? this.pager.page({
+            items: run.findings,
+            cursor: null,
+            toOutput: (finding) => this.dashboardFinding(finding),
+            binding: {
+              auditId: run.auditId,
+              revision: run.revision,
+              channel: "dashboard",
+              filterKey: dashboardFilterKey,
+            },
+          })
+        : { findings: [], nextCursor: null };
     const output = {
       auditId: results.auditId,
       revision: results.revision,
@@ -1866,7 +2192,9 @@ class AuditRuntimeService implements AuditToolService {
       storageSummary: results.storageSummary,
       diskObservation: results.diskObservation,
       excludedCount: results.excludedCount,
+      findingSummary: results.findingSummary,
       findings: results.findings,
+      nextCursor: results.nextCursor,
     };
     const manifests = await new ManifestRepository(this.stateRoot).list();
     const dashboard = {
@@ -1879,87 +2207,9 @@ class AuditRuntimeService implements AuditToolService {
       storageSummary: output.storageSummary,
       diskObservation: output.diskObservation,
       excludedCount: output.excludedCount,
-      findings: actionable ? run.findings.map((finding) => {
-        const safe = finding.correlation?.safeView;
-        const facts = safe?.facts;
-        const diagnostic = finding.diagnostic;
-        const receiptState =
-          safe?.receiptLifecycle.lifecycle === "live" ||
-          safe?.receiptLifecycle.lifecycle === "stale"
-            ? "present"
-            : safe?.receiptLifecycle.lifecycle === "absent"
-              ? "absent"
-              : "unknown";
-        return {
-          ...finding.model,
-          componentDisplayName: finding.componentDisplayName,
-          correlationRevisionId: safe?.correlationRevisionId ?? null,
-          ownerBindingState: safe?.ownerBindingState ?? "missing",
-          ownerBindingSourceClass: safe?.ownerBindingSourceClass ?? "none",
-          requirementProfileId: safe?.requirementProfileId ?? "inspection_only_v1",
-          requirementApplicability: safe?.requirementApplicability ?? null,
-          receiptLifecycle: safe?.receiptLifecycle ?? {
-            lifecycle: "unknown",
-            reasonCode: "missing",
-          },
-          facts: facts ?? null,
-          coverageSummary: safe?.coverageSummary ??
-            (diagnostic === null
-              ? {
-                  completeSourceCount: 0,
-                  gapCount: 1,
-                  gapCodes: ["missing"],
-                }
-              : {
-                  completeSourceCount: 1,
-                  gapCount: 0,
-                  gapCodes: [],
-                }),
-          staleDuringAudit: safe?.staleDuringAudit ?? diagnostic === null,
-          blockingReasonCodes:
-            safe?.blockingReasonCodes ?? finding.policy.blockingRuleIds,
-          findingFacts: {
-            lastObservedAt: finding.observation.observedAt,
-            temporalKind: finding.evidence.stale ? "stale" : "current",
-            mainBundleState: facts?.ownerApplication.state ?? "unknown",
-            activityState:
-              facts?.activity.state ?? diagnostic?.activityState ?? "unknown",
-            openFileState: facts?.openFile.state ?? "unknown",
-            startupKinds:
-              diagnostic !== null && diagnostic.startupKind !== null
-                ? [diagnostic.startupKind]
-                : facts?.startupTarget.state === "present"
-                  ? ["unknown"]
-                  : [],
-            targetExecutableState:
-              diagnostic?.targetExecutableState ??
-              facts?.ownerExecutable.state ??
-              "unknown",
-            receiptState,
-            dependencyState: facts?.dependency.state ?? "unknown",
-            sensitivityFlags: finding.observation.sensitivityFlags,
-            recommendedRemovalMethod: finding.evidence.recommendedRemovalMethod,
-            blockingReasons: finding.model.blockingReasons,
-          },
-          reclaimEstimate: {
-            estimatedPhysicalBytes: finding.model.physicalSize,
-            confidence: "low",
-            basis: "observed_physical_size",
-            limitations: ["snapshot_estimate"],
-            observedAt: finding.observation.observedAt,
-          },
-          evidence: diagnostic === null
-            ? []
-            : finding.evidence.items.map((item) => ({
-                evidenceId: item.evidenceId,
-                ruleInputType: item.ruleInputType,
-                sourceAdapter: item.sourceAdapter,
-                outcome: item.outcome,
-                observedAt: item.observedAt,
-                summary: item.summary,
-              })),
-        };
-      }) : [],
+      findingSummary: output.findingSummary,
+      findings: dashboardPage.findings,
+      nextCursor: dashboardPage.nextCursor,
       quarantineEntries: manifests
         .filter((manifest) => manifest.state === "moved")
         .map((manifest) => ({
