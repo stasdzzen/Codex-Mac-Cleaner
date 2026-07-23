@@ -7,7 +7,7 @@
 * **Native tool flow**: CMC-46 закрепил один штатный host discovery, exact terminal revision и fail-closed `AUDIT_STALE` без Terminal, direct stdio, local HTML и автоматического повторного аудита.
 * **Выпуск**: CMC-48 опубликовал `v0.1.0-beta.11` из merge SHA `b5a61bf362330b0f9620547ef54fde3603b0b76e`.
 * **Защита от регрессии**: CMC-49 добавил privacy-safe troubleshooting, capability matrix и read-only probe точной packaged MCP App поверхности.
-* **Подготовка выпуска**: CMC-50 обновляет публичную версию до `v0.1.0-beta.12`, закрепляет probe в release gates и сохраняет реальный Mac smoke отдельным действием владельца.
+* **Выпуск**: CMC-50 опубликовал [`v0.1.0-beta.12`](https://github.com/stasdzzen/Codex-Mac-Cleaner/releases/tag/v0.1.0-beta.12) из merge SHA `afe603dd9e26bca221ea6496a8f2e51ea40f7a4b`; шесть release assets сверены побайтно, probe вошёл в release gates, а real-Mac smoke остался отдельным действием владельца.
 
 ## 2026-07-22
 
