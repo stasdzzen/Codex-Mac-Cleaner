@@ -288,6 +288,7 @@ export class KeyedExclusionStateStore {
   async readForAudit(): Promise<
     | Readonly<{
         status: "ready";
+        stateVersion: number;
         exclusions: readonly KeyedUserExclusion[];
         tokenIssuance: "allowed";
       }>
@@ -302,6 +303,7 @@ export class KeyedExclusionStateStore {
       const state = await this.load();
       return {
         status: "ready",
+        stateVersion: state.stateVersion,
         exclusions: state.exclusions,
         tokenIssuance: "allowed",
       };
@@ -338,6 +340,47 @@ export class KeyedExclusionStateStore {
         exclusions,
       });
       return exclusion;
+    });
+  }
+
+  async remove(exclusionId: string): Promise<KeyedUserExclusionState> {
+    return this.serialize(async () => {
+      const current = await this.load();
+      if (!current.exclusions.some((entry) => entry.exclusionId === exclusionId)) {
+        throw new KeyedExclusionStoreError("EXCLUSION_NOT_FOUND");
+      }
+      return this.writeAndVerify({
+        ...current,
+        stateVersion: current.stateVersion + 1,
+        updatedAt: this.now().toISOString(),
+        exclusions: current.exclusions.filter(
+          (entry) => entry.exclusionId !== exclusionId,
+        ),
+      });
+    });
+  }
+
+  async reset(expectedStateVersion: number): Promise<
+    | Readonly<{
+        status: "reset";
+        state: KeyedUserExclusionState;
+        removedCount: number;
+      }>
+    | Readonly<{ status: "stale"; stateVersion: number }>
+  > {
+    return this.serialize(async () => {
+      const current = await this.load();
+      if (current.stateVersion !== expectedStateVersion) {
+        return { status: "stale", stateVersion: current.stateVersion };
+      }
+      const removedCount = current.exclusions.length;
+      const state = await this.writeAndVerify({
+        ...current,
+        stateVersion: current.stateVersion + 1,
+        updatedAt: this.now().toISOString(),
+        exclusions: [],
+      });
+      return { status: "reset", state, removedCount };
     });
   }
 

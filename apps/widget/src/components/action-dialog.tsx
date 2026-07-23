@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArchiveIcon, ArchiveRestoreIcon, LoaderCircleIcon } from "lucide-react";
+import { ArchiveRestoreIcon, LoaderCircleIcon, Trash2Icon } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -57,6 +57,8 @@ export function ActionDialog({ finding, auditRevision, bridge }: ActionDialogPro
     if (previewToken === null) {
       return;
     }
+    setPreparing(true);
+    setPreviewToken(null);
     try {
       await bridge.callTool("quarantine_move", {
         previewToken,
@@ -66,6 +68,9 @@ export function ActionDialog({ finding, auditRevision, bridge }: ActionDialogPro
       setOpen(false);
     } catch {
       toast.error("Объект изменился после проверки. Запустите проверку ещё раз.");
+      setOpen(false);
+    } finally {
+      setPreparing(false);
     }
   }
 
@@ -84,26 +89,28 @@ export function ActionDialog({ finding, auditRevision, bridge }: ActionDialogPro
         render={
           <Button
             variant="destructive"
+            aria-label={`Удалить: ${finding.displayName}`}
             onClick={() => {
               void prepareMove();
             }}
           />
         }
       >
-        <ArchiveIcon data-icon="inline-start" />
-        В карантин
+        <Trash2Icon data-icon="inline-start" />
+        Удалить
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogMedia>
             <ArchiveRestoreIcon aria-hidden="true" />
           </AlertDialogMedia>
-          <AlertDialogTitle>Переместить «{finding.displayName}» в карантин?</AlertDialogTitle>
+          <AlertDialogTitle>Удалить «{finding.displayName}»?</AlertDialogTitle>
           <AlertDialogDescription
             render={<div className="flex flex-col gap-2" />}
           >
               <p>
-                Будет перемещён в карантин ровно один объект. Это не прямое удаление исходника.
+                Ровно один объект будет безопасно перемещён в карантин, а не удалён
+                напрямую.
               </p>
               <p>
                 Занимает на диске примерно {formatBytes(finding.reclaimEstimate.estimatedPhysicalBytes)}.
@@ -122,7 +129,7 @@ export function ActionDialog({ finding, auditRevision, bridge }: ActionDialogPro
             }}
           >
             {preparing && <LoaderCircleIcon data-icon="inline-start" className="animate-spin" />}
-            Переместить один объект
+            Переместить в карантин
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

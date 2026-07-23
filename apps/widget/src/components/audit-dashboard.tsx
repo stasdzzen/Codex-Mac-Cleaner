@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   BanIcon,
   CalendarClockIcon,
@@ -10,6 +10,7 @@ import {
   LoaderCircleIcon,
   Maximize2Icon,
   MessageSquarePlusIcon,
+  Minimize2Icon,
   ShieldCheckIcon,
   SkipForwardIcon,
 } from "lucide-react";
@@ -54,10 +55,15 @@ import {
   acceptSnapshot,
   createRequestId,
   type DashboardTab,
+  type WidgetDisplayMode,
   type WidgetBridge,
   type WidgetViewState,
 } from "@/lib/bridge";
 import type { DashboardFinding, DashboardSnapshot } from "@/lib/dashboard-types";
+import {
+  groupDashboardFindings,
+  type DashboardFindingGroup,
+} from "@/lib/finding-groups";
 import { PROJECT_LINKS, type WidgetExternalUrl } from "@/lib/project-links";
 import {
   blockingReasonLabel,
@@ -74,16 +80,13 @@ interface AuditDashboardProps {
 
 const INITIAL_VIEW_STATE: WidgetViewState = {
   activeTab: "overview",
-  filter: "",
   selectedFindingId: null,
-  selectedQuarantineEntryId: null,
   panel: "none",
   skippedFindingIds: [],
 };
 
 const TAB_LABELS: ReadonlyArray<{ value: DashboardTab; label: string }> = [
   { value: "overview", label: "Обзор" },
-  { value: "findings", label: "Найдено" },
   { value: "quarantine", label: "Карантин" },
   { value: "exclusions", label: "Оставленные" },
   { value: "schedule", label: "Автопроверка" },
@@ -99,6 +102,9 @@ export function AuditDashboard({ snapshot, bridge }: AuditDashboardProps) {
   const [exclusionRefreshKey, setExclusionRefreshKey] = useState(0);
   const [pagePending, setPagePending] = useState(false);
   const [isFullscreenPending, setFullscreenPending] = useState(false);
+  const [displayMode, setDisplayMode] = useState<WidgetDisplayMode>(
+    () => bridge.getDisplayMode?.() ?? "inline",
+  );
   const previousRevisionKey = useRef(revisionKey(snapshot));
   const tabRefs = useRef(new Map<DashboardTab, HTMLButtonElement>());
 
@@ -188,7 +194,6 @@ export function AuditDashboard({ snapshot, bridge }: AuditDashboardProps) {
       const reset: WidgetViewState = {
         ...current,
         selectedFindingId: null,
-        selectedQuarantineEntryId: null,
         panel: "none",
         skippedFindingIds: [],
       };
@@ -344,7 +349,7 @@ export function AuditDashboard({ snapshot, bridge }: AuditDashboardProps) {
     setExclusionRefreshKey((current) => current + 1);
   }
 
-  async function requestFullscreen(): Promise<void> {
+  async function toggleDisplayMode(): Promise<void> {
     if (bridge.requestDisplayMode === undefined) {
       toast.error(
         "Эта версия Codex не умеет разворачивать окно. Проверка остаётся доступна здесь.",
@@ -352,10 +357,16 @@ export function AuditDashboard({ snapshot, bridge }: AuditDashboardProps) {
       return;
     }
     setFullscreenPending(true);
+    const requestedMode =
+      displayMode === "fullscreen" ? "inline" : "fullscreen";
     try {
-      await bridge.requestDisplayMode("fullscreen");
+      setDisplayMode(await bridge.requestDisplayMode(requestedMode));
     } catch {
-      toast.error("Codex не развернул окно. Проверка остаётся доступна здесь.");
+      toast.error(
+        requestedMode === "fullscreen"
+          ? "Codex не развернул окно. Проверка остаётся доступна здесь."
+          : "Codex не свернул окно. Проверка остаётся открыта.",
+      );
     } finally {
       setFullscreenPending(false);
     }
@@ -379,6 +390,15 @@ export function AuditDashboard({ snapshot, bridge }: AuditDashboardProps) {
                 <h1 className="text-2xl font-semibold tracking-tight">
                   Очистка MacBook от мусора
                 </h1>
+                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                  <span className="font-medium">Свободно</span>
+                  <span className="tabular-nums">
+                    {formatBytes(acceptedSnapshot.diskObservation.availableBytes)}
+                  </span>
+                  <span className="text-muted-foreground">
+                    из {formatBytes(acceptedSnapshot.diskObservation.totalBytes)}
+                  </span>
+                </div>
               </div>
             </div>
             <CardAction className="flex flex-wrap items-center gap-2 max-sm:col-start-1 max-sm:row-span-1 max-sm:row-start-3 max-sm:mt-3 max-sm:justify-self-start">
@@ -386,14 +406,16 @@ export function AuditDashboard({ snapshot, bridge }: AuditDashboardProps) {
                 type="button"
                 variant="outline"
                 disabled={isFullscreenPending}
-                onClick={() => void requestFullscreen()}
+                onClick={() => void toggleDisplayMode()}
               >
                 {isFullscreenPending ? (
                   <LoaderCircleIcon className="animate-spin" data-icon="inline-start" />
+                ) : displayMode === "fullscreen" ? (
+                  <Minimize2Icon data-icon="inline-start" />
                 ) : (
                   <Maximize2Icon data-icon="inline-start" />
                 )}
-                Развернуть
+                {displayMode === "fullscreen" ? "Свернуть" : "Развернуть"}
               </Button>
             </CardAction>
           </CardHeader>
@@ -485,59 +507,66 @@ export function AuditDashboard({ snapshot, bridge }: AuditDashboardProps) {
             <div className="lg:col-span-8">
               <AuditProgress snapshot={acceptedSnapshot} onCancel={() => void cancelAudit()} />
             </div>
-            <div className="lg:col-span-12 lg:row-start-2">
-              <StorageSummary
-                storageSummary={acceptedSnapshot.storageSummary}
-                diskObservation={acceptedSnapshot.diskObservation}
-              />
-            </div>
-          <Card className="lg:col-span-4 lg:col-start-9 lg:row-start-1">
-            <CardHeader>
-              <CardTitle>Итог проверки</CardTitle>
-              <CardDescription>
-                Найдено объектов: {acceptedSnapshot.findingSummary.totalCount}. Загружено: {acceptedSnapshot.findings.length}. Оставлено по вашему выбору: {acceptedSnapshot.excludedCount}.
-                Источников проверено: {acceptedSnapshot.coverage.checkedSourceCount}; недоступно: {acceptedSnapshot.coverage.skippedSourceCount}.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-wrap gap-2">
-              <Badge variant="secondary">
-                Можно рассмотреть: {acceptedSnapshot.findingSummary.supportLevelCounts.candidate}
-              </Badge>
-              <Badge variant="secondary">
-                Только анализ: {acceptedSnapshot.findingSummary.supportLevelCounts.analysisOnly}
-              </Badge>
-              <Badge variant="secondary">
-                Нужна ручная проверка: {acceptedSnapshot.findingSummary.supportLevelCounts.unsupportedManual}
-              </Badge>
-            </CardContent>
-          </Card>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="findings" className="flex flex-col gap-4">
-          <FindingsTable
-            findings={visibleFindings}
-            revision={acceptedSnapshot.revision}
-            actionable={isActionableRevision}
-            bridge={bridge}
-            onInspect={inspectFinding}
-            onExclude={excludeFinding}
-            onSkip={skipFinding}
-          />
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm text-muted-foreground">
-              Показано {acceptedSnapshot.findings.length} из{" "}
-              {acceptedSnapshot.findingSummary.matchingCount}
-            </p>
-            {acceptedSnapshot.nextCursor !== null ? (
-              <Button
-                type="button"
-                variant="outline"
-                disabled={pagePending}
-                onClick={() => void loadNextPage()}
-              >
-                {pagePending ? "Загружаем…" : "Показать ещё"}
-              </Button>
+            <Card className="lg:col-span-4 lg:col-start-9 lg:row-start-1">
+              <CardHeader>
+                <CardTitle>Итог проверки</CardTitle>
+                <CardDescription>
+                  Найдено объектов: {acceptedSnapshot.findingSummary.totalCount}.
+                  Загружено: {acceptedSnapshot.findings.length}. Оставлено по вашему
+                  выбору: {acceptedSnapshot.excludedCount}. Источников проверено:{" "}
+                  {acceptedSnapshot.coverage.checkedSourceCount}; недоступно:{" "}
+                  {acceptedSnapshot.coverage.skippedSourceCount}.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-wrap gap-2">
+                <Badge variant="secondary">
+                  Можно рассмотреть:{" "}
+                  {acceptedSnapshot.findingSummary.supportLevelCounts.candidate}
+                </Badge>
+                <Badge variant="secondary">
+                  Только анализ:{" "}
+                  {acceptedSnapshot.findingSummary.supportLevelCounts.analysisOnly}
+                </Badge>
+                <Badge variant="secondary">
+                  Нужна ручная проверка:{" "}
+                  {
+                    acceptedSnapshot.findingSummary.supportLevelCounts
+                      .unsupportedManual
+                  }
+                </Badge>
+              </CardContent>
+            </Card>
+            {isActionableRevision ? (
+              <div className="flex flex-col gap-4 lg:col-span-12">
+                <FindingsTable
+                  findings={visibleFindings}
+                  revision={acceptedSnapshot.revision}
+                  actionable={isActionableRevision}
+                  bridge={bridge}
+                  onInspect={inspectFinding}
+                  onExclude={excludeFinding}
+                  onSkip={skipFinding}
+                />
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-sm text-muted-foreground">
+                    Показано {acceptedSnapshot.findings.length} из{" "}
+                    {acceptedSnapshot.findingSummary.matchingCount}
+                  </p>
+                  {acceptedSnapshot.nextCursor !== null ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={pagePending}
+                      onClick={() => void loadNextPage()}
+                    >
+                      {pagePending ? "Загружаем…" : "Показать ещё"}
+                    </Button>
+                  ) : null}
+                </div>
+                <StorageSummary
+                  storageSummary={acceptedSnapshot.storageSummary}
+                />
+              </div>
             ) : null}
           </div>
         </TabsContent>
@@ -677,6 +706,11 @@ function FindingsTable({
   onExclude,
   onSkip,
 }: FindingsTableProps) {
+  const [expandedGroupIds, setExpandedGroupIds] = useState<readonly string[]>(
+    [],
+  );
+  const groups = useMemo(() => groupDashboardFindings(findings), [findings]);
+
   if (findings.length === 0) {
     return (
       <Alert>
@@ -692,106 +726,179 @@ function FindingsTable({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Найденные объекты</CardTitle>
+        <h2 className="text-sm font-medium">Найденный мусор</h2>
         <CardDescription>
-          Для каждого объекта показаны причина, риск и доступное действие.
+          Результаты объединены по типу и приложению. Раскройте группу, чтобы
+          проверить и удалить отдельный объект через карантин.
         </CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="max-h-[min(46vh,34rem)] overflow-auto">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Объект</TableHead>
-              <TableHead>Почему найден</TableHead>
-              <TableHead>Размер</TableHead>
-              <TableHead>Можно ли убрать</TableHead>
+              <TableHead>Группа</TableHead>
+              <TableHead>Объектов</TableHead>
+              <TableHead>На диске</TableHead>
+              <TableHead>Доступно</TableHead>
               <TableHead>Действия</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {findings.map((finding) => {
-              const canMove =
-                actionable &&
-                revision !== null &&
-                finding.allowedActions.includes("prepare_move");
-              const canSkip = actionable && revision !== null;
-              const canExclude =
-                actionable &&
-                revision !== null &&
-                finding.allowedActions.includes("exclude");
-              const reasons = Array.from(
-                new Set([
-                  ...finding.blockingReasons,
-                  ...finding.findingFacts.blockingReasons,
-                ]),
-              );
-
+            {groups.map((group) => {
+              const expanded = expandedGroupIds.includes(group.groupId);
               return (
-                <TableRow key={finding.findingId}>
-                  <TableCell>
-                    <div className="flex min-w-52 flex-col gap-1 whitespace-normal">
-                      <span className="font-medium">{finding.displayName}</span>
-                      <span className="text-muted-foreground">{finding.componentDisplayName}</span>
-                      <SupportLevel level={finding.supportLevel} />
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-col gap-1 whitespace-normal">
-                      <span>Что это: {findingLabel(finding.label)}</span>
-                      <span>Насколько надёжен вывод: {confidenceLabel(finding.confidence)}</span>
-                      <span>Риск: {riskLabel(finding.risk)}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-col gap-1">
-                      <span>Размер файлов: {formatBytes(finding.logicalSize)}</span>
-                      <span>Занимает на диске: {formatBytes(finding.physicalSize)}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    {canMove ? (
-                      <span>Доступно: перемещение одного объекта в карантин</span>
-                    ) : reasons.length > 0 ? (
-                      <span>Действие недоступно: {reasons.map(blockingReasonLabel).join(", ")}</span>
-                    ) : (
-                      <span>Изменение файлов недоступно</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex min-w-56 flex-wrap gap-2">
+                <Fragment key={group.groupId}>
+                  <TableRow>
+                    <TableCell>
+                      <div className="flex min-w-48 flex-col gap-1 whitespace-normal">
+                        <span className="font-medium">{group.title}</span>
+                        <span className="text-muted-foreground">
+                          {group.description}
+                        </span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="tabular-nums">
+                      {group.findings.length}
+                    </TableCell>
+                    <TableCell className="tabular-nums">
+                      {formatBytes(group.physicalSize)}
+                    </TableCell>
+                    <TableCell>
+                      {group.actionableCount > 0
+                        ? `Можно удалить: ${group.actionableCount}`
+                        : "Только просмотр"}
+                    </TableCell>
+                    <TableCell>
                       <Button
                         variant="outline"
-                        aria-label={`Подробнее: ${finding.displayName}`}
-                        onClick={() => onInspect(finding)}
+                        aria-expanded={expanded}
+                        onClick={() =>
+                          setExpandedGroupIds((current) =>
+                            expanded
+                              ? current.filter((id) => id !== group.groupId)
+                              : [...current, group.groupId],
+                          )
+                        }
                       >
                         <EyeIcon data-icon="inline-start" />
-                        Подробнее
+                        {expanded ? "Скрыть" : "Показать объекты"}
                       </Button>
-                      {canMove && revision !== null && (
-                        <ActionDialog
-                          finding={finding}
-                          auditRevision={revision}
+                    </TableCell>
+                  </TableRow>
+                  {expanded ? (
+                    <TableRow key={`${group.groupId}:details`}>
+                      <TableCell colSpan={5}>
+                        <FindingGroupDetails
+                          group={group}
+                          revision={revision}
+                          actionable={actionable}
                           bridge={bridge}
+                          onInspect={onInspect}
+                          onExclude={onExclude}
+                          onSkip={onSkip}
                         />
-                      )}
-                      {canExclude && (
-                        <ExclusionAction finding={finding} onExclude={onExclude} />
-                      )}
-                      {canSkip && finding.supportLevel === "candidate" && (
-                        <Button variant="ghost" onClick={() => onSkip(finding)}>
-                          <SkipForwardIcon data-icon="inline-start" />
-                          Пропустить сейчас
-                        </Button>
-                      )}
-                    </div>
-                  </TableCell>
-                </TableRow>
+                      </TableCell>
+                    </TableRow>
+                  ) : null}
+                </Fragment>
               );
             })}
           </TableBody>
         </Table>
       </CardContent>
     </Card>
+  );
+}
+
+function FindingGroupDetails({
+  group,
+  revision,
+  actionable,
+  bridge,
+  onInspect,
+  onExclude,
+  onSkip,
+}: {
+  readonly group: DashboardFindingGroup;
+  readonly revision: number | null;
+  readonly actionable: boolean;
+  readonly bridge: WidgetBridge;
+  readonly onInspect: (finding: DashboardFinding) => void;
+  readonly onExclude: (finding: DashboardFinding) => Promise<void>;
+  readonly onSkip: (finding: DashboardFinding) => void;
+}) {
+  return (
+    <div className="flex max-h-72 flex-col gap-2 overflow-y-auto pr-1">
+      {group.findings.map((finding) => {
+        const canMove =
+          actionable &&
+          revision !== null &&
+          finding.allowedActions.includes("prepare_move");
+        const canSkip = actionable && revision !== null;
+        const canExclude =
+          actionable &&
+          revision !== null &&
+          finding.allowedActions.includes("exclude");
+        const reasons = Array.from(
+          new Set([
+            ...finding.blockingReasons,
+            ...finding.findingFacts.blockingReasons,
+          ]),
+        );
+
+        return (
+          <article
+            key={finding.findingId}
+            className="grid gap-3 rounded-lg border bg-background p-3 md:grid-cols-[minmax(0,1fr)_auto]"
+          >
+            <div className="flex min-w-0 flex-col gap-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-medium">{finding.displayName}</span>
+                <SupportLevel level={finding.supportLevel} />
+              </div>
+              <span className="text-muted-foreground">
+                {findingLabel(finding.label)} · {formatBytes(finding.physicalSize)} ·
+                риск {riskLabel(finding.risk)}
+              </span>
+              <span className="text-muted-foreground">
+                Надёжность вывода: {confidenceLabel(finding.confidence)}
+              </span>
+              {!canMove && reasons.length > 0 ? (
+                <span className="text-muted-foreground">
+                  Почему нельзя удалить:{" "}
+                  {reasons.map(blockingReasonLabel).join(", ")}
+                </span>
+              ) : null}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="outline"
+                aria-label={`Подробнее: ${finding.displayName}`}
+                onClick={() => onInspect(finding)}
+              >
+                Подробнее
+              </Button>
+              {canMove && revision !== null ? (
+                <ActionDialog
+                  finding={finding}
+                  auditRevision={revision}
+                  bridge={bridge}
+                />
+              ) : null}
+              {canExclude ? (
+                <ExclusionAction finding={finding} onExclude={onExclude} />
+              ) : null}
+              {canSkip && finding.supportLevel === "candidate" ? (
+                <Button variant="ghost" onClick={() => onSkip(finding)}>
+                  <SkipForwardIcon data-icon="inline-start" />
+                  Пропустить
+                </Button>
+              ) : null}
+            </div>
+          </article>
+        );
+      })}
+    </div>
   );
 }
 

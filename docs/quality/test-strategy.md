@@ -60,7 +60,7 @@ Snapshot A/B tests меняют candidate, parent, executable, process/open-file
 
 ## Packaged plugin surface probe
 
-`pnpm probe:plugin-surface` запускает отслеживаемый plugin-relative stdio runtime на временном синтетическом `HOME`, но не вызывает `audit_start`. Probe проверяет точные 9 model-visible и 15 app-only tools, visibility metadata, binding `dashboard_open` к Dashboard v3, MIME и закрытый CSP. HTTP/terminal launch contract, неизвестный tool, ошибочная видимость и resource drift завершают проверку ошибкой. Ошибка выводит только безопасный typed code и не содержит абсолютный plugin root, синтетический `HOME` или другой локальный путь.
+`pnpm probe:plugin-surface` запускает отслеживаемый plugin-relative stdio runtime на временном синтетическом `HOME`, но не вызывает `audit_start`. Probe проверяет точные 9 model-visible и 15 app-only tools, visibility metadata, binding `dashboard_open` к Dashboard v4, MIME и закрытый CSP. HTTP/terminal launch contract, неизвестный tool, ошибочная видимость и resource drift завершают проверку ошибкой. Ошибка выводит только безопасный typed code и не содержит абсолютный plugin root, синтетический `HOME` или другой локальный путь.
 
 Plugin-test сравнивает [capability matrix](plugin-capability-matrix.md) с тем же каноническим списком и подменяет Dashboard URI только во временной копии runtime, доказывая отрицательный gate. Зелёный packaged probe не доказывает наличие task-scoped registry в каждом процессе Codex; такой host gap обрабатывается по [runbook](../development/audit-runtime-troubleshooting.md) без обхода.
 
@@ -80,7 +80,7 @@ Plugin-test сравнивает [capability matrix](plugin-capability-matrix.md
 
 ## UI tests
 
-Проверяются пять вкладок, состояния загрузки и отмены, coverage warnings, `supportLevel`, безопасные owner/profile facts, `FindingFacts`, `ReclaimEstimate`, evidence `Sheet`, «Переместить в карантин», «Исключить», «Пропустить сейчас», Quarantine Center, Exclusions, Schedule, пустые состояния, пять показателей, отсутствие кнопки при запрете policy, точный текст `AlertDialog`, одно действие за подтверждение, keyboard navigation, focus return и корректная обработка expired token. Отдельные negative tests доказывают отсутствие bulk action, shell-команд, tool call при «Пропустить сейчас», direct delete исходника и обхода policy прямым tool call.
+Проверяются четыре вкладки, состояния загрузки и отмены, grouped cache/application rows, bounded высота таблицы, free-space в шапке, скрытие отдельного storage-блока во время аудита, `supportLevel`, безопасные owner/profile facts, `FindingFacts`, `ReclaimEstimate`, evidence `Sheet`, «Удалить» через карантин, «Исключить», «Пропустить», Quarantine Center, Exclusions, Schedule, пустые состояния, отсутствие кнопки при запрете policy, display-mode toggle, keyboard navigation и focus return. Последовательная очистка карантина требует отдельного подтверждения каждого entry; negative tests доказывают отсутствие bulk token, shell-команд, direct delete исходника и обхода policy.
 
 Schedule tests v0.1 проверяют инертность schema/intent skeleton, `enabled=false`, отсутствие automation ID, opt-in/lifecycle controls, next/last scheduled run и host/system scheduler side effects. Вкладка предлагает ручной `application_remnants` через обычный audit flow; MCP App не вызывает host-native tool, cron или LaunchAgent. Duplicate/update/pause/resume/delete и scheduled-prompt tests перенесены в post-v0.1 CMC-13.
 

@@ -28,7 +28,6 @@ import {
   FindingRevealOutputSchema,
   ModelSafeTextSchema,
   ToolErrorSchema,
-  UserExclusionSchema,
   containsSecretLikeValue,
   type ExclusionCreateInput,
   type ExclusionListInput,
@@ -36,9 +35,11 @@ import {
   type ExclusionRemoveInput,
   type ExclusionResetInput,
   type ExclusionResetPrepareInput,
-  type UserExclusion,
+  type KeyedUserExclusion,
+  type KeyedUserExclusionIdentity,
   type UserExclusionIdentity,
 } from "@codex-mac-cleaner/contracts";
+import { matchKeyedUserExclusions } from "@codex-mac-cleaner/policy";
 import {
   assertSupportedPlatform,
   type PlatformInput,
@@ -136,7 +137,8 @@ export const MODEL_VISIBLE_TOOL_DEFINITIONS = {
   },
   dashboard_open: {
     title: "Открыть окно проверки",
-    description: "Открывает безопасные результаты проверки Mac.",
+    description:
+      "Открывает live-аудит по ID либо последний сохранённый результат через null/null.",
     inputSchema: DashboardOpenInputSchema,
     outputSchema: DashboardOpenOutputSchema,
     annotations: { ...ModelToolAnnotations, readOnlyHint: true },
@@ -250,15 +252,24 @@ export type AppVisibleToolName = keyof typeof APP_VISIBLE_TOOL_DEFINITIONS;
 interface ExclusionStorePort {
   list(): Promise<{
     readonly stateVersion: number;
-    readonly exclusions: readonly UserExclusion[];
+    readonly exclusions: readonly KeyedUserExclusion[];
   }>;
-  create(exclusion: UserExclusion): Promise<{
+  create(
+    metadata: Readonly<{
+      exclusionId: string;
+      ruleId: string;
+      artifactKind: UserExclusionIdentity["artifactKind"];
+      createdAt: string;
+      reasonCategory: ExclusionListItem["reasonCategory"];
+    }>,
+    identity: UserExclusionIdentity,
+  ): Promise<{
     readonly stateVersion: number;
-    readonly exclusions: readonly UserExclusion[];
+    readonly exclusions: readonly KeyedUserExclusion[];
   }>;
   remove(exclusionId: string): Promise<{
     readonly stateVersion: number;
-    readonly exclusions: readonly UserExclusion[];
+    readonly exclusions: readonly KeyedUserExclusion[];
   }>;
   reset(expectedStateVersion: number): Promise<
     | Readonly<{
@@ -269,13 +280,18 @@ interface ExclusionStorePort {
     | Readonly<{ status: "stale"; stateVersion: number }>
   >;
   readForAudit(): Promise<
-    | Readonly<{ status: "ready"; exclusions: readonly UserExclusion[] }>
+    | Readonly<{
+        status: "ready";
+        stateVersion: number;
+        exclusions: readonly KeyedUserExclusion[];
+      }>
     | Readonly<{
         status: "invalid";
-        errorCode: "EXCLUSION_STATE_INVALID";
+        errorCode: string;
         tokenIssuance: "blocked";
       }>
   >;
+  deriveIdentity(identity: UserExclusionIdentity): KeyedUserExclusionIdentity;
 }
 
 interface FindingIdentityResolver {
@@ -309,22 +325,7 @@ export class ExclusionToolError extends Error {
   }
 }
 
-function sameIdentity(
-  exclusion: UserExclusion,
-  identity: UserExclusionIdentity,
-): boolean {
-  return (
-    exclusion.ruleId === identity.ruleId &&
-    exclusion.artifactKind === identity.artifactKind &&
-    exclusion.normalizedTargetIdentity === identity.normalizedTargetIdentity &&
-    (exclusion.bundleId ?? null) === (identity.bundleId ?? null) &&
-    (exclusion.packageId ?? null) === (identity.packageId ?? null) &&
-    (exclusion.signingIdentity ?? null) === (identity.signingIdentity ?? null) &&
-    exclusion.ownerTypeFingerprint === identity.ownerTypeFingerprint
-  );
-}
-
-function listItem(exclusion: UserExclusion): ExclusionListItem {
+function listItem(exclusion: KeyedUserExclusion): ExclusionListItem {
   return ExclusionListItemSchema.parse({
     exclusionId: exclusion.exclusionId,
     ruleId: exclusion.ruleId,
@@ -385,19 +386,19 @@ export class ExclusionService {
     );
     if (cached !== undefined) return cached;
     const identity = await this.resolveIdentity(input.findingId, input.auditRevision);
-    const exclusion = UserExclusionSchema.parse({
-      schemaVersion: 1,
+    const metadata = {
       exclusionId: this.createId("exclusion"),
-      ...identity,
+      ruleId: identity.ruleId,
+      artifactKind: identity.artifactKind,
       createdAt: this.now().toISOString(),
       reasonCategory: input.reasonCategory,
-    });
-    const state = await this.options.store.create(exclusion);
+    } as const;
+    const state = await this.options.store.create(metadata, identity);
     return this.remember(
       "create",
       input.requestId,
       ExclusionCreateOutputSchema.parse({
-        exclusion: listItem(exclusion),
+        exclusion: metadata,
         stateVersion: state.stateVersion,
       }),
     );
@@ -492,7 +493,14 @@ export class ExclusionService {
     if (state.status === "invalid") {
       throw new ExclusionToolError("EXCLUSION_STATE_INVALID", "fatal");
     }
-    if (state.exclusions.some((exclusion) => sameIdentity(exclusion, identity))) {
+    const match = matchKeyedUserExclusions(
+      state.exclusions,
+      this.options.store.deriveIdentity(identity),
+    );
+    if (match.status === "invalid") {
+      throw new ExclusionToolError("EXCLUSION_STATE_INVALID", "fatal");
+    }
+    if (match.status === "matched") {
       throw new ExclusionToolError("EXCLUDED_FINDING");
     }
   }
@@ -653,7 +661,7 @@ function auditServiceError(error: unknown): CallToolResult {
       errorCode: "AUDIT_STALE",
       severity: "blocking",
       scope: "audit",
-      message: "Результаты этой проверки больше недоступны в текущем процессе.",
+      message: "Сохранённый результат этой проверки больше недоступен.",
       recommendedAction:
         "Начните новую проверку только после явного запроса пользователя.",
       retryable: false,

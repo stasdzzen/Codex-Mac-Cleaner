@@ -13,17 +13,20 @@ describe("display-mode bridge", () => {
   });
 
   it("передаёт пользовательский запрос в документированный host API", async () => {
-    const requestDisplayMode = vi.fn(async () => ({ mode: "fullscreen" }));
+    const requestDisplayMode = vi.fn(async ({ mode }: { mode: string }) => ({
+      mode,
+    }));
     Object.defineProperty(window, "openai", {
       configurable: true,
-      value: { requestDisplayMode },
+      value: { displayMode: "fullscreen", requestDisplayMode },
     });
 
     const bridge = createStandaloneBridge();
-    await bridge.requestDisplayMode?.("fullscreen");
+    expect(bridge.getDisplayMode?.()).toBe("fullscreen");
+    await bridge.requestDisplayMode?.("inline");
 
     expect(requestDisplayMode).toHaveBeenCalledTimes(1);
-    expect(requestDisplayMode).toHaveBeenCalledWith({ mode: "fullscreen" });
+    expect(requestDisplayMode).toHaveBeenCalledWith({ mode: "inline" });
   });
 
   it("передаёт разрешённую внешнюю ссылку в host и отклоняет произвольную", async () => {

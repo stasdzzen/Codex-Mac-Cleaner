@@ -47,7 +47,7 @@ const temporaryRoot = await mkdtemp(join(tmpdir(), "cmc-dashboard-build-"));
 const widgetOutput = join(temporaryRoot, "widget");
 const dashboardTarget = join(
   outputRoot,
-  ".codex-plugin/assets/dashboard-v3.html",
+  ".codex-plugin/assets/dashboard-v4.html",
 );
 const runtimeTarget = join(outputRoot, ".codex-plugin/runtime/server.js");
 
@@ -61,31 +61,17 @@ try {
       alias: [
         { find: /^react$/u, replacement: reactEntry },
         { find: /^react\/jsx-runtime$/u, replacement: reactJsxRuntime },
-        {
-          find: "@/lib/bridge",
-          replacement: join(
-            repositoryRoot,
-            "apps/mcp-server/src/resources/widget-bridge.ts",
-          ),
-        },
-        {
-          find: "@/app",
-          replacement: join(
-            repositoryRoot,
-            "apps/mcp-server/src/resources/widget-app.tsx",
-          ),
-        },
         { find: "@", replacement: join(widgetRoot, "src") },
       ],
     },
     build: {
       outDir: widgetOutput,
       emptyOutDir: true,
-      rollupOptions: { input: join(widgetRoot, "dashboard-v3.html") },
+      rollupOptions: { input: join(widgetRoot, "dashboard-v4.html") },
     },
   });
 
-  const builtHtmlPath = join(widgetOutput, "dashboard-v3.html");
+  const builtHtmlPath = join(widgetOutput, "dashboard-v4.html");
   let html = await readFile(builtHtmlPath, "utf8");
   const scriptMatch = html.match(
     /<script\s+type="module"\s+crossorigin\s+src="([^"]+)"\s*><\/script>/u,
