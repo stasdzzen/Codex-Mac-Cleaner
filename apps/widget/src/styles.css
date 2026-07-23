@@ -172,23 +172,6 @@
     line-height: 1;
   }
 
-  .audit-progress-track {
-    isolation: isolate;
-  }
-
-  [data-audit-active="true"] .audit-progress-track::after {
-    position: absolute;
-    inset-block: 0;
-    width: 26%;
-    content: "";
-    background: linear-gradient(
-      90deg,
-      transparent,
-      color-mix(in oklab, var(--primary-foreground) 58%, transparent),
-      transparent
-    );
-  }
-
   .storage-comparison-track {
     height: 0.55rem;
     overflow: hidden;
@@ -233,15 +216,6 @@
   }
 }
 
-@keyframes audit-scan {
-  from {
-    transform: translateX(-110%);
-  }
-  to {
-    transform: translateX(390%);
-  }
-}
-
 @keyframes audit-status-pulse {
   50% {
     box-shadow: 0 0 0 0.45rem color-mix(in oklab, var(--primary) 5%, transparent);
@@ -264,10 +238,6 @@
 
   [data-audit-active="true"] .audit-status-mark {
     animation: audit-status-pulse 1.8s ease-in-out infinite;
-  }
-
-  [data-audit-active="true"] .audit-progress-track::after {
-    animation: audit-scan 2.4s ease-in-out infinite;
   }
 
   .storage-comparison-bar {

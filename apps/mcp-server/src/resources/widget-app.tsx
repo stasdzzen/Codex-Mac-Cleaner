@@ -136,7 +136,9 @@ export function App() {
         <main className="mx-auto flex min-h-screen w-full max-w-3xl items-center p-6">
           <section className="w-full rounded-xl border bg-card p-6 text-card-foreground shadow-sm">
             <p className="text-sm text-muted-foreground">Codex Mac Cleaner</p>
-            <h1 className="mt-2 text-2xl font-semibold">Проверка Mac</h1>
+            <h1 className="mt-2 text-2xl font-semibold">
+              Очистка MacBook от мусора
+            </h1>
             <h2 className="mt-6 text-base font-medium">Ожидание результатов</h2>
             <p className="mt-2 text-sm text-muted-foreground">
               Найденные объекты и доступные действия появятся после ответа локального плагина.
