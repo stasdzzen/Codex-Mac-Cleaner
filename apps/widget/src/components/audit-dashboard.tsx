@@ -17,7 +17,10 @@ import {
 import { toast } from "sonner";
 
 import pluginIconUrl from "@/assets/codex-mac-cleaner-icon.png?inline";
-import { ActionDialog } from "@/components/action-dialog";
+import {
+  ActionDialog,
+  type MoveResult,
+} from "@/components/action-dialog";
 import { AuditProgress } from "@/components/audit-progress";
 import { ExclusionsTab } from "@/components/exclusions-tab";
 import { FindingSheet } from "@/components/finding-sheet";
@@ -116,10 +119,23 @@ export function AuditDashboard({ snapshot, bridge }: AuditDashboardProps) {
       if (revisionKey(current) !== revisionKey(snapshot)) {
         return snapshot;
       }
+      const keepCurrentStorage =
+        current.storageSummary.stateVersion >
+        snapshot.storageSummary.stateVersion;
       return {
         ...snapshot,
+        stateVersion: Math.max(current.stateVersion, snapshot.stateVersion),
         findings: current.findings,
         nextCursor: current.nextCursor,
+        storageSummary: keepCurrentStorage
+          ? current.storageSummary
+          : snapshot.storageSummary,
+        diskObservation: keepCurrentStorage
+          ? current.diskObservation
+          : snapshot.diskObservation,
+        quarantineEntries: keepCurrentStorage
+          ? current.quarantineEntries
+          : snapshot.quarantineEntries,
       };
     });
   }, [snapshot]);
@@ -349,6 +365,43 @@ export function AuditDashboard({ snapshot, bridge }: AuditDashboardProps) {
     setExclusionRefreshKey((current) => current + 1);
   }
 
+  function recordMovedFinding(
+    findingId: string,
+    result: MoveResult,
+  ): void {
+    setAcceptedSnapshot((current) => ({
+      ...current,
+      stateVersion: Math.max(current.stateVersion, result.stateVersion),
+      storageSummary: result.storageSummary,
+      diskObservation: result.diskObservation,
+      findings: current.findings.filter(
+        (finding) => finding.findingId !== findingId,
+      ),
+      quarantineEntries: [
+        ...current.quarantineEntries.filter(
+          (entry) =>
+            entry.entryId !== result.quarantineEntry.quarantineEntryId,
+        ),
+        {
+          entryId: result.quarantineEntry.quarantineEntryId,
+          displayName: result.quarantineEntry.displayName,
+          physicalBytes: result.quarantineEntry.physicalBytes,
+          movedAt: result.quarantineEntry.movedAt,
+          state: result.quarantineEntry.state,
+        },
+      ],
+    }));
+    commitViewState((current) => ({
+      ...current,
+      selectedFindingId:
+        current.selectedFindingId === findingId
+          ? null
+          : current.selectedFindingId,
+      panel:
+        current.selectedFindingId === findingId ? "none" : current.panel,
+    }));
+  }
+
   async function toggleDisplayMode(): Promise<void> {
     if (bridge.requestDisplayMode === undefined) {
       toast.error(
@@ -546,6 +599,7 @@ export function AuditDashboard({ snapshot, bridge }: AuditDashboardProps) {
                   onInspect={inspectFinding}
                   onExclude={excludeFinding}
                   onSkip={skipFinding}
+                  onMoved={recordMovedFinding}
                 />
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <p className="text-sm text-muted-foreground">
@@ -695,6 +749,7 @@ interface FindingsTableProps {
   readonly onInspect: (finding: DashboardFinding) => void;
   readonly onExclude: (finding: DashboardFinding) => Promise<void>;
   readonly onSkip: (finding: DashboardFinding) => void;
+  readonly onMoved: (findingId: string, result: MoveResult) => void;
 }
 
 function FindingsTable({
@@ -705,6 +760,7 @@ function FindingsTable({
   onInspect,
   onExclude,
   onSkip,
+  onMoved,
 }: FindingsTableProps) {
   const [expandedGroupIds, setExpandedGroupIds] = useState<readonly string[]>(
     [],
@@ -796,6 +852,7 @@ function FindingsTable({
                           onInspect={onInspect}
                           onExclude={onExclude}
                           onSkip={onSkip}
+                          onMoved={onMoved}
                         />
                       </TableCell>
                     </TableRow>
@@ -818,6 +875,7 @@ function FindingGroupDetails({
   onInspect,
   onExclude,
   onSkip,
+  onMoved,
 }: {
   readonly group: DashboardFindingGroup;
   readonly revision: number | null;
@@ -826,6 +884,7 @@ function FindingGroupDetails({
   readonly onInspect: (finding: DashboardFinding) => void;
   readonly onExclude: (finding: DashboardFinding) => Promise<void>;
   readonly onSkip: (finding: DashboardFinding) => void;
+  readonly onMoved: (findingId: string, result: MoveResult) => void;
 }) {
   return (
     <div className="flex max-h-72 flex-col gap-2 overflow-y-auto pr-1">
@@ -883,6 +942,7 @@ function FindingGroupDetails({
                   finding={finding}
                   auditRevision={revision}
                   bridge={bridge}
+                  onMoved={onMoved}
                 />
               ) : null}
               {canExclude ? (

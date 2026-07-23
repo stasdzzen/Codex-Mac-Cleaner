@@ -139,10 +139,12 @@ export function createStandaloneBridge(): WidgetBridge {
             const result = await requestDisplayMode.call(host.openai, { mode });
             if (
               typeof result === "object" &&
-              result !== null &&
-              Reflect.get(result, "mode") === "fullscreen"
+              result !== null
             ) {
-              return "fullscreen";
+              const observedMode = Reflect.get(result, "mode");
+              if (observedMode === "fullscreen" || observedMode === "inline") {
+                return observedMode;
+              }
             }
             return mode;
           },

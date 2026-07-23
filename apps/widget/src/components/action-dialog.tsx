@@ -17,7 +17,10 @@ import {
 import { Button } from "@/components/ui/button";
 import type { WidgetBridge } from "@/lib/bridge";
 import { createRequestId } from "@/lib/bridge";
-import type { DashboardFinding } from "@/lib/dashboard-types";
+import type {
+  DashboardFinding,
+  DashboardSnapshot,
+} from "@/lib/dashboard-types";
 import { riskLabel } from "@/lib/presentation";
 import { formatBytes } from "@/lib/utils";
 
@@ -25,13 +28,32 @@ interface MovePreview {
   readonly previewToken: string;
 }
 
+export interface MoveResult {
+  readonly quarantineEntry: {
+    readonly quarantineEntryId: string;
+    readonly displayName: string;
+    readonly physicalBytes: number;
+    readonly movedAt: string;
+    readonly state: "moved";
+  };
+  readonly storageSummary: DashboardSnapshot["storageSummary"];
+  readonly diskObservation: DashboardSnapshot["diskObservation"];
+  readonly stateVersion: number;
+}
+
 interface ActionDialogProps {
   readonly finding: DashboardFinding;
   readonly auditRevision: number;
   readonly bridge: WidgetBridge;
+  readonly onMoved: (findingId: string, result: MoveResult) => void;
 }
 
-export function ActionDialog({ finding, auditRevision, bridge }: ActionDialogProps) {
+export function ActionDialog({
+  finding,
+  auditRevision,
+  bridge,
+  onMoved,
+}: ActionDialogProps) {
   const [previewToken, setPreviewToken] = useState<string | null>(null);
   const [preparing, setPreparing] = useState(false);
   const [open, setOpen] = useState(false);
@@ -60,10 +82,14 @@ export function ActionDialog({ finding, auditRevision, bridge }: ActionDialogPro
     setPreparing(true);
     setPreviewToken(null);
     try {
-      await bridge.callTool("quarantine_move", {
-        previewToken,
-        operationId: createRequestId("move"),
-      });
+      const result = await bridge.callTool<MoveResult>(
+        "quarantine_move",
+        {
+          previewToken,
+          operationId: createRequestId("move"),
+        },
+      );
+      onMoved(finding.findingId, result);
       toast.success("Объект перемещён в карантин.");
       setOpen(false);
     } catch {

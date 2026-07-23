@@ -29,6 +29,20 @@ describe("display-mode bridge", () => {
     expect(requestDisplayMode).toHaveBeenCalledWith({ mode: "inline" });
   });
 
+  it("возвращает фактически установленный host mode при отказе в запросе", async () => {
+    const requestDisplayMode = vi.fn(async () => ({ mode: "inline" }));
+    Object.defineProperty(window, "openai", {
+      configurable: true,
+      value: { displayMode: "inline", requestDisplayMode },
+    });
+
+    const bridge = createStandaloneBridge();
+
+    await expect(
+      bridge.requestDisplayMode?.("fullscreen"),
+    ).resolves.toBe("inline");
+  });
+
   it("передаёт разрешённую внешнюю ссылку в host и отклоняет произвольную", async () => {
     const openExternal = vi.fn(async () => undefined);
     Object.defineProperty(window, "openai", {

@@ -32,11 +32,12 @@ import {
   AuditStatusInputSchema,
   DashboardOpenInputSchema,
   DashboardPageInputSchema,
+  CorrelationRevisionSchema,
   FindingModelViewSchema,
   FindingInspectInputSchema,
   FindingRevealInputSchema,
   ModelSafeTextSchema,
-  UserExclusionIdentitySchema,
+  SafeCorrelationViewSchema,
   type DiskObservation,
   type AuditProgressPhase,
   type FindingModelView,
@@ -161,11 +162,11 @@ const PROTECTED_SCOPE_NAME_PATTERNS: Readonly<
   system_scope:
     /(?:^|[._ -])(?:system|launchagent|launchdaemon|autostart)(?:$|[._ -])/iu,
   credential_store:
-    /(?:^|[._ -])(?:credential|keychain|password|secret|token|wallet|private[_-]?key|authorization)(?:$|[._ -])/iu,
+    /(?:^|[._ -])(?:credentials?|keychains?|passwords?|secrets?|tokens?|wallets?|private[_-]?keys?|authori[sz]ations?|auth|oauth|sessions?|cookies?|logins?)(?:$|[._ -])/iu,
   browser_profile:
-    /(?:^|[._ -])(?:safari|chrome|firefox|browser)(?:$|[._ -])/iu,
+    /(?:^|[._ -])(?:safari|chrome|firefox|browsers?|bookmarks?|history|profiles?)(?:$|[._ -])/iu,
   personal_data:
-    /(?:^|[._ -])(?:personal|mail|message|photo|contact|calendar|database)(?:$|[._ -])/iu,
+    /(?:^|[._ -])(?:personal|mails?|messages?|photos?|contacts?|calendars?|databases?|documents?|save(?:d|s)?|savegames?|sync|vpn)(?:$|[._ -])/iu,
 });
 
 function isWithinBoundary(boundary: string, path: string): boolean {
@@ -1140,12 +1141,17 @@ interface FindingRecord {
   readonly evidence: EvidenceSet;
   readonly classification: Classification;
   readonly policy: PolicyDecision;
-  readonly correlation: CorrelationResolverResult | null;
+  readonly correlation: RuntimeCorrelationRecord | null;
   readonly regenerabilityProof: RuntimeRegenerabilityProof | null;
   readonly candidate: RuntimeCandidate | null;
   readonly identity: UserExclusionIdentity | null;
   readonly diagnostic: RuntimeDiagnostic | null;
 }
+
+type RuntimeCorrelationRecord = Pick<
+  CorrelationResolverResult,
+  "candidateSubjectId" | "revision" | "safeView"
+>;
 
 interface AuditRunRecord {
   readonly auditId: string;
@@ -1178,7 +1184,36 @@ interface AuditRunRecord {
   persistence: Promise<void> | null;
 }
 
-type PersistedAuditRun = Omit<AuditRunRecord, "controller" | "persistence">;
+type PersistedCandidate = Pick<
+  RuntimeCandidate,
+  | "ref"
+  | "path"
+  | "allowedRoot"
+  | "root"
+  | "kind"
+  | "fingerprint"
+  | "parentFingerprint"
+>;
+
+interface PersistedFinding {
+  readonly model: FindingModelView;
+  readonly componentDisplayName: string;
+  readonly observation: Observation;
+  readonly evidence: EvidenceSet;
+  readonly classification: Classification;
+  readonly policy: PolicyDecision;
+  readonly correlation: RuntimeCorrelationRecord | null;
+  readonly regenerabilityProof: RuntimeRegenerabilityProof | null;
+  readonly candidate: PersistedCandidate | null;
+  readonly diagnostic: RuntimeDiagnostic | null;
+}
+
+type PersistedAuditRun = Omit<
+  AuditRunRecord,
+  "controller" | "persistence" | "findings"
+> & {
+  readonly findings: readonly PersistedFinding[];
+};
 
 interface PersistedAuditEnvelope {
   readonly schemaVersion: 1;
@@ -1196,6 +1231,14 @@ function plainRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function hasExactKeys(
+  value: Record<string, unknown>,
+  keys: readonly string[],
+): boolean {
+  return Object.keys(value).sort().join("\u0000") ===
+    [...keys].sort().join("\u0000");
+}
+
 function stableJson(value: unknown): string {
   if (Array.isArray(value)) {
     return `[${value.map(stableJson).join(",")}]`;
@@ -1209,15 +1252,60 @@ function stableJson(value: unknown): string {
   return JSON.stringify(value) ?? "null";
 }
 
-function persistedFinding(value: unknown): value is FindingRecord {
-  if (!plainRecord(value)) return false;
-  if (!FindingModelViewSchema.safeParse(value.model).success) return false;
-  if (!ModelSafeTextSchema.safeParse(value.componentDisplayName).success) {
+function persistedCandidate(value: unknown): value is PersistedCandidate {
+  return (
+    plainRecord(value) &&
+    hasExactKeys(value, [
+      "ref",
+      "path",
+      "allowedRoot",
+      "root",
+      "kind",
+      "fingerprint",
+      "parentFingerprint",
+    ]) &&
+    typeof value.ref === "string" &&
+    typeof value.path === "string" &&
+    typeof value.allowedRoot === "string" &&
+    typeof value.root === "string" &&
+    typeof value.kind === "string" &&
+    plainRecord(value.fingerprint) &&
+    plainRecord(value.parentFingerprint)
+  );
+}
+
+function persistedCorrelation(
+  value: unknown,
+): value is RuntimeCorrelationRecord {
+  return (
+    plainRecord(value) &&
+    hasExactKeys(value, ["candidateSubjectId", "revision", "safeView"]) &&
+    typeof value.candidateSubjectId === "string" &&
+    CorrelationRevisionSchema.safeParse(value.revision).success &&
+    SafeCorrelationViewSchema.safeParse(value.safeView).success
+  );
+}
+
+function persistedFinding(value: unknown): value is PersistedFinding {
+  if (
+    !plainRecord(value) ||
+    !hasExactKeys(value, [
+      "model",
+      "componentDisplayName",
+      "observation",
+      "evidence",
+      "classification",
+      "policy",
+      "correlation",
+      "regenerabilityProof",
+      "candidate",
+      "diagnostic",
+    ])
+  ) {
     return false;
   }
-  if (
-    !UserExclusionIdentitySchema.nullable().safeParse(value.identity).success
-  ) {
+  if (!FindingModelViewSchema.safeParse(value.model).success) return false;
+  if (!ModelSafeTextSchema.safeParse(value.componentDisplayName).success) {
     return false;
   }
   if (
@@ -1229,14 +1317,79 @@ function persistedFinding(value: unknown): value is FindingRecord {
     return false;
   }
   if (
+    value.correlation !== null &&
+    !persistedCorrelation(value.correlation)
+  ) {
+    return false;
+  }
+  if (
     value.candidate !== null &&
-    (!plainRecord(value.candidate) ||
-      typeof value.candidate.path !== "string" ||
-      typeof value.candidate.allowedRoot !== "string")
+    !persistedCandidate(value.candidate)
   ) {
     return false;
   }
   return true;
+}
+
+function identityForFinding(input: Readonly<{
+  classification: Classification;
+  candidate: Pick<RuntimeCandidate, "kind" | "fingerprint">;
+  targetIdentity: string;
+}>): UserExclusionIdentity {
+  return {
+    ruleId:
+      input.classification.ruleIds[0] ??
+      "CLASSIFIER_V2_UNKNOWN_INCOMPLETE_EVIDENCE",
+    artifactKind: input.candidate.kind,
+    normalizedTargetIdentity: `target:v1:${sha256(input.targetIdentity)}`,
+    bundleId: null,
+    packageId: null,
+    signingIdentity: null,
+    ownerTypeFingerprint: `owner-type:v1:${sha256(
+      `${input.candidate.fingerprint.uid}:${input.candidate.fingerprint.fileType}`,
+    )}`,
+  };
+}
+
+function hydratePersistedFinding(
+  finding: PersistedFinding,
+): FindingRecord {
+  const candidate: RuntimeCandidate | null =
+    finding.candidate === null
+      ? null
+      : {
+          ...finding.candidate,
+          protected: true,
+          protectedScopeEvaluation: { complete: false, kinds: [] },
+          regenerabilityProbe: {
+            schemaVersion: 1,
+            ruleId: CACHE_LOG_REGENERABILITY_RULE_ID,
+            ruleVersion: CACHE_LOG_REGENERABILITY_RULE_VERSION,
+            complete: false,
+            regenerable: false,
+            targetFingerprint: fingerprintDigest(
+              finding.candidate.fingerprint,
+            ),
+          },
+          pathValidation: {
+            ok: false,
+            errorCode: "PATH_ANCESTRY_INCOMPLETE",
+          },
+        };
+  return {
+    ...finding,
+    candidate,
+    identity:
+      candidate === null
+        ? null
+        : identityForFinding({
+            classification: finding.classification,
+            candidate,
+            targetIdentity:
+              finding.correlation?.candidateSubjectId ??
+              finding.evidence.targetIdentity,
+          }),
+  };
 }
 
 function parsePersistedAuditPayload(value: unknown): PersistedAuditRun {
@@ -1491,7 +1644,7 @@ class PersistentRuntimeExclusionStore implements RuntimeExclusionStore {
 
   constructor(
     stateRoot: string,
-    private readonly installationKey: InstallationKey,
+    private readonly installationKey: InstallationKey | null,
   ) {
     this.store = new KeyedExclusionStateStore({ stateRoot });
   }
@@ -1517,10 +1670,20 @@ class PersistentRuntimeExclusionStore implements RuntimeExclusionStore {
   }
 
   async readForAudit() {
+    if (this.installationKey === null) {
+      return {
+        status: "invalid" as const,
+        errorCode: "CORRELATION_SCHEMA_UNSUPPORTED",
+        tokenIssuance: "blocked" as const,
+      };
+    }
     return this.store.readForAudit();
   }
 
   deriveIdentity(identity: UserExclusionIdentity): KeyedUserExclusionIdentity {
+    if (this.installationKey === null) {
+      throw new Error("EXCLUSION_STATE_INVALID");
+    }
     const exclusion = deriveKeyedUserExclusion(
       this.installationKey,
       {
@@ -1584,6 +1747,7 @@ class AuditRuntimeService implements AuditToolService {
   private readonly pager: BoundedCursorPager;
   private latestAuditId: string | null = null;
   private latestCompletedAuditId: string | null = null;
+  private executionQueue: Promise<void> = Promise.resolve();
 
   constructor(
     private readonly filesystem: RuntimeFileSystemFacade,
@@ -1606,9 +1770,46 @@ class AuditRuntimeService implements AuditToolService {
     const {
       controller: _controller,
       persistence: _persistence,
+      findings,
       ...payload
     } = run;
-    return JSON.parse(JSON.stringify(payload)) as PersistedAuditRun;
+    return JSON.parse(
+      JSON.stringify({
+        ...payload,
+        findings: findings.map((finding): PersistedFinding => ({
+          model: finding.model,
+          componentDisplayName: finding.componentDisplayName,
+          observation: finding.observation,
+          evidence: finding.evidence,
+          classification: finding.classification,
+          policy: finding.policy,
+          correlation:
+            finding.correlation === null
+              ? null
+              : {
+                  candidateSubjectId:
+                    finding.correlation.candidateSubjectId,
+                  revision: finding.correlation.revision,
+                  safeView: finding.correlation.safeView,
+                },
+          regenerabilityProof: finding.regenerabilityProof,
+          candidate:
+            finding.candidate === null
+              ? null
+              : {
+                  ref: finding.candidate.ref,
+                  path: finding.candidate.path,
+                  allowedRoot: finding.candidate.allowedRoot,
+                  root: finding.candidate.root,
+                  kind: finding.candidate.kind,
+                  fingerprint: finding.candidate.fingerprint,
+                  parentFingerprint:
+                    finding.candidate.parentFingerprint,
+                },
+          diagnostic: finding.diagnostic,
+        })),
+      }),
+    ) as PersistedAuditRun;
   }
 
   private async persistLatest(run: AuditRunRecord): Promise<void> {
@@ -1674,6 +1875,7 @@ class AuditRuntimeService implements AuditToolService {
       }
       const run: AuditRunRecord = {
         ...payload,
+        findings: payload.findings.map(hydratePersistedFinding),
         controller: new AbortController(),
         persistence: null,
       };
@@ -1953,23 +2155,15 @@ class AuditRuntimeService implements AuditToolService {
     const classification = classifyEvidence(evidence);
     const currentFingerprint = candidate.fingerprint;
     const findingId = this.findingId(auditId, observation.targetRef);
-    const identity: UserExclusionIdentity = {
-      ruleId: classification.ruleIds[0] ?? "CLASSIFIER_V2_UNKNOWN_INCOMPLETE_EVIDENCE",
-      artifactKind: candidate.kind,
-      normalizedTargetIdentity: `target:v1:${sha256(
+    const identity = identityForFinding({
+      classification,
+      candidate,
+      targetIdentity:
         correlation?.candidateSubjectId ?? evidence.targetIdentity,
-      )}`,
-      bundleId: null,
-      packageId: null,
-      signingIdentity: null,
-      ownerTypeFingerprint: `owner-type:v1:${sha256(
-        `${candidate.fingerprint.uid}:${candidate.fingerprint.fileType}`,
-      )}`,
-    };
-    const exclusionMatch = this.exclusionMatch(
-      exclusionState.exclusions,
-      identity,
-    );
+    });
+    const exclusionMatch = exclusionState.invalid
+      ? { status: "invalid" as const }
+      : this.exclusionMatch(exclusionState.exclusions, identity);
     const matchedExclusion =
       exclusionMatch.status === "matched"
         ? exclusionState.exclusions.find(
@@ -2233,6 +2427,7 @@ class AuditRuntimeService implements AuditToolService {
             exclusionState,
           );
           const excluded =
+            !exclusionState.invalid &&
             finding.identity !== null &&
             this.exclusionMatch(
               exclusionState.exclusions,
@@ -2335,7 +2530,10 @@ class AuditRuntimeService implements AuditToolService {
     this.runs.set(auditId, run);
     this.auditIdByRequest.set(input.requestId, auditId);
     this.latestAuditId = auditId;
-    queueMicrotask(() => void this.execute(run));
+    queueMicrotask(() => {
+      const execution = this.executionQueue.then(() => this.execute(run));
+      this.executionQueue = execution.catch(() => undefined);
+    });
     return { auditId, state: "queued" as const, stateVersion: 0 };
   }
 
@@ -2374,7 +2572,7 @@ class AuditRuntimeService implements AuditToolService {
 
   private async safeSnapshot(run: AuditRunRecord) {
     const exclusionState = await this.exclusionSnapshot();
-    const storageSummary = await this.storageSummary();
+    const storageSummary = await this.storageSummaryForRun(run);
     const diskObservation = await observeDisk(this.stateRoot);
     return {
       storageSummary,
@@ -2591,8 +2789,9 @@ class AuditRuntimeService implements AuditToolService {
     }
   }
 
-  async storageSummary(): Promise<StorageSummary> {
-    const run = this.latestAuditId === null ? undefined : this.runs.get(this.latestAuditId);
+  private async storageSummaryForRun(
+    run: AuditRunRecord | undefined,
+  ): Promise<StorageSummary> {
     const candidateLogicalBytes = run?.findings.reduce(
       (total, finding) =>
         total + (finding.candidate === null ? 0 : finding.model.logicalSize),
@@ -2614,6 +2813,11 @@ class AuditRuntimeService implements AuditToolService {
       },
     });
     return controller.readStorageSummary();
+  }
+
+  async storageSummary(): Promise<StorageSummary> {
+    const run = this.latestAuditId === null ? undefined : this.runs.get(this.latestAuditId);
+    return this.storageSummaryForRun(run);
   }
 
   moveSubject(findingId: string, revision: number): MoveSubject {
@@ -3159,7 +3363,7 @@ export async function createRuntimeCore(
   const exclusionStateRoot = join(stateRoot, "exclusions");
   const exclusionInstallationKey = await new InstallationKeyStore({
     stateRoot: exclusionStateRoot,
-  }).loadOrCreate();
+  }).loadOrCreate().catch(() => null);
   const exclusionStore = new PersistentRuntimeExclusionStore(
     exclusionStateRoot,
     exclusionInstallationKey,

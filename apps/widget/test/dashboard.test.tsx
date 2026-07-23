@@ -564,4 +564,77 @@ describe("интерфейс проверки Mac", () => {
     await waitFor(() => expect(dialog).not.toBeInTheDocument());
     expect(trigger).toHaveFocus();
   });
+
+  it("сразу переносит успешно перемещённый объект из находок в карантин", async () => {
+    const state = createBridge();
+    state.callTool.mockImplementation(async (name) => {
+      if (name === "quarantine_prepare_move") {
+        return { previewToken: "preview-synthetic-001" };
+      }
+      if (name === "quarantine_move") {
+        return {
+          quarantineEntry: {
+            quarantineEntryId: "move-synthetic-001",
+            displayName: "Synthetic Cache",
+            physicalBytes: 1_048_576,
+            movedAt: "2026-07-23T10:00:00.000Z",
+            state: "moved",
+          },
+          storageSummary: {
+            ...dashboardFixture.storageSummary,
+            candidateLogicalBytes: 524_288,
+            candidatePhysicalBytes: 262_144,
+            quarantinePhysicalBytes: 1_572_864,
+            stateVersion:
+              dashboardFixture.storageSummary.stateVersion + 1,
+          },
+          diskObservation: dashboardFixture.diskObservation,
+          stateVersion: dashboardFixture.stateVersion + 1,
+        };
+      }
+      if (name === "exclusion_list") {
+        return { exclusions: [], stateVersion: 20 };
+      }
+      return { stateVersion: 20 };
+    });
+    render(<AuditDashboard snapshot={dashboardFixture} bridge={state.bridge} />);
+    expandFindingGroup("Кеши приложений");
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Удалить: Synthetic Cache" }),
+    );
+    const dialog = await screen.findByRole("alertdialog", {
+      name: "Удалить «Synthetic Cache»?",
+    });
+    await waitFor(() =>
+      expect(
+        within(dialog).getByRole("button", {
+          name: "Переместить в карантин",
+        }),
+      ).toBeEnabled(),
+    );
+    fireEvent.click(
+      within(dialog).getByRole("button", {
+        name: "Переместить в карантин",
+      }),
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", {
+          name: "Удалить: Synthetic Cache",
+        }),
+      ).not.toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByRole("tab", { name: "Карантин" }));
+    expect(
+      screen.getByRole("button", {
+        name: "Восстановить: Synthetic Cache",
+      }),
+    ).toBeVisible();
+    expect(state.callTool).toHaveBeenCalledWith("quarantine_move", {
+      previewToken: "preview-synthetic-001",
+      operationId: expect.stringMatching(/^move-/u),
+    });
+  });
 });
