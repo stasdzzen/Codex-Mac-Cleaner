@@ -6,6 +6,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "nod
 import {
   ALLOWLISTED_LIBRARY_ROOTS,
   createAutostartAdapter,
+  createCommandTimeoutRunner,
   createInspectionOnlyAdapter,
   createMacOSCandidateRegistry,
   createMacOSProductionCorrelationAdapter,
@@ -89,6 +90,7 @@ const MAX_GIT_SCAN_DEPTH = 128;
 const MAX_GIT_SCAN_ENTRIES = 100_000;
 const MAX_EMPTY_ARTIFACT_ENTRIES = 4_096;
 const DEFAULT_CANDIDATE_CONCURRENCY = 8;
+const DEFAULT_COMMAND_TIMEOUT_MS = 30_000;
 const EMPTY_CACHE_LOG_RULE_ID = "EMPTY_CACHE_LOG_ARTIFACT_V1" as const;
 const EMPTY_CACHE_LOG_RULE_VERSION = 1 as const;
 
@@ -900,7 +902,8 @@ class RuntimeFileSystemFacade implements FileSystemFacade {
           ? "absent"
           : "unknown";
       }
-    } catch {
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ETIMEDOUT") throw error;
       signal.throwIfAborted();
       return "unknown";
     }
@@ -1214,6 +1217,8 @@ export interface RuntimeServiceOptions {
    */
   readonly correlation?: Readonly<{
     readonly commands?: CommandRunner;
+    /** Test-only override; packaged runtime ограничивает каждую команду 30 секундами. */
+    readonly commandTimeoutMs?: number;
     readonly filesystem?: MacOSCorrelationReadOnlyFileSystem;
     readonly ownerBindingHistory?: MacOSOwnerBindingHistory;
     readonly installationKey?: InstallationKey;
@@ -1244,6 +1249,7 @@ class AuditRuntimeService implements AuditToolService {
     private readonly homeDirectory: string,
     private readonly installationKey: InstallationKey,
     private readonly correlationCommands: CommandRunner,
+    private readonly commandTimeoutMs: number,
     private readonly correlationFilesystem: MacOSCorrelationReadOnlyFileSystem | undefined,
     private readonly ownerBindingHistory: MacOSOwnerBindingHistory | undefined,
     private readonly candidateConcurrency: number,
@@ -1315,6 +1321,7 @@ class AuditRuntimeService implements AuditToolService {
       }),
       stateRoot: this.stateRoot,
       installationKey: this.installationKey,
+      commandTimeoutMs: this.commandTimeoutMs,
       ...(this.correlationFilesystem === undefined
         ? {}
         : { filesystem: this.correlationFilesystem }),
@@ -2604,6 +2611,12 @@ export async function createRuntimeCore(
   const currentProjectRoot = await realpath(requestedCurrentProjectRoot);
   const correlationCommands =
     options.correlation?.commands ?? createNodeCommandRunner();
+  const commandTimeoutMs =
+    options.correlation?.commandTimeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS;
+  const discoveryCommands = createCommandTimeoutRunner(
+    correlationCommands,
+    commandTimeoutMs,
+  );
   const realRuntimeHome = homeDirectory === resolve(homedir());
   const systemLibraryRoot = resolve(
     options.diagnostics?.systemLibraryRoot ??
@@ -2615,7 +2628,7 @@ export async function createRuntimeCore(
     homeDirectory,
     stateRoot,
     currentProjectRoot,
-    correlationCommands,
+    discoveryCommands,
     systemLibraryRoot,
     options.diagnostics?.enableProcessInspection ?? realRuntimeHome,
   );
@@ -2626,6 +2639,7 @@ export async function createRuntimeCore(
     homeDirectory,
     options.correlation?.installationKey ?? installationKey,
     correlationCommands,
+    commandTimeoutMs,
     options.correlation?.filesystem,
     options.correlation?.ownerBindingHistory,
     candidateConcurrency,

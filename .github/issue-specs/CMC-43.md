@@ -2,7 +2,7 @@
 schema: 1
 dependencies: #78
 conflicts: #80
-touched_paths: .github/issue-specs/CMC-43.md; SPEC.md; docs/index.md; docs/decisions/ADR-0019-complete-audit-without-overall-deadline.md; docs/architecture/components.md; docs/architecture/runtime-flows.md; docs/contracts/errors.md; docs/safety/threat-model.md; docs/product/PRD-codex-mac-cleaner.md; docs/product/implementation-roadmap.md; docs/product/requirements-traceability.md; packages/contracts/src/errors.ts; apps/mcp-server/src/runtime.ts; apps/mcp-server/test/runtime-services.test.ts; apps/mcp-server/test/plugin-integration.test.ts; .codex-plugin/runtime/server.js; tests/plugin/plugin-contract.test.ts
+touched_paths: .github/issue-specs/CMC-43.md; SPEC.md; docs/index.md; docs/decisions/ADR-0019-complete-audit-without-overall-deadline.md; docs/architecture/components.md; docs/architecture/runtime-flows.md; docs/contracts/errors.md; docs/safety/threat-model.md; docs/product/PRD-codex-mac-cleaner.md; docs/product/implementation-roadmap.md; docs/product/requirements-traceability.md; packages/contracts/src/errors.ts; packages/adapters/src/command-runner.ts; packages/adapters/src/macos-production-correlation.ts; apps/mcp-server/src/runtime.ts; apps/mcp-server/test/runtime-services.test.ts; apps/mcp-server/test/plugin-integration.test.ts; .codex-plugin/runtime/server.js; tests/plugin/plugin-contract.test.ts
 risk: high
 parallel_safety: serial
 execution_profile: default
