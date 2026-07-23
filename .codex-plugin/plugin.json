@@ -1,6 +1,6 @@
 {
   "name": "codex-mac-cleaner",
-  "version": "0.1.0-beta.11",
+  "version": "0.1.0-beta.12",
   "description": "Проверяет Mac на остатки удалённых приложений и помогает безопасно убрать их через карантин.",
   "author": {
     "name": "Участники проекта Codex Mac Cleaner"
