@@ -1776,6 +1776,7 @@ class AuditRuntimeService implements AuditToolService {
       auditId: run.auditId,
       state: run.state,
       stateVersion: run.stateVersion,
+      revision: run.revision,
       progress: this.progress(run),
       coverageWarningCodes: run.coverageWarningCodes,
     };

@@ -13,6 +13,11 @@ describe("CMC-10: clean-room/new-task no-terminal contract", () => {
     );
     expect(skill).toMatch(/audit_start[\s\S]*application_remnants/iu);
     expect(skill).toMatch(/dashboard_open/iu);
+    expect(skill).toMatch(/точн[^\n]*revision|revision[^\n]*точн/iu);
+    expect(skill).toMatch(/штатн[^\n]*поиск[^\n]*инструмент/iu);
+    expect(skill).toMatch(/после поиска[^\n]*недоступен[^\n]*останов/iu);
+    expect(skill).toMatch(/прям[^\n]*stdio|stdio[^\n]*прям/iu);
+    expect(skill).toMatch(/не[^\n]*(?:повторн|нов)[^\n]*аудит/iu);
     expect(skill).toMatch(/кноп|клик/iu);
     expect(skill).not.toMatch(/```(?:bash|sh|zsh|shell)|\bsudo\b|\brm\s+-|launchctl/iu);
     expect(skill).not.toMatch(

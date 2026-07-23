@@ -42,6 +42,7 @@ import {
   buildToolResult,
   createMcpServer,
 } from "../src/server.js";
+import { ToolErrorSchema } from "@codex-mac-cleaner/contracts";
 
 const platform = { platform: "darwin", arch: "arm64", release: "26.0.0" } as const;
 const execFileAsync = promisify(execFile);
@@ -126,13 +127,15 @@ async function waitForCompletedAudit(client: Client, requestId: string) {
   expect(status?.structuredContent).toMatchObject({
     auditId,
     state: expect.stringMatching(/^completed(?:_with_warnings)?$/),
+    revision: expect.any(Number),
   });
+  const revision = (status?.structuredContent as { revision: number }).revision;
   const results = await client.callTool({
     name: "audit_results",
-    arguments: { auditId, revision: 1, cursor: null, filters: {} },
+    arguments: { auditId, revision, cursor: null, filters: {} },
   });
   expect(results.isError).not.toBe(true);
-  return { auditId, results };
+  return { auditId, revision, results };
 }
 
 function generatedInode(path: string): string {
@@ -652,7 +655,9 @@ describe("полная интеграция MCP App", () => {
       expect(status?.structuredContent).toMatchObject({
         auditId,
         state: expect.stringMatching(/^completed(?:_with_warnings)?$/),
+        revision: expect.any(Number),
       });
+      const revision = (status?.structuredContent as { revision: number }).revision;
 
       const completedLiveDashboard = await client.callTool({
         name: "dashboard_open",
@@ -667,10 +672,10 @@ describe("полная интеграция MCP App", () => {
 
       const results = await client.callTool({
         name: "audit_results",
-        arguments: { auditId, revision: 1, cursor: null, filters: {} },
+        arguments: { auditId, revision, cursor: null, filters: {} },
       });
       expect(results.isError).not.toBe(true);
-      expect(results.structuredContent).toMatchObject({ auditId, revision: 1 });
+      expect(results.structuredContent).toMatchObject({ auditId, revision });
       const resultFindings = (
         results.structuredContent as {
           findings: Array<{
@@ -690,15 +695,40 @@ describe("полная интеграция MCP App", () => {
 
       const dashboard = await client.callTool({
         name: "dashboard_open",
-        arguments: { auditId, revision: 1 },
+        arguments: { auditId, revision },
       });
       expect(dashboard.isError).not.toBe(true);
       expect(dashboard.structuredContent).toMatchObject({
         auditId,
-        revision: 1,
+        revision,
         resourceUri: DASHBOARD_RESOURCE_URI,
         findings: resultFindings,
       });
+
+      const missingStatus = await client.callTool({
+        name: "audit_status",
+        arguments: { auditId: "audit-process-lost" },
+      });
+      expect(missingStatus.isError).toBe(true);
+      const errorContent = (
+        missingStatus.content as Array<{ type?: string; text?: string }>
+      )[0];
+      expect(errorContent?.type).toBe("text");
+      const toolError = ToolErrorSchema.parse(
+        JSON.parse(
+          errorContent?.type === "text" && typeof errorContent.text === "string"
+            ? errorContent.text
+            : "{}",
+        ),
+      );
+      expect(toolError).toMatchObject({
+        errorCode: "AUDIT_STALE",
+        severity: "blocking",
+        scope: "audit",
+        retryable: false,
+        details: [],
+      });
+      expect(missingStatus._meta?.["codexMacCleaner/toolError"]).toEqual(toolError);
 
       const quarantine = await client.callTool({ name: "quarantine_list", arguments: {} });
       expect(quarantine.isError).not.toBe(true);
@@ -775,7 +805,10 @@ describe("полная интеграция MCP App", () => {
 
         const dashboard = await client.callTool({
           name: "dashboard_open",
-          arguments: { auditId: revisionN1.auditId, revision: 1 },
+          arguments: {
+            auditId: revisionN1.auditId,
+            revision: revisionN1.revision,
+          },
         });
         const dashboardFinding = (
           (dashboard._meta as { dashboard?: { findings?: unknown[] } } | undefined)

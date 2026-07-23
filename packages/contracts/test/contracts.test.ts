@@ -88,10 +88,41 @@ describe("контракты аудита", () => {
         auditId: "audit-live-1",
         state: "running",
         stateVersion: 1,
+        revision: null,
         progress,
         coverageWarningCodes: [],
       }).progress,
     ).toEqual(progress);
+    expect(
+      AuditStatusOutputSchema.parse({
+        auditId: "audit-live-1",
+        state: "completed_with_warnings",
+        stateVersion: 2,
+        revision: 7,
+        progress: { ...progress, phase: "completed", completedSteps: 2 },
+        coverageWarningCodes: ["CORRELATION_COVERAGE_INCOMPLETE"],
+      }).revision,
+    ).toBe(7);
+    expect(() =>
+      AuditStatusOutputSchema.parse({
+        auditId: "audit-live-1",
+        state: "running",
+        stateVersion: 1,
+        revision: 1,
+        progress,
+        coverageWarningCodes: [],
+      }),
+    ).toThrow();
+    expect(() =>
+      AuditStatusOutputSchema.parse({
+        auditId: "audit-live-1",
+        state: "completed",
+        stateVersion: 2,
+        revision: null,
+        progress: { ...progress, phase: "completed", completedSteps: 2 },
+        coverageWarningCodes: [],
+      }),
+    ).toThrow();
     expect(
       DashboardOpenOutputSchema.parse({
         auditId: "audit-live-1",

@@ -25,6 +25,7 @@ import {
   FindingRevealInputSchema,
   FindingRevealOutputSchema,
   ModelSafeTextSchema,
+  ToolErrorSchema,
   UserExclusionSchema,
   containsSecretLikeValue,
   type ExclusionCreateInput,
@@ -623,6 +624,33 @@ function safeServiceError(message: string): CallToolResult {
   };
 }
 
+function auditServiceError(error: unknown): CallToolResult {
+  if (error instanceof Error && error.message === "AUDIT_STALE") {
+    const toolError = ToolErrorSchema.parse({
+      errorCode: "AUDIT_STALE",
+      severity: "blocking",
+      scope: "audit",
+      message: "Результаты этой проверки больше недоступны в текущем процессе.",
+      recommendedAction:
+        "Начните новую проверку только после явного запроса пользователя.",
+      retryable: false,
+      correlationId: `audit-error-${randomUUID()}`,
+      details: [],
+    });
+    return {
+      content: [
+        {
+          type: "text",
+          text: ModelSafeTextSchema.parse(JSON.stringify(toolError)),
+        },
+      ],
+      isError: true,
+      _meta: { "codexMacCleaner/toolError": toolError },
+    };
+  }
+  return safeServiceError("Проверка безопасно остановлена.");
+}
+
 function exclusionErrorResult(error: unknown): CallToolResult {
   const message =
     error instanceof ExclusionToolError
@@ -815,8 +843,8 @@ async function callAuditModelTool(
           "Запрос Finder обработан без изменения файла.",
         );
     }
-  } catch {
-    return safeServiceError("Проверка безопасно остановлена.");
+  } catch (error) {
+    return auditServiceError(error);
   }
 }
 

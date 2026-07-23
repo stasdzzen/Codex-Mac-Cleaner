@@ -77,6 +77,11 @@ describe("repository marketplace plugin", () => {
     );
     expect(skill).toMatch(/profile[^\n]*application_remnants/i);
     expect(skill).toMatch(/dashboard_open/i);
+    expect(skill).toMatch(/audit_status[^\n]*revision|revision[^\n]*audit_status/i);
+    expect(skill).toMatch(/штатн[^\n]*поиск[^\n]*инструмент/i);
+    expect(skill).toMatch(/после поиска[^\n]*недоступен[^\n]*останов/i);
+    expect(skill).toMatch(/прям[^\n]*stdio|stdio[^\n]*прям/i);
+    expect(skill).toMatch(/не[^\n]*(?:повторн|нов)[^\n]*аудит/i);
     expect(skill).toMatch(/audit_cancel[^\n]*явн/i);
     expect(skill).toMatch(/нажати[^\n]*кнопк[^\n]*(?:подтверж|одн)/i);
     expect(skill).not.toMatch(/```(?:bash|sh|zsh|shell)|\bsudo\b|\brm\s+-|launchctl|готово[»"]?/i);
