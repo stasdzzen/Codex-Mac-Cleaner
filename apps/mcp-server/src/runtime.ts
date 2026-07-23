@@ -166,7 +166,7 @@ const PROTECTED_SCOPE_NAME_PATTERNS: Readonly<
   browser_profile:
     /(?:^|[._ -])(?:safari|chrome|firefox|browsers?|bookmarks?|history|profiles?)(?:$|[._ -])/iu,
   personal_data:
-    /(?:^|[._ -])(?:personal|mails?|messages?|photos?|contacts?|calendars?|databases?|documents?|save(?:d|s)?|savegames?|sync|vpn)(?:$|[._ -])/iu,
+    /(?:^|[._ -])(?:personal|mails?|messages?|photos?|contacts?|calendars?|databases?|db|sqlite3?|documents?|save(?:d|s)?|savegames?|sync|vpn|web[._ -]+data|local[._ -]+state|settings?|preferences?|configs?|configuration)(?:$|[._ -])/iu,
 });
 
 function isWithinBoundary(boundary: string, path: string): boolean {
@@ -2320,6 +2320,12 @@ class AuditRuntimeService implements AuditToolService {
   }
 
   private async execute(run: AuditRunRecord): Promise<void> {
+    if (run.controller.signal.aborted) {
+      run.state = "cancelled";
+      run.progressPhase = "cancelled";
+      run.stateVersion += 1;
+      return;
+    }
     run.state = "running";
     run.progressPhase = "discovering_candidates";
     run.stateVersion += 1;

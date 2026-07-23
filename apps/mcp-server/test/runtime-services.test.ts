@@ -683,12 +683,37 @@ describe("production runtime services", () => {
       requestId: "serialized-audit-second",
       profile: "application_remnants",
     })) as { auditId: string };
+    const cancelled = (await services.auditService?.start({
+      requestId: "serialized-audit-cancelled",
+      profile: "application_remnants",
+    })) as { auditId: string };
+    const runs = Reflect.get(
+      services.auditService as object,
+      "runs",
+    ) as Map<string, { state: string }>;
+    const cancelledRun = runs.get(cancelled.auditId)!;
+    let cancelledState = cancelledRun.state;
+    const cancelledTransitions = [cancelledState];
+    Object.defineProperty(cancelledRun, "state", {
+      configurable: true,
+      enumerable: true,
+      get: () => cancelledState,
+      set: (state: string) => {
+        cancelledState = state;
+        cancelledTransitions.push(state);
+      },
+    });
+    await services.auditService?.cancel({
+      auditId: cancelled.auditId,
+      requestId: "cancel-serialized-queued-audit",
+    });
 
     expect(
       (await services.auditService?.status({
         auditId: second.auditId,
       })) as { state: string },
     ).toMatchObject({ state: "queued" });
+    expect(cancelledTransitions).toEqual(["queued", "cancelling"]);
     releaseFirstCommand?.();
 
     for (const auditId of [first.auditId, second.auditId]) {
@@ -704,6 +729,18 @@ describe("production runtime services", () => {
       }
       expect(terminalState).toMatch(/^completed(?:_with_warnings)?$/u);
     }
+    for (let attempt = 0; attempt < 500; attempt += 1) {
+      const status = (await services.auditService?.status({
+        auditId: cancelled.auditId,
+      })) as { state: string };
+      if (status.state === "cancelled") break;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    expect(cancelledTransitions).toEqual([
+      "queued",
+      "cancelling",
+      "cancelled",
+    ]);
 
     const liveDashboard = await services.auditService?.dashboard({
       auditId: null,
@@ -2018,49 +2055,62 @@ describe("production runtime services", () => {
     },
   );
 
-  it.each(["credentials.db", "Cookies", "sync-state"])(
+  it.each([
+    "credentials.db",
+    "Cookies",
+    "sync-state",
+    "cache.db",
+    "index.sqlite",
+    "Web Data",
+    "Local State",
+  ])(
     "пересчитывает cache proof перед preview и блокирует появившееся имя %s",
     async (sensitiveName) => {
-    const root = await mkdtemp(join(tmpdir(), "cmc-runtime-proof-race-"));
-    roots.push(root);
-    const homeDirectory = join(root, "home");
-    const candidatePath = join(
-      homeDirectory,
-      "Library",
-      "Caches",
-      "Proof Race",
-    );
-    await mkdir(candidatePath, { recursive: true });
-    const harness = await productionCorrelationHarness(homeDirectory, candidatePath);
-    harness.removeOwner();
-    const { server, client } = await connectedRuntime(
-      homeDirectory,
-      join(root, "state"),
-      harness.correlation,
-      harness.fixedNow,
-    );
-    try {
-      const results = await completedAudit(client, "proof-race-audit");
-      const finding = (results.structuredContent as {
-        findings: Array<{ findingId: string; allowedActions: string[] }>;
-      }).findings[0];
-      expect(finding?.allowedActions).toContain("prepare_move");
-
-      await writeFile(
-        join(candidatePath, sensitiveName),
-        "late-sensitive-payload",
-        "utf8",
+      const root = await mkdtemp(join(tmpdir(), "cmc-runtime-proof-race-"));
+      roots.push(root);
+      const homeDirectory = join(root, "home");
+      const candidatePath = join(
+        homeDirectory,
+        "Library",
+        "Caches",
+        "Proof Race",
       );
-      const preview = await client.callTool({
-        name: "quarantine_prepare_move",
-        arguments: { findingId: finding?.findingId, auditRevision: 1 },
-      });
-      expect(preview.isError).toBe(true);
-      expect(preview.structuredContent ?? {}).not.toHaveProperty("previewToken");
-    } finally {
-      await client.close();
-      await server.close();
-    }
+      await mkdir(candidatePath, { recursive: true });
+      const harness = await productionCorrelationHarness(
+        homeDirectory,
+        candidatePath,
+      );
+      harness.removeOwner();
+      const { server, client } = await connectedRuntime(
+        homeDirectory,
+        join(root, "state"),
+        harness.correlation,
+        harness.fixedNow,
+      );
+      try {
+        const results = await completedAudit(client, "proof-race-audit");
+        const finding = (results.structuredContent as {
+          findings: Array<{ findingId: string; allowedActions: string[] }>;
+        }).findings[0];
+        expect(finding?.allowedActions).toContain("prepare_move");
+
+        await writeFile(
+          join(candidatePath, sensitiveName),
+          "late-sensitive-payload",
+          "utf8",
+        );
+        const preview = await client.callTool({
+          name: "quarantine_prepare_move",
+          arguments: { findingId: finding?.findingId, auditRevision: 1 },
+        });
+        expect(preview.isError).toBe(true);
+        expect(preview.structuredContent ?? {}).not.toHaveProperty(
+          "previewToken",
+        );
+      } finally {
+        await client.close();
+        await server.close();
+      }
     },
   );
 
@@ -2072,6 +2122,10 @@ describe("production runtime services", () => {
     "sync-state",
     "vpn-profile",
     "Saved Games",
+    "cache.db",
+    "index.sqlite",
+    "Web Data",
+    "Local State",
   ])(
     "не выдаёт prepare_move для cache с чувствительным вложенным именем %s",
     async (sensitiveName) => {
