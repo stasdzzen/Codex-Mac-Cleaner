@@ -25,6 +25,7 @@ export const AuditStatusOutputSchema = z
     auditId: OpaqueIdSchema,
     state: AuditRunStateSchema,
     stateVersion: SafeIntegerSchema,
+    revision: SafeIntegerSchema.min(1).nullable(),
     progress: z
       .object({
         phase: AuditProgressPhaseSchema,
@@ -39,7 +40,25 @@ export const AuditStatusOutputSchema = z
       }),
     coverageWarningCodes: z.array(ToolErrorCodeSchema),
   })
-  .strict();
+  .strict()
+  .superRefine((value, context) => {
+    const completed =
+      value.state === "completed" || value.state === "completed_with_warnings";
+    if (completed && value.revision === null) {
+      context.addIssue({
+        code: "custom",
+        path: ["revision"],
+        message: "Завершённый аудит обязан содержать точную ревизию",
+      });
+    }
+    if (!completed && value.revision !== null) {
+      context.addIssue({
+        code: "custom",
+        path: ["revision"],
+        message: "Незавершённый аудит не может публиковать ревизию",
+      });
+    }
+  });
 
 export const AuditCancelOutputSchema = z
   .object({

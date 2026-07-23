@@ -33,7 +33,7 @@ date: 2026-07-22
 | `REQ-PURGE-01` | Только ручной поэлементный purge | [Runtime flows](../architecture/runtime-flows.md) | `CMC-07` | F |
 | `REQ-QCTR-01` | Quarantine Center с поэлементным restore/purge | [ADR-0009](../decisions/ADR-0009-v01-safety-ux-completion.md) | `CMC-07`, `CMC-08`, `CMC-09` | E, F, G |
 | `REQ-SIZE-01` | Логический/физический размер, карантин, purge и DiskObservation без ложного APFS claim; UI использует десятичные МБ/ГБ | [Доменная модель](../contracts/domain-model.md), [ADR-0018](../decisions/ADR-0018-real-mac-audit-throughput-and-diagnostics.md) | `CMC-03`, `CMC-07`, `CMC-08`, `CMC-09`, `CMC-10`, `CMC-36` | F, G, H |
-| `REQ-MCP-01` | Model/app visibility и точные schemas | [MCP contract](../contracts/mcp-tools.md) | `CMC-03`, `CMC-09` | D |
+| `REQ-MCP-01` | Model/app visibility, точные schemas, штатный host pipeline и exact terminal revision без direct-stdio fallback | [MCP contract](../contracts/mcp-tools.md) | `CMC-03`, `CMC-09`, `CMC-46` | D, G, H |
 | `REQ-PRIV-01` | Без сети, телеметрии и полных путей модели | [Threat model](../safety/threat-model.md) | `CMC-03`, `CMC-09`, `CMC-10` | G |
 | `REQ-CORR-PRIV-01` | Raw paths/inventory/bundle-package-signing identities/historical bindings/graph/tokens server-only; widget получает safe facts/actions | [Correlation contract](../contracts/correlation-identity.md) | `CMC-20`, `CMC-22`, `CMC-21`, `CMC-09`, `CMC-10` | D, G, H |
 | `REQ-UI-01` | Тёмный shadcn Dashboard на Base UI с пятью вкладками, адаптивной компоновкой и понятными русскими подписями; «Автопроверка» в v0.1 только для ручного запуска | [ADR-0006](../decisions/ADR-0006-dark-shadcn-dashboard.md), [ADR-0009](../decisions/ADR-0009-v01-safety-ux-completion.md), [ADR-0014](../decisions/ADR-0014-defer-host-automation-post-v01.md) | `CMC-08`, `CMC-09`, `CMC-12`, `CMC-10`, `CMC-38`, `CMC-40` | G |
@@ -111,6 +111,7 @@ Issue и PR не могут объявить требование выполне
 | `CMC-42` | [#80 — убрать лишнюю анимацию и уточнить заголовок Dashboard](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/80) | Закрыта; PR #81 слит |
 | `CMC-43` | [#82 — полный аудит без общего лимита времени](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/82) | Закрыта; PR #83 слит |
 | `CMC-44` | [#84 — устранить runtime-уязвимости зависимостей](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/84) | Закрыта; PR #85 слит |
-| `CMC-45` | [#86 — выпуск v0.1.0-beta.10](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/86) | `cto:review` |
+| `CMC-45` | [#86 — выпуск v0.1.0-beta.10](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/86) | Закрыта; PR #87 слит, выпуск опубликован |
+| `CMC-46` | [#88 — штатный запуск MCP и завершённая ревизия](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/88) | `cto:in-progress` |
 
 Operational label не заменяет dependency validation. Источником текущего readiness остаётся GitHub и `issue_contract.py`.

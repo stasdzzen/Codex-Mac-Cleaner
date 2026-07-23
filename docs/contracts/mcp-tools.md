@@ -17,7 +17,7 @@ date: 2026-07-21
 | Tool | Назначение | Главный вход | Главный выход |
 |---|---|---|---|
 | `audit_start` | Начать read-only аудит | `requestId`, `profile=application_remnants` | `auditId`, `state`, `stateVersion` |
-| `audit_status` | Получить прогресс | `auditId` | state, phase, шаги, candidate counts, coverage warnings |
+| `audit_status` | Получить прогресс | `auditId` | state, nullable exact revision, phase, шаги, candidate counts, coverage warnings |
 | `audit_cancel` | Отменить read-only аудит | `auditId`, `requestId` | state, stateVersion, cancelRequestedAt |
 | `audit_results` | Получить страницу результатов | `auditId`, `revision`, `cursor`, filters | summary, finding IDs, next cursor |
 | `dashboard_open` | Открыть Audit Dashboard | `auditId`, `revision=null \| integer` | live или immutable widget snapshot |
@@ -89,6 +89,7 @@ date: 2026-07-21
 * `findingId`, `auditRevision`, `correlationRevisionId`, `operationId` и opaque action handle обязательны там, где применимы; preview token остаётся server-side.
 * `audit_cancel` не принимает profile, path, revision или mutation-параметры.
 * `dashboard_open.revision=null` запрашивает текущий live snapshot. Integer revision допустима только для завершённой immutable revision.
+* `audit_status.revision` равна `null` до успешного terminal state. Только `completed` и `completed_with_warnings` возвращают точную integer revision для последующих `audit_results` и `dashboard_open`; клиент не угадывает её и не запускает повторный аудит автоматически.
 * Preview token хранится server-side и привязан к действию, UI session, finding/quarantine entry, immutable audit/correlation revision, candidate/parent fingerprints, edge/coverage digests, policy/derivation versions, exclusion state и сроку пять минут.
 * App получает только opaque action handle без identity или token material. Token одноразовый. Повтор с тем же `operationId` возвращает прежний результат.
 * Любой неизвестный input field отклоняется schema validation.
@@ -96,6 +97,7 @@ date: 2026-07-21
 # Правила выходов
 
 * `structuredContent` содержит краткие model-visible данные и `stateVersion`.
+* Если tools не видны немедленно, Skill один раз использует штатный host tool discovery по точным именам. Потерянный in-memory audit run возвращает безопасную ошибку `AUDIT_STALE`; сервер не сохраняет raw audit report, а Skill не обходит host через terminal/direct stdio и не начинает новый аудит без явного запроса пользователя.
 * Live `dashboard_open` возвращает `revision=null`, пустые findings/actions и server-owned progress; он не создаёт action authority.
 * `content` содержит короткое русскоязычное объяснение без полного пути.
 * `_meta` содержит widget-only `SafeCorrelationView`, presentation state и server-owned actions. Полные пути, raw/digested identity claims, inventory, correlation edges, coverage certificates и token material отсутствуют.
