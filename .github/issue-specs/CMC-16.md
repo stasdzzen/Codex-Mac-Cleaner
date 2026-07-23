@@ -12,7 +12,9 @@ execution_profile: deep
 
 ### Goal
 
-Bring the public repository to the verified Codex-Skills community, contribution, CI and GitHub protection baseline without changing product runtime or release scope.
+Bring the public repository to a verified open-source community, contribution,
+CI and GitHub protection baseline without changing product runtime or release
+scope.
 
 ### Scope
 
@@ -34,7 +36,9 @@ Do not implement cleaner runtime, change the MIT-to-Apache legal gate, create a 
 
 ### Цель
 
-Довести публичный репозиторий до проверенного уровня community, contribution, CI и GitHub-защиты Codex-Skills без изменения runtime продукта и release scope.
+Довести публичный репозиторий до проверенного open-source уровня community,
+contribution, CI и GitHub-защиты без изменения runtime продукта и release
+scope.
 
 ### Объём
 
