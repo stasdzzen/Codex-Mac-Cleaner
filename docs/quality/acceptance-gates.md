@@ -5,7 +5,7 @@ description: Блокирующие условия готовности реал
 tags: [quality, acceptance, release, gates]
 status: approved
 owner: Architect
-date: 2026-07-19
+date: 2026-07-23
 ---
 
 # Gate A — документация и лицензия
@@ -101,8 +101,13 @@ date: 2026-07-19
 
 * Clean-room установка из repository marketplace работает по опубликованной инструкции.
 * `.codex-plugin/plugin.json`, `.mcp.json` и `SKILL.md` проходят schema и smoke checks.
+* Packaged surface probe на синтетическом `HOME` подтверждает точные 9 model-visible и 15 app-only tools, их visibility metadata, Dashboard v3 URI/MIME/CSP и plugin-relative Node stdio без HTTP/terminal fallback.
+* Capability matrix совпадает с probe; tool/resource/visibility drift даёт ненулевой exit code, а stderr не раскрывает абсолютные локальные пути.
 * GitHub Release содержит checksum, SBOM и provenance, связанные с tag и commit.
 * Clean-room запуск в новой задаче Codex открывает аудит и Dashboard без копирования команд в терминал.
+* Missing task-scoped tools приводят к одному штатному host discovery и затем к fail-closed остановке; прямой stdio, Terminal, local HTML, ложный claim об открытом Dashboard и автоматический rescan отсутствуют.
+* Успешный terminal state передаёт точную revision в `audit_results`/`dashboard_open`; `revision=null`, `AUDIT_STALE` и stale/cross-channel cursor не создают actionable или повторный run.
+* Результаты на 101 и 2 767 findings полностью обходятся страницами до 100 findings/512 КиБ, а host notification той же revision не стирает уже загруженные Widget-страницы.
 * Все решения пользователя выполняются отдельными кнопками для одного объекта; terminal confirmation flow отсутствует.
 * Clean-room v0.1 не заявляет scheduled run или host automation lifecycle; manual fallback запускает обычный read-only audit без mutation token и `sudo`.
 * Duplicate, update, pause, resume, delete automation и scheduled-prompt behavior не являются Gate H v0.1 и проверяются только в post-v0.1 CMC-13 после owner decision.

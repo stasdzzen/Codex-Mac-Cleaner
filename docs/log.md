@@ -1,5 +1,25 @@
 # История архитектурного канона
 
+## 2026-07-23
+
+* **Полный аудит**: ADR-0019 удалил общий hard/soft/progress-aware deadline; отдельный timeout источника создаёт coverage gap, но не отменяет обработку остальных кандидатов.
+* **Bounded Dashboard**: ADR-0020 и CMC-47 ввели Dashboard v3, независимые model/widget cursors, лимиты 100 findings и 512 КиБ на страницу и app-only `dashboard_page`.
+* **Native tool flow**: CMC-46 закрепил один штатный host discovery, exact terminal revision и fail-closed `AUDIT_STALE` без Terminal, direct stdio, local HTML и автоматического повторного аудита.
+* **Выпуск**: CMC-48 опубликовал `v0.1.0-beta.11` из merge SHA `b5a61bf362330b0f9620547ef54fde3603b0b76e`.
+* **Защита от регрессии**: CMC-49 добавил privacy-safe troubleshooting, capability matrix и read-only probe точной packaged MCP App поверхности.
+
+## 2026-07-22
+
+* **Dashboard presentation**: ADR-0016 удалил продуктовый PiP и сохранил только явный fullscreen-запрос пользователя без обещания размещения в правой панели.
+* **Footer**: ADR-0017 разрешил только host-mediated переходы после клика на закрытый GitHub/dzzen allowlist без внешних fetch и telemetry.
+* **Производительность и диагностика**: ADR-0018 закрепил bounded concurrency восемь, десятичные МБ/ГБ и read-only diagnostics отсутствующих target executable без расширения mutation scope.
+* **Выпуск**: CMC-45 опубликовал `v0.1.0-beta.10`; последующая owner-проверка выявила task-scoped tool и oversized-response регрессии, исправленные в beta.11.
+
+## 2026-07-21
+
+* **Live Dashboard**: ADR-0015 ввёл Dashboard v2 сразу после `audit_start`, nullable pre-result revision и server-owned progress без ранних findings/actions.
+* **Shared inventories**: installed app, process, open-file, startup и package inventories снимаются один раз для Snapshot A и один раз для Snapshot B; candidate-specific evidence остаётся отдельным.
+
 ## 2026-07-19
 
 * **Граница v0.1**: ADR-0014 перенёс создание/update/pause/resume/delete host-native Codex automation и scheduled prompt в capability-релиз после v0.1.
