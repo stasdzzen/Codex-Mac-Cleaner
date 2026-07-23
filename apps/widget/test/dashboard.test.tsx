@@ -94,7 +94,9 @@ describe("интерфейс проверки Mac", () => {
         "Codex не развернул окно. Проверка остаётся доступна здесь.",
       ),
     );
-    expect(screen.getByRole("heading", { name: "Проверка Mac" })).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "Очистка MacBook от мусора" }),
+    ).toBeVisible();
   });
 
   it("показывает подвал и открывает только фиксированные ссылки по клику", async () => {
@@ -140,7 +142,9 @@ describe("интерфейс проверки Mac", () => {
     expect(errorToast).toHaveBeenCalledWith(
       "Эта версия Codex не поддерживает открытие внешних ссылок.",
     );
-    expect(screen.getByRole("heading", { name: "Проверка Mac" })).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "Очистка MacBook от мусора" }),
+    ).toBeVisible();
   });
 
   it("показывает пять вкладок, исключения и запуск проверки пользователем", async () => {

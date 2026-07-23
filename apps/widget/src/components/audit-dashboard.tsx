@@ -305,7 +305,9 @@ export function AuditDashboard({ snapshot, bridge }: AuditDashboardProps) {
               />
               <div>
                 <p className="text-sm text-muted-foreground">Codex Mac Cleaner</p>
-                <h1 className="text-2xl font-semibold tracking-tight">Проверка Mac</h1>
+                <h1 className="text-2xl font-semibold tracking-tight">
+                  Очистка MacBook от мусора
+                </h1>
               </div>
             </div>
             <CardAction className="flex flex-wrap items-center gap-2 max-sm:col-start-1 max-sm:row-span-1 max-sm:row-start-3 max-sm:mt-3 max-sm:justify-self-start">
