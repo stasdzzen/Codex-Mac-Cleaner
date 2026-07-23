@@ -56,7 +56,7 @@ date: 2026-07-22
 | `REQ-UNINST-01` | Официальный uninstaller приоритетнее manual quarantine | [Публичный дизайн](../superpowers/specs/2026-07-17-public-plugin-contract-design.md) | `CMC-04`, `CMC-05`, `CMC-08`, `CMC-10` | C, D, G |
 | `REQ-ADV-01` | System findings только read-only `unsupported_manual`; mutation ждёт Advanced Cleanup ADR | [ADR-0011](../decisions/ADR-0011-public-plugin-exclusions-scheduling.md) | `CMC-04`, `CMC-05`, `CMC-10`, `CMC-14` | C, D, H |
 | `REQ-NOCLI-01` | Установка, аудит и решения без копирования shell-команд | [ADR-0010](../decisions/ADR-0010-field-research-safety-contract.md) | `CMC-08`, `CMC-09`, `CMC-10` | G, H |
-| `REQ-DIST-01` | GitHub Releases и repository marketplace | [ADR-0007](../decisions/ADR-0007-github-distribution.md) | `CMC-09`, `CMC-10`, `CMC-37`, `CMC-39`, `CMC-41` | H |
+| `REQ-DIST-01` | GitHub Releases и repository marketplace | [ADR-0007](../decisions/ADR-0007-github-distribution.md) | `CMC-09`, `CMC-10`, `CMC-37`, `CMC-39`, `CMC-41`, `CMC-45` | H |
 | `REQ-REC-01` | Fault-injection recovery fail closed | [Модель угроз](../safety/threat-model.md) | `CMC-06`, `CMC-10` | E, H |
 
 # Правило проверки
@@ -109,7 +109,8 @@ Issue и PR не могут объявить требование выполне
 | `CMC-40` | [#76 — понятные русские тексты](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/76) | Закрыта; PR #77 слит |
 | `CMC-41` | [#78 — выпуск v0.1.0-beta.9](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/78) | Закрыта; PR #79 слит, выпуск опубликован |
 | `CMC-42` | [#80 — убрать лишнюю анимацию и уточнить заголовок Dashboard](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/80) | Закрыта; PR #81 слит |
-| `CMC-43` | [#82 — полный аудит без общего лимита времени](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/82) | `cto:review`; PR #83 |
-| `CMC-44` | [#84 — устранить runtime-уязвимости зависимостей](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/84) | `cto:in-progress`; merge запрещён этой задачей |
+| `CMC-43` | [#82 — полный аудит без общего лимита времени](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/82) | Закрыта; PR #83 слит |
+| `CMC-44` | [#84 — устранить runtime-уязвимости зависимостей](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/84) | Закрыта; PR #85 слит |
+| `CMC-45` | [#86 — выпуск v0.1.0-beta.10](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/86) | `cto:in-progress` |
 
 Operational label не заменяет dependency validation. Источником текущего readiness остаётся GitHub и `issue_contract.py`.
