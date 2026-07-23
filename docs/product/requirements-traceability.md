@@ -111,6 +111,6 @@ Issue и PR не могут объявить требование выполне
 | `CMC-42` | [#80 — убрать лишнюю анимацию и уточнить заголовок Dashboard](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/80) | Закрыта; PR #81 слит |
 | `CMC-43` | [#82 — полный аудит без общего лимита времени](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/82) | Закрыта; PR #83 слит |
 | `CMC-44` | [#84 — устранить runtime-уязвимости зависимостей](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/84) | Закрыта; PR #85 слит |
-| `CMC-45` | [#86 — выпуск v0.1.0-beta.10](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/86) | `cto:in-progress` |
+| `CMC-45` | [#86 — выпуск v0.1.0-beta.10](https://github.com/stasdzzen/Codex-Mac-Cleaner/issues/86) | `cto:review` |
 
 Operational label не заменяет dependency validation. Источником текущего readiness остаётся GitHub и `issue_contract.py`.
