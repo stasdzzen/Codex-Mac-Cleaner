@@ -549,6 +549,7 @@ describe("production runtime services", () => {
       ).auditId;
       const completedStorageSummary = (
         completed.structuredContent as {
+          findings: Array<{ findingId: string }>;
           storageSummary: {
             candidateLogicalBytes: number;
             candidatePhysicalBytes: number;
@@ -580,6 +581,45 @@ describe("production runtime services", () => {
         auditId: completedAuditId,
         revision: 1,
         storageSummary: completedStorageSummary,
+      });
+
+      const findingId = (
+        completed.structuredContent as {
+          findings: Array<{ findingId: string }>;
+        }
+      ).findings[0]!.findingId;
+      const preview = await runtime.client.callTool({
+        name: "quarantine_prepare_move",
+        arguments: {
+          findingId,
+          auditRevision: 1,
+        },
+      });
+      expect(preview.isError).not.toBe(true);
+      const moved = await runtime.client.callTool({
+        name: "quarantine_move",
+        arguments: {
+          previewToken: (
+            preview.structuredContent as { previewToken: string }
+          ).previewToken,
+          operationId: `move-after-cancel-${randomUUID()}`,
+        },
+      });
+      expect(moved.isError).not.toBe(true);
+      expect(
+        (
+          moved.structuredContent as {
+            storageSummary: {
+              candidateLogicalBytes: number;
+              candidatePhysicalBytes: number;
+            };
+          }
+        ).storageSummary,
+      ).toMatchObject({
+        candidateLogicalBytes:
+          completedStorageSummary.candidateLogicalBytes,
+        candidatePhysicalBytes:
+          completedStorageSummary.candidatePhysicalBytes,
       });
     } finally {
       await runtime.client.close();

@@ -2816,8 +2816,22 @@ class AuditRuntimeService implements AuditToolService {
   }
 
   async storageSummary(): Promise<StorageSummary> {
-    const run = this.latestAuditId === null ? undefined : this.runs.get(this.latestAuditId);
+    const selectedAuditId =
+      this.latestCompletedAuditId ?? this.latestAuditId;
+    const run =
+      selectedAuditId === null
+        ? undefined
+        : this.runs.get(selectedAuditId);
     return this.storageSummaryForRun(run);
+  }
+
+  async storageSummaryForAudit(
+    auditId: string,
+    auditRevision: number,
+  ): Promise<StorageSummary> {
+    return this.storageSummaryForRun(
+      this.completedRun(auditId, auditRevision),
+    );
   }
 
   moveSubject(findingId: string, revision: number): MoveSubject {
@@ -3419,8 +3433,19 @@ export async function createRuntimeCore(
       const manifests = new ManifestRepository(stateRoot);
       const controller = new QuarantineController({
         storeRoot: stateRoot,
-        candidateStorage: async () => {
-          const summary = await auditService.storageSummary();
+        candidateStorage: async (binding) => {
+          let summary: StorageSummary;
+          try {
+            summary =
+              binding === undefined
+                ? await auditService.storageSummary()
+                : await auditService.storageSummaryForAudit(
+                    binding.auditId,
+                    binding.auditRevision,
+                  );
+          } catch {
+            summary = await auditService.storageSummary();
+          }
           return {
             candidateLogicalBytes: summary.candidateLogicalBytes,
             candidatePhysicalBytes: summary.candidatePhysicalBytes,
